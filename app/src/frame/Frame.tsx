@@ -78,7 +78,7 @@ function Bell() {
 /** Fixed top bar: menu toggle + brand on the left, search in the middle, actions on the right. */
 function TopBar() {
   return (
-    <header class="shrink-0 h-16 flex items-center gap-2 md:gap-3 px-3 md:px-4 bg-c0 border-b border-c1">
+    <header class="shrink-0 h-13 md:h-14 xl:h-16 flex items-center gap-2 md:gap-3 px-3 md:px-4 bg-c0 border-b border-c1">
       <button onClick={toggleNav} aria-label={collapsed.value ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed.value}
         class="hidden md:flex w-10 h-10 rounded-xl hover:bg-c1 items-center justify-center cursor-pointer shrink-0">
         <Icon name="menu" />
@@ -111,12 +111,12 @@ function BottomBar() {
   const items = [NAV[0], NAV[1], NAV[4], NAV[5], { href: "/more", label: "More", icon: "grid" }];
   const moreOn = !items.slice(0, 4).some((n) => isActive(path, n.href));
   return (
-    <nav class="md:hidden shrink-0 bg-c0 border-t border-c1 grid grid-cols-5 px-2 pt-1.5 pb-[max(6px,env(safe-area-inset-bottom))]" aria-label="Main">
+    <nav class="md:hidden shrink-0 bg-c0 border-t border-c1 grid grid-cols-5 px-2 pt-1 pb-[max(4px,env(safe-area-inset-bottom))]" aria-label="Main">
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
         return (
           <a key={n.href} href={n.href} aria-current={on ? "page" : undefined}
-            class={`flex flex-col items-center justify-center h-12 rounded-xl text-[11px] gap-0.5 ${on ? "bg-c4 text-c0" : "text-c3"}`}>
+            class={`flex flex-col items-center justify-center h-11 rounded-xl text-[10px] gap-0 ${on ? "bg-c4 text-c0" : "text-c3"}`}>
             <Icon name={n.icon} size={19} />
             {n.label.split(" ")[0]}
           </a>

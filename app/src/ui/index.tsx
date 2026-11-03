@@ -68,16 +68,16 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
       <label class="md:hidden relative block">
         <span class="sr-only">Section</span>
         <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
-          class="appearance-none w-full h-11 pl-4 pr-10 rounded-full bg-c4 text-c0 font-medium text-sm">
+          class="appearance-none w-full h-9 pl-3 pr-8 rounded-full truncate bg-c4 text-c0 font-medium text-sm">
           {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
         </select>
-        <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-c0 text-xs">▼</span>
+        <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c0 text-xs">▼</span>
       </label>
       {/* iPad + desktop: wrapping pills */}
       <nav class="hidden md:flex flex-wrap gap-2" aria-label="Sections">
         {tabs.map((t) => (
           <a key={t.href} href={t.href} aria-current={current?.href === t.href ? "page" : undefined}
-            class={`h-9 px-4 inline-flex items-center rounded-full text-sm ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
+            class={`h-8 xl:h-9 px-3 xl:px-4 inline-flex items-center rounded-full text-sm ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
             {t.label}
           </a>
         ))}
@@ -186,19 +186,34 @@ export function Page({ title, sub, actions, tabs, toolbar, children }: {
 }) {
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div class="shrink-0 flex flex-col gap-3 px-4 md:px-5 2xl:px-7 pt-3 md:pt-4 pb-3 border-b border-c1 bg-c1">
-        <header class="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
-          <div class="min-w-0">
-            <h1 class="text-xl md:text-2xl 2xl:text-[28px] font-semibold leading-tight">{title}</h1>
-            {sub && <p class="text-sm text-c3 mt-0.5">{sub}</p>}
+      {/* Fixed head. Phone: one row (title + section switcher). iPad/desktop: title, actions, tabs, toolbar kept compact. */}
+      <div class="shrink-0 flex flex-col gap-2 xl:gap-2.5 px-3 md:px-5 2xl:px-7 py-2 md:py-3 border-b border-c2/40 bg-c1">
+        <header class="flex items-center gap-3 min-w-0">
+          <div class="min-w-0 flex-1 flex items-baseline gap-3">
+            <h1 class="text-lg md:text-xl 2xl:text-2xl font-semibold leading-tight truncate">{title}</h1>
+            {sub && <p class="hidden lg:block text-sm text-c3 truncate">{sub}</p>}
           </div>
-          {actions && <div class="flex flex-wrap gap-2">{actions}</div>}
+          {tabs && <div class="md:hidden w-[48%] shrink-0"><Tabs tabs={tabs} /></div>}
+          {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
-        {tabs && <Tabs tabs={tabs} />}
-        {toolbar}
+        {(tabs || toolbar) && (
+          <div class="hidden md:flex flex-wrap items-center gap-x-4 gap-y-2">
+            {tabs && <Tabs tabs={tabs} />}
+            {toolbar && <div class="flex flex-wrap items-center gap-2 lg:ml-auto">{toolbar}</div>}
+          </div>
+        )}
       </div>
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 md:px-5 2xl:px-7 py-4 md:py-5">
-        <div class="flex flex-col gap-5 2xl:gap-6">{children}</div>
+      {/* Only this area scrolls. On phone, actions + toolbar live here and scroll away. */}
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-7 py-3 md:py-4">
+        <div class="flex flex-col gap-4 2xl:gap-6">
+          {(actions || toolbar) && (
+            <div class="md:hidden flex flex-col gap-2">
+              {actions && <div class="flex flex-wrap gap-2">{actions}</div>}
+              {toolbar}
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );
