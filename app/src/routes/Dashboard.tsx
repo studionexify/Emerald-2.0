@@ -41,7 +41,7 @@ export default function Dashboard() {
       <Section title="At a glance">
         <div class="grid gap-3 md:grid-cols-2 2xl:grid-cols-[1.4fr_1fr_1fr]">
           <Card dark class="md:col-span-2 2xl:col-span-1">
-            <CardTitle action={<a href="/work" class="text-sm opacity-80">Work Area →</a>}>Work in progress</CardTitle>
+            <CardTitle action={<a href="/work" class="text-sm opacity-80">Production →</a>}>Work in progress</CardTitle>
             <div class="flex flex-wrap items-end gap-x-8 gap-y-2 mb-4">
               <div><div class="num text-3xl md:text-5xl font-semibold leading-none">{open.length}</div><div class="text-sm opacity-80 mt-1">open orders</div></div>
               <div><div class="num text-xl md:text-3xl font-semibold leading-none">{inr(pipeline)}</div><div class="text-sm opacity-80 mt-1">order value in pipeline</div></div>

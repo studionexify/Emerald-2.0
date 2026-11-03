@@ -2,7 +2,7 @@ export type NavItem = { href: string; label: string; icon: string };
 
 export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "home" },
-  { href: "/work", label: "Work Area", icon: "work" },
+  { href: "/work", label: "Production", icon: "work" },
   { href: "/workshop", label: "Workshop & Inventory", icon: "box" },
   { href: "/calculator", label: "Calculator", icon: "calc" },
   { href: "/mauny", label: "Mauny", icon: "money" },
