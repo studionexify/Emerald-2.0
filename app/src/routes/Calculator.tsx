@@ -15,7 +15,7 @@ function Result({ rows, price }: { rows: [string, number][]; price: number }) {
   return (
     <Card dark class="lg:sticky lg:top-6 self-start">
       <div class="text-sm opacity-80">Suggested price (incl. GST)</div>
-      <div class="num text-5xl font-semibold mt-1 mb-6">{inr(price)}</div>
+      <div class="num text-4xl xl:text-5xl font-semibold mt-1 mb-3">{inr(price)}</div>
       <ul class="flex flex-col gap-2 text-sm">
         {rows.map(([l, n]) => <li key={l} class="flex justify-between border-t border-c3 pt-2"><span class="opacity-80">{l}</span><span class="num">{inr(n)}</span></li>)}
       </ul>
@@ -28,7 +28,7 @@ function Shell({ children }: { children: preact.ComponentChildren }) {
     <>
       <PageHead title="Calculator" sub="Price a job before you quote it" />
       <div class="mb-5"><Tabs tabs={CALC_TABS} /></div>
-      <div class="grid gap-4 lg:grid-cols-[1fr_360px]">{children}</div>
+      <div class="grid gap-3 lg:grid-cols-[1fr_320px]">{children}</div>
     </>
   );
 }

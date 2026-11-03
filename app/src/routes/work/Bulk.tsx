@@ -6,14 +6,14 @@ export default function Bulk() {
   const orders = ordersSig.value.filter((o) => o.type === "bulk" && o.stage !== "archived");
   return (
     <WorkShell title="Bulk orders" sub="Stationery stores, gift shops and other large orders" actions={<Button icon="plus">New bulk order</Button>}>
-      <div class="grid gap-4 lg:grid-cols-2">
+      <div class="grid gap-3 lg:grid-cols-2">
         {orders.map((o) => {
           const bs = db.batches.filter((b) => b.orderNo === o.no);
           const units = orderUnits(o), done = bs.reduce((s, b) => s + b.done, 0);
           return (
             <Card key={o.id}>
               <CardTitle action={<span class="text-xs text-c3">{o.no}</span>}>{o.customer}</CardTitle>
-              <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="grid grid-cols-3 gap-3 mb-3">
                 <Fact label="Value" value={inr(orderTotal(o))} />
                 <Fact label="Units" value={`${done}/${units}`} />
                 <Fact label="Due" value={shortDate(o.due)} />

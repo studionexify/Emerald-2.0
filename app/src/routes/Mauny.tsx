@@ -23,7 +23,7 @@ const accounts = [
 export function MaunyHome() {
   return (
     <Shell title="Mauny" sub="Every rupee in and out" actions={<><Button variant="outline">Transfer</Button><Button icon="plus">Add entry</Button></>}>
-      <div class="grid gap-4 md:grid-cols-3 mb-4">
+      <div class="grid gap-3 md:grid-cols-3 mb-3">
         {accounts.map((a, i) => (
           <Card key={a.name} dark={i === 0}>
             <div class="text-sm opacity-80">{a.name}</div>
@@ -56,7 +56,7 @@ export function Purchases() {
 export function Finance() {
   return (
     <Shell title="Finance" sub="Month to date vs same days last month">
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-4">
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4 mb-3">
         <Card dark><Fact label="Net revenue" value={<span class="num text-3xl">{inr(142800)}</span>} /></Card>
         <Card><Fact label="Gross profit" value={<span class="num text-3xl">{inr(91300)}</span>} /></Card>
         <Card><Fact label="Expenses" value={<span class="num text-3xl">{inr(38600)}</span>} /></Card>
@@ -74,7 +74,7 @@ export function Goals() {
   const goals = [{ l: "Revenue", v: 142800, t: 250000 }, { l: "Orders", v: 34, t: 50 }, { l: "Spend cap", v: 38600, t: 60000 }];
   return (
     <Shell title="Goals" sub="Targets for this month" actions={<Button icon="plus">New goal</Button>}>
-      <div class="grid gap-4 md:grid-cols-3">
+      <div class="grid gap-3 md:grid-cols-3">
         {goals.map((g) => (
           <Card key={g.l} class="flex flex-col items-center gap-3">
             <Ring value={Math.round((g.v / g.t) * 100)} label={g.l} />
@@ -89,7 +89,7 @@ export function Goals() {
 export function Accounts() {
   return (
     <Shell title="Accounts & statements" sub="Upload bank or Razorpay statements to reconcile" actions={<Button icon="plus">Upload statement</Button>}>
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-3 md:grid-cols-2">
         {accounts.map((a) => (
           <Card key={a.name}>
             <CardTitle>{a.name}</CardTitle>
@@ -134,7 +134,7 @@ export function Gst() {
 export function Reports() {
   return (
     <Shell title="Reports & analytics" sub="Derived from records, never stored">
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-3 md:grid-cols-2">
         <Card><CardTitle>Revenue by order type</CardTitle><Bars data={[96, 42, 0]} labels={["Client", "Bulk", "In-house"]} /></Card>
         <Card><CardTitle>Orders by intake medium</CardTitle><Bars data={[14, 9, 6, 3, 2]} labels={["Insta", "WhatsApp", "Web", "Email", "Other"]} /></Card>
       </div>

@@ -21,13 +21,13 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
 
 export function Card({ children, class: c, dark, dashed }: { children: ComponentChildren; class?: string; dark?: boolean; dashed?: boolean }) {
   const base = dark ? "bg-c4 text-c0" : dashed ? "bg-transparent border-2 border-dashed border-c2" : "bg-c0";
-  return <section class={`rounded-[var(--radius-card)] p-5 ${base} ${c ?? ""}`}>{children}</section>;
+  return <section class={`rounded-[var(--radius-card)] p-4 xl:p-5 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
 }
 
 export function CardTitle({ children, action }: { children: ComponentChildren; action?: ComponentChildren }) {
   return (
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-base font-semibold">{children}</h2>
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 class="text-base font-semibold min-w-0">{children}</h2>
       {action}
     </div>
   );
@@ -35,9 +35,9 @@ export function CardTitle({ children, action }: { children: ComponentChildren; a
 
 export function Stat({ value, label, dark }: { value: string | number; label: string; dark?: boolean }) {
   return (
-    <div class={`rounded-2xl p-3 text-center ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
-      <div class="num text-2xl font-semibold">{value}</div>
-      <div class="text-xs text-c3 mt-1">{label}</div>
+    <div class={`rounded-2xl px-1 py-2.5 xl:py-3 text-center min-w-0 ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
+      <div class="num text-xl xl:text-2xl font-semibold">{value}</div>
+      <div class="text-[11px] xl:text-xs mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
     </div>
   );
 }
@@ -60,17 +60,29 @@ export function Chip({ active, children, onClick }: { active?: boolean; children
 }
 
 export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
-  const { path } = useLocation();
+  const { path, route } = useLocation();
   const current = [...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => path === t.href || path.startsWith(t.href + "/"));
   return (
-    <nav class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" aria-label="Sections">
-      {tabs.map((t) => (
-        <a key={t.href} href={t.href} aria-current={current?.href === t.href ? "page" : undefined}
-          class={`h-9 px-4 inline-flex items-center rounded-full text-sm whitespace-nowrap ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
-          {t.label}
-        </a>
-      ))}
-    </nav>
+    <>
+      {/* Phone: one compact switcher, nothing cropped */}
+      <label class="md:hidden relative block">
+        <span class="sr-only">Section</span>
+        <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
+          class="appearance-none w-full h-11 pl-4 pr-10 rounded-full bg-c4 text-c0 font-medium text-sm">
+          {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
+        </select>
+        <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-c0 text-xs">▼</span>
+      </label>
+      {/* iPad + desktop: wrapping pills */}
+      <nav class="hidden md:flex flex-wrap gap-2" aria-label="Sections">
+        {tabs.map((t) => (
+          <a key={t.href} href={t.href} aria-current={current?.href === t.href ? "page" : undefined}
+            class={`h-9 px-4 inline-flex items-center rounded-full text-sm ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
+            {t.label}
+          </a>
+        ))}
+      </nav>
+    </>
   );
 }
 
@@ -111,26 +123,44 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
   );
 }
 
-export type Col<T> = { key: string; label: string; render: (row: T) => ComponentChildren; align?: "right" };
+export type Col<T> = { key: string; label: string; render: (row: T) => ComponentChildren; align?: "right"; hideTablet?: boolean };
+/** Table on iPad/desktop; stacked cards on phone. Never scrolls sideways. */
 export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: T[]; rowKey: (r: T) => string; onRow?: (r: T) => void }) {
   if (!rows.length) return <Empty title="Nothing here yet" />;
+  const [head, ...rest] = cols;
+  const hid = (c: Col<T>) => (c.hideTablet ? "hidden xl:table-cell" : "");
   return (
-    <div class="overflow-x-auto -mx-5 px-5">
-      <table class="w-full text-sm">
+    <>
+      <ul class="md:hidden flex flex-col gap-2">
+        {rows.map((r) => (
+          <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`bg-c1 rounded-2xl p-3 ${onRow ? "cursor-pointer" : ""}`}>
+            <div class="font-semibold mb-2 break-words">{head.render(r)}</div>
+            <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+              {rest.map((c) => (
+                <div key={c.key} class={`min-w-0 ${c.label ? "" : "col-span-2"}`}>
+                  {c.label && <dt class="text-xs text-c3">{c.label}</dt>}
+                  <dd class="break-words">{c.render(r)}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ul>
+      <table class="hidden md:table w-full text-sm table-auto">
         <thead>
           <tr class="text-left text-c3 text-xs">
-            {cols.map((c) => <th key={c.key} class={`font-medium py-2 pr-4 whitespace-nowrap ${c.align === "right" ? "text-right" : ""}`}>{c.label}</th>)}
+            {cols.map((c) => <th key={c.key} class={`font-medium py-2 pr-3 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-t border-c1 ${onRow ? "cursor-pointer hover:bg-c1" : ""}`}>
-              {cols.map((c) => <td key={c.key} class={`py-3 pr-4 whitespace-nowrap ${c.align === "right" ? "text-right num" : ""}`}>{c.render(r)}</td>)}
+            <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-t border-c1 align-top ${onRow ? "cursor-pointer hover:bg-c1" : ""}`}>
+              {cols.map((c) => <td key={c.key} class={`py-2.5 pr-3 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
+    </>
   );
 }
 
@@ -139,7 +169,7 @@ export function Drawer({ open, onClose, title, children }: { open: boolean; onCl
   return (
     <div class="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
       <div class="absolute inset-0 bg-c4 opacity-40" onClick={onClose} />
-      <aside class="relative bg-c0 w-full max-w-lg h-full overflow-y-auto p-6">
+      <aside class="relative bg-c0 w-full md:max-w-lg h-full overflow-y-auto p-4 md:p-6">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-xl font-semibold">{title}</h2>
           <button class="w-10 h-10 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
@@ -152,12 +182,12 @@ export function Drawer({ open, onClose, title, children }: { open: boolean; onCl
 
 export function PageHead({ title, sub, actions }: { title: string; sub?: string; actions?: ComponentChildren }) {
   return (
-    <header class="flex flex-wrap items-end justify-between gap-3 mb-5">
+    <header class="flex flex-wrap items-end justify-between gap-3 mb-4">
       <div>
-        <h1 class="text-2xl md:text-3xl font-semibold">{title}</h1>
+        <h1 class="text-2xl xl:text-3xl font-semibold">{title}</h1>
         {sub && <p class="text-sm text-c3 mt-1">{sub}</p>}
       </div>
-      {actions && <div class="flex gap-2">{actions}</div>}
+      {actions && <div class="flex flex-wrap gap-2">{actions}</div>}
     </header>
   );
 }

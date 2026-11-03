@@ -1,5 +1,6 @@
 import { NAV } from "../nav";
 import { Icon, PageHead } from "../ui";
+import { theme, toggleTheme } from "../frame/theme";
 
 export default function More() {
   const items = [...NAV, { href: "/settings", label: "Settings", icon: "settings" }];
@@ -15,6 +16,10 @@ export default function More() {
           </a></li>
         ))}
       </ul>
+      <button onClick={toggleTheme} class="mt-3 w-full flex items-center gap-3 p-3 rounded-[var(--radius-card)] bg-c0 cursor-pointer">
+        <span class="w-10 h-10 rounded-full bg-c1 flex items-center justify-center"><Icon name={theme.value === "dark" ? "sun" : "moon"} size={18} /></span>
+        <span class="flex-1 text-left font-medium">{theme.value === "dark" ? "Light" : "Dark"} theme</span>
+      </button>
     </>
   );
 }

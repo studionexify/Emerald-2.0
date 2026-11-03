@@ -7,7 +7,7 @@ const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "acti
 export function Production() {
   return (
     <WorkShell title="Production" sub="One job per line item; machine picked at print time" actions={<Button icon="plus">Quick print</Button>}>
-      <div class="grid gap-4 md:grid-cols-3 mb-4">
+      <div class="grid gap-3 md:grid-cols-3 mb-3">
         {db.printers.map((p) => (
           <Card key={p.id} dark={p.status === "printing"}>
             <div class="flex justify-between items-start">
@@ -39,10 +39,10 @@ export function QC() {
   const pass = db.qc.filter((q) => q.result === "pass").length;
   return (
     <WorkShell title="QC & Logging" sub="Pass, rework or scrap — with the reason kept" actions={<Button icon="plus">Log QC</Button>}>
-      <div class="grid gap-4 grid-cols-3 mb-4">
-        <Card dark><div class="num text-4xl font-semibold">{pass}</div><div class="text-sm opacity-80">passed</div></Card>
-        <Card><div class="num text-4xl font-semibold">{db.qc.filter((q) => q.result === "rework").length}</div><div class="text-sm text-c3">rework</div></Card>
-        <Card><div class="num text-4xl font-semibold">{db.qc.reduce((s, q) => s + q.grams, 0)}g</div><div class="text-sm text-c3">wasted</div></Card>
+      <div class="grid gap-3 grid-cols-3 mb-3">
+        <Card dark><div class="num text-2xl md:text-4xl font-semibold">{pass}</div><div class="text-sm opacity-80">passed</div></Card>
+        <Card><div class="num text-2xl md:text-4xl font-semibold">{db.qc.filter((q) => q.result === "rework").length}</div><div class="text-sm text-c3">rework</div></Card>
+        <Card><div class="num text-2xl md:text-4xl font-semibold">{db.qc.reduce((s, q) => s + q.grams, 0)}g</div><div class="text-sm text-c3">wasted</div></Card>
       </div>
       <Card>
         <Table rows={db.qc} rowKey={(q) => q.id} cols={[
@@ -63,11 +63,11 @@ export function Packing() {
   const list = ordersSig.value.filter((o) => o.stage === "packing");
   return (
     <WorkShell title="Packing" sub="Materials used, weight, box size, handling notes">
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-3 md:grid-cols-2">
         {list.map((o) => (
           <Card key={o.id}>
             <CardTitle action={<span class="text-xs text-c3">{TYPE_LABEL[o.type]}</span>}>{o.no} · {o.customer}</CardTitle>
-            <div class="grid grid-cols-3 gap-3 mb-4">
+            <div class="grid grid-cols-3 gap-3 mb-3">
               <Fact label="Units" value={orderUnits(o)} />
               <Fact label="Box" value="—" />
               <Fact label="Weight" value="—" />

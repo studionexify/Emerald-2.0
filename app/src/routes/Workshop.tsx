@@ -45,7 +45,7 @@ export function Team() {
 export function Filament() {
   return (
     <Shell>
-      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {db.spools.map((s) => (
           <Card key={s.id} dark={s.grams === 0}>
             <div class="flex justify-between text-sm opacity-80"><span>{s.spoolNo}</span><span>{s.brand}</span></div>

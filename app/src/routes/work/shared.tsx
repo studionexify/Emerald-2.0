@@ -18,7 +18,7 @@ export type TypeFilter = "all" | OrderType;
 export function TypeChips({ value, onChange }: { value: TypeFilter; onChange: (v: TypeFilter) => void }) {
   const opts: TypeFilter[] = ["all", "client", "bulk", "inhouse"];
   return (
-    <div class="flex gap-2 overflow-x-auto">
+    <div class="flex flex-wrap gap-2">
       {opts.map((o) => <Chip key={o} active={value === o} onClick={() => onChange(o)}>{o === "all" ? "All" : TYPE_LABEL[o]}</Chip>)}
     </div>
   );
@@ -27,17 +27,17 @@ export function TypeChips({ value, onChange }: { value: TypeFilter; onChange: (v
 export const stageIndex = (o: Order) => STAGES.findIndex((s) => s.key === o.stage);
 export const stageLabel = (o: Order) => STAGES[stageIndex(o)].label;
 
-export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
+export function OrderCard({ o, onOpen, inset }: { o: Order; onOpen: (o: Order) => void; inset?: boolean }) {
   return (
-    <button onClick={() => onOpen(o)} class={`w-full text-left rounded-2xl p-4 cursor-pointer ${o.type === "bulk" ? "bg-c4 text-c0" : "bg-c0"}`}>
-      <div class="flex justify-between text-xs opacity-80 mb-1"><span>{o.no}</span><span>{TYPE_LABEL[o.type]}</span></div>
-      <div class="font-semibold">{o.customer}</div>
-      <div class="text-sm opacity-80 truncate">{o.items.map((i) => i.name).join(", ")}</div>
-      <div class="flex justify-between items-center mt-3 text-sm">
+    <button onClick={() => onOpen(o)} class={`w-full min-w-0 text-left rounded-2xl p-3 xl:p-3.5 cursor-pointer ${o.type === "bulk" ? "bg-c4 text-c0" : inset ? "bg-c1" : "bg-c0"}`}>
+      <div class="flex flex-wrap justify-between gap-x-2 text-xs opacity-80 mb-1"><span>{o.no}</span><span>{TYPE_LABEL[o.type]}</span></div>
+      <div class="font-semibold break-words leading-snug">{o.customer}</div>
+      <div class="text-sm opacity-80 break-words leading-snug">{o.items.map((i) => i.name).join(", ")}</div>
+      <div class="flex flex-wrap justify-between items-center gap-x-2 mt-2 text-sm">
         <span class="num font-semibold">{o.type === "inhouse" ? "Internal" : inr(orderTotal(o))}</span>
         <span class="opacity-80">Due {shortDate(o.due)}</span>
       </div>
-      {o.blocked && <div class="mt-2 text-xs font-semibold flex items-center gap-2"><span class="w-2 h-2 rotate-45 bg-current" />{o.blocked}</div>}
+      {o.blocked && <div class="mt-2 text-xs font-semibold flex items-start gap-2"><span class="w-2 h-2 mt-1 shrink-0 rotate-45 bg-current" />{o.blocked}</div>}
     </button>
   );
 }

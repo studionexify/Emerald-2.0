@@ -10,7 +10,7 @@ export function Todo() {
   return (
     <>
       <PageHead title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus">New task</Button>} />
-      <div class="flex gap-2 mb-4"><Chip active={f === "open"} onClick={() => setF("open")}>Open</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip></div>
+      <div class="flex gap-2 mb-3"><Chip active={f === "open"} onClick={() => setF("open")}>Open</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip></div>
       <Card>
         <ul>
           {list.map((t) => (
