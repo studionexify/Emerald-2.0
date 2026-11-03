@@ -44,3 +44,11 @@ body { overflow: hidden; }
 body { margin: 0; background: var(--c-1); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* Document generator: print only the sheet */
+@media print {
+  html, body, #app { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000 !important; background: #fff !important; }
+}

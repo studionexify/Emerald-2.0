@@ -1,6 +1,6 @@
 import { Bars } from "../charts";
 import { Card, CardTitle, Page, Section, Stat, Status } from "../ui";
-import { db, inr, logsSig, ordersSig, X, orderCost, orderTotal, shortDate, STAGES } from "../data";
+import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, db, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, STAGES } from "../data";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 
@@ -12,6 +12,9 @@ export default function Dashboard() {
   const paid = open.filter((o) => o.type !== "inhouse");
   const pipeline = paid.reduce((s, o) => s + orderTotal(o), 0);
   const margin = Math.round((1 - paid.reduce((s, o) => s + orderCost(o), 0) / pipeline) * 100);
+  const al = attn(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value);
+  const fm = financeSummary(windowFor("mtd", "2026-27"), ordersSig.value);
+  const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: moneySig.value.filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
   const todo = db.tasks.filter((t) => !t.done);
   const dueSoon = [...open].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
   const attention = [
@@ -21,9 +24,9 @@ export default function Dashboard() {
   ];
   return (
     <Page title="Hi, Studio Nexify" sub="Tuesday, 3 November">
-      <Section title="Needs attention" note={`${Object.values(X.alerts).flat().length} items`} action={<a href="/alerts" class="text-xs text-c3 whitespace-nowrap">All →</a>}>
+      <Section title="Needs attention" note={`${Object.values(al).flat().length} items`} action={<a href="/alerts" class="text-xs text-c3 whitespace-nowrap">All →</a>}>
         <div class="grid gap-2 grid-cols-1 md:grid-cols-2 2xl:grid-cols-4">
-          {Object.entries(X.alerts).map(([g, list]) => (
+          {Object.entries(al).map(([g, list]) => (
             <Card key={g}>
               <CardTitle action={<span class="num text-xs text-c3">{list.length}</span>}>{g}</CardTitle>
               <ul class="flex flex-col">
@@ -49,14 +52,14 @@ export default function Dashboard() {
           </Card>
           <Card>
             <CardTitle action={<a href="/mauny" class="text-sm text-c3">Mauny →</a>}>Money in / out this week</CardTitle>
-            <Bars data={[4200, -1800, 6100, 2097, -6250, 25000, -380]} labels={["M", "T", "W", "T", "F", "S", "S"]} height={120} />
+            <Bars data={week.map((d) => d.v)} labels={week.map((d) => d.l)} height={120} />
           </Card>
           <Card>
             <CardTitle action={<a href="/mauny/finance" class="text-sm text-c3">Finance →</a>}>This month</CardTitle>
             <div class="grid grid-cols-2 gap-x-4 gap-y-4">
-              <div><div class="text-xs text-c3">Revenue</div><div class="num text-2xl font-semibold">{inr(142800)}</div></div>
-              <div><div class="text-xs text-c3">Net profit</div><div class="num text-2xl font-semibold">{inr(52700)}</div></div>
-              <div><div class="text-xs text-c3">Orders</div><div class="num text-2xl font-semibold">34</div></div>
+              <div><div class="text-xs text-c3">Earned</div><div class="num text-2xl font-semibold">{inr(fm.earned)}</div></div>
+              <div><div class="text-xs text-c3">Net profit</div><div class="num text-2xl font-semibold">{inr(fm.earned - fm.spent)}</div></div>
+              <div><div class="text-xs text-c3">Spent</div><div class="num text-2xl font-semibold">{inr(fm.spent)}</div></div>
               <div><div class="text-xs text-c3">Pipeline margin</div><div class="num text-2xl font-semibold">{margin}%</div></div>
             </div>
           </Card>

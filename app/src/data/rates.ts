@@ -1,5 +1,4 @@
 /** Every price and rate in the app — editable in Settings → Rates & prices. Persisted per device until the backend exists. */
-import { signal } from "@preact/signals";
 
 export type RateDef = { key: string; label: string; unit: string; group: string; value: number };
 export const RATE_DEFS: RateDef[] = [
@@ -27,14 +26,12 @@ export const RATE_DEFS: RateDef[] = [
   { group: "Alerts", key: "reorderFilament", label: "Filament reorder point", unit: "g", value: 1000 },
   { group: "Alerts", key: "stuckDays", label: "Order stuck alert after", unit: "days", value: 3 },
 ];
-const load = (): Record<string, number> => {
-  const base = Object.fromEntries(RATE_DEFS.map((r) => [r.key, r.value]));
-  try { return { ...base, ...JSON.parse(localStorage.getItem("emerald-rates") || "{}") }; } catch { return base; }
-};
-export const ratesSig = signal<Record<string, number>>(load());
+import { persisted } from "./store";
+const base = () => Object.fromEntries(RATE_DEFS.map((r) => [r.key, r.value]));
+export const ratesSig = persisted<Record<string, number>>("rates", base());
+if (Object.keys(ratesSig.value).length < RATE_DEFS.length) ratesSig.value = { ...base(), ...ratesSig.value };
 export const rate = (k: string) => ratesSig.value[k] ?? 0;
 export function setRate(k: string, v: number) {
   ratesSig.value = { ...ratesSig.value, [k]: v };
-  try { localStorage.setItem("emerald-rates", JSON.stringify(ratesSig.value)); } catch {}
 }
-export function resetRates() { try { localStorage.removeItem("emerald-rates"); } catch {} ratesSig.value = Object.fromEntries(RATE_DEFS.map((r) => [r.key, r.value])); }
+export function resetRates() { ratesSig.value = base(); }

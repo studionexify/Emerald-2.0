@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
-import { Button, Card, CardTitle, Chip, Field, inputCls, Page, Section, Status, Table } from "../ui";
-import { db, logsSig, shortDate, X } from "../data";
+import { Button, Card, CardTitle, Chip, Empty, Field, inputCls, Page, Section, Status, Table } from "../ui";
+import { attention, batchesSig, can, changePassword, db, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
 
 export function Todo() {
   const [tasks, setTasks] = useState(db.tasks);
@@ -71,7 +71,7 @@ export function Bin() {
 
 export function Alerts() {
   const tone = { danger: "blocked", warn: "waiting", info: "idle" } as const;
-  const groups = Object.entries(X.alerts);
+  const groups = Object.entries(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value));
   return (
     <Page title="Attention" sub="What needs action — escalates on age, every row links to its record">
       <div class="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
@@ -82,6 +82,7 @@ export function Alerts() {
               {[...list].sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t)).map((a, i) => (
                 <li key={i} class="border-t border-c1 first:border-0"><a href={a.href} class="flex items-start gap-2 py-2 text-sm"><Status tone={tone[a.t]}>{""}</Status><span class="min-w-0">{a.text}</span></a></li>
               ))}
+              {!list.length && <li class="text-sm text-c3 py-1">Nothing here — all clear.</li>}
             </ul>
           </Card>
         ))}
@@ -99,59 +100,74 @@ function SettingsShell({ children }: { children: preact.ComponentChildren }) {
 }
 
 export function Profile() {
+  const [cur, setCur] = useState(""), [nx, setNx] = useState(""), [msg, setMsg] = useState("");
+  const u = me.value!;
   return (
     <SettingsShell>
       <Card class="flex flex-col gap-3">
-        <Field label="Name"><input class={inputCls} value="You" /></Field>
-        <Field label="Email"><input class={inputCls} value="owner@studionexify.com" /></Field>
-        <Field label="Display name (greeting only — audit uses your account)"><input class={inputCls} value="Ankit" /></Field>
-        <div class="grid sm:grid-cols-2 gap-3"><Field label="Current password"><input class={inputCls} type="password" /></Field><Field label="New password"><input class={inputCls} type="password" /></Field></div>
-        <div class="flex flex-wrap gap-2"><Button>Save</Button><Button variant="outline">Change password</Button><Button variant="outline">Set up passkey quick-unlock</Button><Button variant="ghost">Email reset link</Button></div>
+        <div class="text-sm"><b>{u.name}</b> · {u.email} · {ROLE_LABEL[u.role]}</div>
+        <p class="text-xs text-c3">Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</p>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <Field label="Current password"><input class={inputCls} type="password" value={cur} onInput={(e) => setCur((e.target as HTMLInputElement).value)} /></Field>
+          <Field label="New password (8+ characters)"><input class={inputCls} type="password" value={nx} onInput={(e) => setNx((e.target as HTMLInputElement).value)} /></Field>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <Button onClick={() => { const e = changePassword(cur, nx); setMsg(e ?? "Password changed"); if (!e) { setCur(""); setNx(""); } }}>Change password</Button>
+          <Button variant="outline" onClick={() => setMsg("Passkey quick-unlock needs the server (WebAuthn) — arrives with the backend.")}>Set up passkey</Button>
+        </div>
+        {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       </Card>
+      {can("settings", "full") && <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Prototype data is saved on this device.</span><Button variant="outline" onClick={() => confirm("Erase all local data and reload the sample data?") && resetAll()}>Reset sample data</Button></Card>}
     </SettingsShell>
   );
 }
 
 export function Users() {
+  const [edit, setEdit] = useState<User | null>(null);
+  const mods = ["work", "workshop", "mauny", "books", "gst", "settings"] as const;
+  const owner = can("settings", "full");
   return (
     <SettingsShell>
       <Section title="Role matrix">
         <Card>
-          <Table rows={X.roles} rowKey={(r) => r.id} cols={[
-            { key: "r", label: "Role", render: (r) => <b>{r.role}</b> }, { key: "o", label: "Orders", render: (r) => r.orders }, { key: "p", label: "Production", render: (r) => r.production },
-            { key: "f", label: "Finance", render: (r) => r.finance }, { key: "b", label: "Books", render: (r) => r.books }, { key: "s", label: "Settings", render: (r) => r.settings }]} />
+          <Table rows={Object.keys(MATRIX).map((r) => ({ r: r as Role }))} rowKey={(x) => x.r} cols={[
+            { key: "r", label: "Role", render: (x) => <b>{ROLE_LABEL[x.r]}</b> },
+            ...mods.map((m) => ({ key: m, label: m, render: (x: { r: Role }) => MATRIX[x.r][m] ?? "none" })),
+          ]} />
         </Card>
       </Section>
-      <Section title="Users" action={<Button variant="outline" icon="plus">Add user</Button>}>
-      <Card>
-        <Table rows={db.team} rowKey={(m) => m.id} cols={[
-          { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
-          { key: "r", label: "Role", render: (m) => m.role },
-          { key: "e", label: "Email", render: (m) => m.email },
-          { key: "x", label: "", render: () => <Button variant="ghost">Reset password</Button> },
-        ]} />
-      </Card>
+      <Section title="Users" action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true })}>Add user</Button>}>
+        {edit && (
+          <Card class="grid gap-3 sm:grid-cols-4 items-end">
+            <Field label="Name"><input class={inputCls} value={edit.name} onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} /></Field>
+            <Field label="Email"><input class={inputCls} value={edit.email} onInput={(e) => setEdit({ ...edit, email: (e.target as HTMLInputElement).value })} /></Field>
+            <Field label="Role"><select class={inputCls} value={edit.role} onChange={(e) => setEdit({ ...edit, role: (e.target as HTMLSelectElement).value as Role })}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select></Field>
+            <div class="flex gap-2"><Button onClick={() => { saveUser(edit); setEdit(null); }}>Save</Button><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button></div>
+          </Card>
+        )}
+        <Card>
+          <Table rows={usersSig.value} rowKey={(m) => m.id} cols={[
+            { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
+            { key: "r", label: "Role", render: (m) => ROLE_LABEL[m.role] },
+            { key: "e", label: "Email", render: (m) => m.email },
+            { key: "s", label: "Status", render: (m) => <Status tone={m.active ? "done" : "idle"}>{m.active ? "Active" : "Retired"}</Status> },
+            { key: "x", label: "", render: (m) => owner && <span class="flex flex-wrap gap-1"><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
+          ]} />
+        </Card>
       </Section>
     </SettingsShell>
   );
 }
 
 export function Business() {
+  const b = bizSig.value;
+  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={b[k]} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
   return (
     <SettingsShell>
-      <Card class="grid sm:grid-cols-2 gap-4">
-        <Field label="Business name"><input class={inputCls} value="Studio Nexify" /></Field>
-        <Field label="GSTIN"><input class={inputCls} placeholder="24XXXXX0000X1Z5" /></Field>
-        <Field label="Phone"><input class={inputCls} placeholder="+91" /></Field>
-        <Field label="Email"><input class={inputCls} value="connect@studionexify.com" /></Field>
-        <Field label="PAN"><input class={inputCls} /></Field>
-        <Field label="Udyam (MSME) no."><input class={inputCls} /></Field>
-        <div class="sm:col-span-2"><Field label="Address"><input class={inputCls} placeholder="Vadodara, Gujarat" /></Field></div>
-        <Field label="Bank (shown on invoices)"><input class={inputCls} placeholder="HDFC ··4421 · IFSC" /></Field>
-        <Field label="Invoice series"><input class={inputCls} value="B/26-27/####" /></Field>
-        <Field label="Payment terms (days)"><input class={inputCls} value="30" /></Field>
-        <Field label="Logo"><input class={inputCls} type="file" accept="image/*" /></Field>
-        <div><Button>Save</Button></div>
+      <Card class="grid sm:grid-cols-2 gap-3">
+        {f("name", "Business name")}{f("gstin", "GSTIN")}{f("pan", "PAN")}{f("udyam", "Udyam (MSME) no.")}{f("phone", "Phone")}{f("email", "Email")}
+        {f("address", "Address", true)}{f("bank", "Bank (shown on invoices)", true)}{f("series", "Invoice series")}{f("terms", "Terms printed on documents", true)}
+        <p class="sm:col-span-2 text-xs text-c3">Saved as you type · printed on every quotation, invoice and credit note.</p>
       </Card>
     </SettingsShell>
   );
@@ -177,4 +193,36 @@ export function Integrations() {
 }
 
 import { RatesEditor } from "./Calculator";
+import { bizSig, type Biz } from "../data/biz";
 export function Rates() { return <SettingsShell><RatesEditor /></SettingsShell>; }
+
+import { searchQ } from "../data/search";
+import { ordersSig, invoicesSig, quotesSig, expensesSig, billsSig } from "../data";
+import { NAV, WORK_TABS, MAUNY_TABS, WORKSHOP_TABS, CALC_TABS } from "../nav";
+export function Search() {
+  const q = searchQ.value.trim().toLowerCase();
+  const hit = (...xs: (string | undefined)[]) => !!q && xs.some((x) => x?.toLowerCase().includes(q));
+  const pages = [...NAV, ...WORK_TABS, ...MAUNY_TABS, ...WORKSHOP_TABS, ...CALC_TABS, ...SETTINGS_TABS].filter((p) => hit(p.label));
+  const groups: [string, { k: string; t: string; d: string; href: string }[]][] = [
+    ["Orders", ordersSig.value.filter((o) => hit(o.no, o.customer, ...o.items.map((i) => i.name))).map((o) => ({ k: o.id, t: `${o.no} · ${o.customer}`, d: o.items.map((i) => i.name).join(", "), href: "/work/orders" }))],
+    ["Customers", [...new Set(ordersSig.value.map((o) => o.customer).concat(X.clients.map((c) => c.name)))].filter((c) => hit(c)).map((c) => ({ k: c, t: c, d: "Client", href: "/work/clients" }))],
+    ["Invoices", invoicesSig.value.filter((i) => hit(i.no, i.customer, i.orderNo)).map((i) => ({ k: i.id, t: `${i.no} · ${i.customer}`, d: i.kind, href: "/work/invoice" }))],
+    ["Quotations", quotesSig.value.filter((x) => hit(x.no, x.customer)).map((x) => ({ k: x.id, t: `${x.no} · ${x.customer}`, d: x.outcome, href: "/work/quotes" }))],
+    ["Bills & expenses", [...billsSig.value.filter((b) => hit(b.vendor, b.no)).map((b) => ({ k: b.id, t: `${b.vendor} ${b.no}`, d: "Bill", href: "/mauny/purchases" })), ...expensesSig.value.filter((e) => hit(e.vendor, e.head)).map((e) => ({ k: e.id, t: `${e.vendor} · ${e.head}`, d: "Expense", href: "/mauny/finance" }))]],
+    ["Pages", pages.map((p) => ({ k: p.href, t: p.label, d: p.href, href: p.href }))],
+  ];
+  const any = groups.some(([, l]) => l.length);
+  return (
+    <Page title="Search" sub="Orders, customers, invoice and quote numbers, bills, every page">
+      {!q ? <Empty title="Type in the search bar" hint="Ctrl / ⌘ K focuses it from anywhere." /> : !any ? <Empty title={`Nothing matches “${searchQ.value}”`} /> : (
+        <div class="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+          {groups.filter(([, l]) => l.length).map(([g, l]) => (
+            <Card key={g}><CardTitle action={<span class="text-xs text-c3">{l.length}</span>}>{g}</CardTitle>
+              <ul>{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-c1 first:border-0"><a href={r.href} class="block py-1.5 text-sm"><b>{r.t}</b> <span class="text-c3 text-xs">{r.d}</span></a></li>)}</ul>
+            </Card>
+          ))}
+        </div>
+      )}
+    </Page>
+  );
+}

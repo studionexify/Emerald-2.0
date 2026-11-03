@@ -2,7 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Button, Chip, DetailHead, Fact, Page, Status } from "../../ui";
-import { addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 
 export function WorkShell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
   return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{children}</Page>;
@@ -44,6 +44,11 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
   const cons = orderConsumption(order.no);
   const used = cons.reduce((s, c) => s + c.cost, 0);
   const total = orderTotal(order);
+  /** Re-slice rule: moving back needs a reason; every move lands in stage history. */
+  const go = (to: Stage) => { const back = STAGE_ORDER.indexOf(to) < STAGE_ORDER.indexOf(order.stage); const reason = back ? prompt(`Reason for sending ${order.no} back to ${STAGE_LABEL[to]}?`) : ""; if (back && !reason) return; onOpen(moveTo(order, to, reason ?? "")); };
+  const hist = historySig.value.filter((h) => h.orderNo === order.no);
+  const photos = photosSig.value.filter((p) => p.ref === order.no);
+  const lowAcc = X.accessories.filter((a) => a.cat === "Accessory" && a.qty <= a.reorderAt);
   return (
     <div>
       <DetailHead title={`${order.no} · ${order.customer}`} onClose={() => { setMsg(""); onClose(); }} />
@@ -51,17 +56,18 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       <div class="text-[11px] text-c3 mb-1">Stage — tap any to move (outlined = usual path)</div>
       <ol class="flex flex-wrap gap-1 mb-2" aria-label="Stages">
         {STAGE_ORDER.map((s) => (
-          <li key={s}><button onClick={() => onOpen(moveTo(order, s))} aria-pressed={order.stage === s}
+          <li key={s}><button onClick={() => go(s)} aria-pressed={order.stage === s}
             class={`text-[11px] px-2 h-6 inline-flex items-center rounded-full cursor-pointer ${order.stage === s ? "bg-c4 text-c0 font-semibold" : sug.includes(s) ? "bg-c0 border border-c3" : "bg-c1 text-c3"}`}>{STAGE_LABEL[s]}</button></li>
         ))}
       </ol>
       <div class="flex flex-wrap gap-2 mb-3">
-        {prev && <Button variant="outline" onClick={() => onOpen(moveTo(order, prev))}>← {STAGE_LABEL[prev]}</Button>}
-        {next && <Button onClick={() => onOpen(moveTo(order, next))}>{STAGE_LABEL[next]} →</Button>}
+        {prev && <Button variant="outline" onClick={() => go(prev)}>← {STAGE_LABEL[prev]}</Button>}
+        {next && <Button onClick={() => go(next)}>{STAGE_LABEL[next]} →</Button>}
         <Button variant="outline" icon="copy" onClick={() => { const c = duplicateOrder(order); setMsg(`Created ${c.no}`); onOpen(c); }}>Duplicate</Button>
       </div>
       {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
 
+      {order.stage === "production" && lowAcc.length > 0 && <div class="rounded-xl bg-c1 p-2 text-xs mb-3"><b>Stock check (advisory):</b> {lowAcc.map((a) => a.name).join(", ")} at or below reorder.</div>}
       <h3 class="font-semibold text-sm mb-1.5">Recorded</h3>
       <ul class="grid grid-cols-2 gap-x-3 gap-y-1 mb-3 text-xs">
         {checks(order, batchesSig.value).map((c) => (
@@ -104,6 +110,31 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
           </li>
         ))}
       </ul>
+      <h3 class="font-semibold text-sm mb-1.5">Design record per line</h3>
+      <div class="flex flex-col gap-2 mb-3">
+        {order.items.map((i, k) => { const key = `${order.no}#${k}`; const d = designSig.value[key] ?? { file: "", profile: "", grams: 0, minutes: 0, bom: "", measuredBy: "", source: "slicer" as const };
+          const set = (p: Partial<typeof d>) => (designSig.value = { ...designSig.value, [key]: { ...d, ...p, measuredBy: "you" } });
+          const c = "h-8 px-2 rounded-lg border border-c3 bg-c0 text-xs min-w-0";
+          return (
+            <div key={k} class="bg-c1 rounded-xl p-2 text-xs">
+              <div class="font-medium mb-1">{i.name}</div>
+              <div class="grid grid-cols-2 gap-1">
+                <input class={c} placeholder="Print file name" value={d.file} onInput={(e) => set({ file: (e.target as HTMLInputElement).value })} />
+                <input class={c} placeholder="Slice profile" value={d.profile} onInput={(e) => set({ profile: (e.target as HTMLInputElement).value })} />
+                <input class={c} type="number" placeholder="Sliced g" value={d.grams || ""} onInput={(e) => set({ grams: Number((e.target as HTMLInputElement).value) || 0 })} />
+                <input class={c} type="number" placeholder="Sliced min" value={d.minutes || ""} onInput={(e) => set({ minutes: Number((e.target as HTMLInputElement).value) || 0 })} />
+                <input class={`${c} col-span-2`} placeholder="BOM: magnets ×2, insert ×4…" value={d.bom} onInput={(e) => set({ bom: (e.target as HTMLInputElement).value })} />
+              </div>
+              {d.grams > 0 && <div class="text-c3 mt-1">Sliced vs logged filament: {d.grams * i.qty} g vs {cons.filter((x) => x.kind === "filament").reduce((s, x) => s + x.qty, 0)} g</div>}
+            </div>
+          ); })}
+      </div>
+
+      <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Photos <label class="text-xs underline cursor-pointer">+ Add (QC / packing)<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: String(r.result), at: nowS() }]; onOpen({ ...order }); }; r.readAsDataURL(f); }} /></label></h3>
+      <div class="grid grid-cols-4 gap-1.5 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><img src={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
+
+      <h3 class="font-semibold text-sm mb-1.5">Stage history</h3>
+      <ul class="text-xs mb-3">{hist.map((h) => <li key={h.id} class="py-1 border-t border-c1">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>
       <label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!order.paid} onChange={() => onOpen(patchOrder(order, { paid: !order.paid }))} /> Payment received</label>
     </div>
   );

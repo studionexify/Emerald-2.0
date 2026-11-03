@@ -1,5 +1,5 @@
 /** Data access. Phase 1 reads in-memory mock; phase 2 swaps in the API. */
-import { signal } from "@preact/signals";
+import { persisted as P } from "./store";
 import * as M from "../mock/data";
 import type { Batch, BatchStage, ConKind, Consumption, Log, LogKind, Order, OrderType, Stage } from "../mock/types";
 import { STAGE_LABEL, STAGE_ORDER } from "./flows";
@@ -7,12 +7,12 @@ import { STAGE_LABEL, STAGE_ORDER } from "./flows";
 export * from "../mock/types";
 export const db = M;
 
-export const ordersSig = signal<Order[]>(M.orders);
-export const batchesSig = signal<Batch[]>(M.batches);
-export const logsSig = signal<Log[]>(M.logs);
-export const consSig = signal<Consumption[]>(M.consumption);
-export const spoolsSig = signal(M.spools);
-export const packSig = signal(M.packStock);
+export const ordersSig = P<Order[]>("orders", M.orders);
+export const batchesSig = P<Batch[]>("batches", M.batches);
+export const logsSig = P<Log[]>("logs", M.logs);
+export const consSig = P<Consumption[]>("consumption", M.consumption);
+export const spoolsSig = P("spools", M.spools);
+export const packSig = P("packStock", M.packStock);
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
 
@@ -41,12 +41,18 @@ export function duplicateOrder(o: Order): Order {
 export * as X from "../mock/extra";
 export * from "./flows";
 export * from "./rates";
+export * from "./store";
+export * from "./ledger";
+export * from "./auth";
+import { me } from "./auth";
+import { setLogger, historySig } from "./ledger";
 import { rate } from "./rates";
 
 const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
 export function log(action: string, target: string, kind: LogKind = "order") {
-  logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: "You", action, target, kind }, ...logsSig.value];
+  logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
+setLogger(log);
 const putOrder = (o: Order) => (ordersSig.value = ordersSig.value.map((x) => (x.id === o.id ? o : x)));
 const putBatch = (b: Batch) => (batchesSig.value = batchesSig.value.map((x) => (x.id === b.id ? b : x)));
 
@@ -60,9 +66,11 @@ export function satisfy(o: Order, field: keyof Order): Order {
 }
 
 /** Move to any stage — no gates. */
-export function moveTo(o: Order, to: Stage): Order {
+export function moveTo(o: Order, to: Stage, reason = ""): Order {
   const n = { ...o, stage: to };
-  putOrder(n); log(`${STAGE_LABEL[o.stage]} → ${STAGE_LABEL[to]}`, o.no); return n;
+  putOrder(n); log(`${STAGE_LABEL[o.stage]} → ${STAGE_LABEL[to]}${reason ? ` (${reason})` : ""}`, o.no);
+  historySig.value = [{ id: crypto.randomUUID(), orderNo: o.no, from: o.stage, to, by: me.value?.name ?? "You", at: now(), reason }, ...historySig.value];
+  return n;
 }
 
 export function batchSet(b: Batch, p: Partial<Batch>, what: string) { putBatch({ ...b, ...p }); log(what, `${b.orderNo} · ${b.name}`); }
@@ -80,7 +88,7 @@ export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?:
     const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;
     packSig.value = packSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p));
   }
-  const e: Consumption = { id: crypto.randomUUID(), at: now(), who: "You", unit: UNIT[d.kind], cost: Math.round(cost), ...d };
+  const e: Consumption = { id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", unit: UNIT[d.kind], cost: Math.round(cost), ...d };
   consSig.value = [e, ...consSig.value];
   log(`Consumed ${d.qty} ${e.unit} ${d.item}`, d.orderNo ?? "Workshop", "consumption");
   return e;

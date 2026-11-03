@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
-import { batchAction, batchesSig, db, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X } from "../../data";
+import { db, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X } from "../../data";
 import { ConsumeForm, WorkShell } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
@@ -153,85 +153,6 @@ export function Packing() {
           </Card>
         </Section>
       </div>
-    </WorkShell>
-  );
-}
-
-export function Invoice() {
-  const [f, setF] = useState("all");
-  const waiting = ordersSig.value.filter((o) => o.stage === "invoice");
-  const bw = batchesSig.value.filter((b) => b.stage === "invoice");
-  const reg = X.invoices.filter((i) => f === "all" || (f === "paid" ? i.paid : !i.paid));
-  return (
-    <WorkShell title="Invoice" sub="Tax invoices in the studio's series · edit, cancel, rename, resequence" actions={<><Button variant="outline">Resequence</Button><Button icon="plus">New invoice</Button></>}
-      toolbar={<div class="flex gap-1.5">{["all", "unpaid", "paid"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s[0].toUpperCase() + s.slice(1)}</Chip>)}</div>}>
-      <Section title="Awaiting invoice" note={`${waiting.length + bw.length} · orders + batch dispatches`}>
-        <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {waiting.map((o) => (
-            <Card key={o.id}>
-              <CardTitle action={<span class="num text-sm font-semibold">{inr(orderTotal(o))}</span>}>{o.no} · {o.customer}</CardTitle>
-              <p class="text-xs text-c3 mb-3">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</p>
-              <div class="flex gap-2"><Button>Raise invoice</Button><Button variant="outline">Draft in generator</Button></div>
-            </Card>
-          ))}
-          {bw.map((b) => (
-            <Card key={b.id}>
-              <CardTitle action={<span class="text-xs text-c3">Batch dispatch</span>}>{b.orderNo} · {b.name}</CardTitle>
-              <p class="text-xs text-c3 mb-3">{b.customer} · {b.units} units{b.invoiceNo ? ` · ${b.invoiceNo}` : ""}</p>
-              {b.invoiceNo ? <Status tone="done">Invoice raised — advance from Bulk</Status> : <Button onClick={() => batchAction(b, "invoice")}>Raise dispatch invoice</Button>}
-            </Card>
-          ))}
-        </div>
-      </Section>
-      <Section title="Register" note={`FY 2026-27 · B series · ${reg.length}`}>
-        <Card>
-          <Table rows={reg} rowKey={(i) => i.id} cols={[
-            { key: "n", label: "Invoice", render: (i) => <b>{i.no}</b> },
-            { key: "d", label: "Date", render: (i) => shortDate(i.date) },
-            { key: "c", label: "Customer", render: (i) => i.customer },
-            { key: "o", label: "Order", render: (i) => i.order, hideTablet: true },
-            { key: "t", label: "Taxable", align: "right", render: (i) => inr(i.taxable), hideTablet: true },
-            { key: "g", label: "GST", align: "right", render: (i) => inr(i.gst) },
-            { key: "v", label: "Total", align: "right", render: (i) => inr(i.total) },
-            { key: "p", label: "Status", render: (i) => <Status tone={i.paid ? "done" : i.age > 60 ? "blocked" : "waiting"}>{i.paid ? "Paid" : `Unpaid ${i.age}d`}</Status> },
-          ]} />
-        </Card>
-      </Section>
-    </WorkShell>
-  );
-}
-
-export function Shipping() {
-  return (
-    <WorkShell title="Shipping" sub="Courier, tracking, freight paid vs recovered · partial dispatch" actions={<Button icon="plus">New dispatch</Button>}>
-      <div class="grid grid-cols-3 gap-2">
-        <Stat value={X.shipments.length} label="dispatches" />
-        <Stat value={inr(X.shipments.reduce((s, x) => s + x.paid, 0))} label="freight paid" />
-        <Stat value={inr(X.shipments.reduce((s, x) => s + x.recovered, 0))} label="recovered" />
-      </div>
-      {(() => {
-        const ready = [...ordersSig.value.filter((o) => o.stage === "shipping").map((o) => ({ id: o.id, ref: o.no, who: o.customer, kind: TYPE_LABEL[o.type] })),
-          ...batchesSig.value.filter((b) => b.stage === "shipping").map((b) => ({ id: b.id, ref: `${b.orderNo} · ${b.name}`, who: b.customer, kind: "Batch dispatch" }))];
-        return <Section title="Ready to ship" note={String(ready.length)}><div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{ready.map((r) => <Card key={r.id}><div class="flex justify-between text-xs text-c3"><span>{r.kind}</span></div><div class="font-semibold text-sm">{r.ref}</div><div class="text-xs text-c3">{r.who}</div></Card>)}</div></Section>;
-      })()}
-      <Card>
-        <Table rows={X.shipments} rowKey={(s) => s.id} cols={[
-          { key: "o", label: "Order", render: (s) => <b>{s.order} · {s.customer}</b> },
-          { key: "c", label: "Courier", render: (s) => `${s.courier} · ${s.service}` },
-          { key: "t", label: "Tracking", render: (s) => (s.tracking || <Status tone="blocked">Missing</Status>) },
-          { key: "p", label: "Part", render: (s) => s.part },
-          { key: "e", label: "ETA", render: (s) => shortDate(s.eta) },
-          { key: "f", label: "Paid / rec.", align: "right", render: (s) => `${inr(s.paid)} / ${inr(s.recovered)}` },
-        ]} />
-      </Card>
-      <Card class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6 items-end">
-        <Field label="Order">{sel(ordersSig.value.filter((o) => o.stage === "shipping").map((o) => o.no))}</Field>
-        <Field label="Courier">{sel(["Delhivery", "DTDC", "Blue Dart", "India Post", "Hand delivery"])}</Field>
-        <Field label="Tracking no."><input class={inputCls} /></Field>
-        <Field label="Freight paid"><input class={inputCls} type="number" /></Field>
-        <Field label="Freight recovered"><input class={inputCls} type="number" /></Field>
-        <Button>Save dispatch</Button>
-      </Card>
     </WorkShell>
   );
 }

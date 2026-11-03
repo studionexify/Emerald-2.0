@@ -1,4 +1,5 @@
-import { lazy, path } from "./router";
+import { lazy, navigate, path } from "./router";
+import { can, isExternal, me, moduleOf } from "./data";
 import { Frame } from "./frame/Frame";
 import { Empty, Page } from "./ui";
 
@@ -19,9 +20,9 @@ const routes: [string, any][] = [
   ["/work/production", L(work, "Production")],
   ["/work/qc", L(work, "QC")],
   ["/work/packing", L(work, "Packing")],
-  ["/work/shipping", L(work, "Shipping")],
+  ["/work/shipping", L(rec, "Shipping")],
   ["/work/archive", L(work, "Archive")],
-  ["/work/invoice", L(work, "Invoice")],
+  ["/work/invoice", L(rec, "Invoice")],
   ["/work/clients", L(rec, "Clients")],
   ["/work/quotes", L(rec, "Quotes")],
   ["/work/documents", L(rec, "Documents")],
@@ -61,7 +62,15 @@ function NotFound() {
 
 const table = new Map(routes);
 
+const LoginPage = D(() => import("./routes/Login"));
+const SearchPage = L(g, "Search");
+function NoAccess() {
+  return <Page title="No access"><Empty title="Your role can't open this page" hint="Ask the owner to change your role in Settings → Users & roles." /></Page>;
+}
 export function App() {
-  const C = table.get(path.value) ?? NotFound;
-  return <Frame><C key={path.value} /></Frame>;
+  if (!me.value) return <LoginPage />;
+  if (isExternal() && !path.value.startsWith("/mauny/gst") && path.value !== "/settings") { navigate("/mauny/gst"); return null; }
+  const C = path.value === "/search" ? SearchPage : table.get(path.value) ?? NotFound;
+  const ok = path.value === "/search" || path.value === "/settings" || can(moduleOf(path.value));
+  return <Frame>{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
 }
