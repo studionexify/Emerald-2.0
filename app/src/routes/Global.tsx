@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
-import { Button, Card, Chip, Field, inputCls, PageHead, Status, Table, Tabs } from "../ui";
+import { Button, Card, Chip, Field, inputCls, Page, Status, Table } from "../ui";
 import { db, shortDate } from "../data";
 
 export function Todo() {
@@ -8,9 +8,8 @@ export function Todo() {
   const [f, setF] = useState<"open" | "done">("open");
   const list = tasks.filter((t) => (f === "open" ? !t.done : t.done));
   return (
-    <>
-      <PageHead title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus">New task</Button>} />
-      <div class="flex gap-2 mb-3"><Chip active={f === "open"} onClick={() => setF("open")}>Open</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip></div>
+    <Page title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus">New task</Button>}
+      toolbar={<div class="flex gap-2"><Chip active={f === "open"} onClick={() => setF("open")}>Open ({tasks.filter((t) => !t.done).length})</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip></div>}>
       <Card>
         <ul>
           {list.map((t) => (
@@ -26,14 +25,13 @@ export function Todo() {
           ))}
         </ul>
       </Card>
-    </>
+    </Page>
   );
 }
 
 export function Logs() {
   return (
-    <>
-      <PageHead title="Logs" sub="Who changed what, and when" />
+    <Page title="Logs" sub="Who changed what, and when" >
       <Card>
         <Table rows={db.logs} rowKey={(l) => l.id} cols={[
           { key: "a", label: "When", render: (l) => l.at },
@@ -42,14 +40,13 @@ export function Logs() {
           { key: "t", label: "Record", render: (l) => l.target },
         ]} />
       </Card>
-    </>
+    </Page>
   );
 }
 
 export function Bin() {
   return (
-    <>
-      <PageHead title="Bin" sub="Deleted records — restore any time" />
+    <Page title="Bin" sub="Deleted records — restore any time" >
       <Card>
         <Table rows={db.bin} rowKey={(b) => b.id} cols={[
           { key: "k", label: "Kind", render: (b) => <Status tone="idle">{b.kind}</Status> },
@@ -58,17 +55,15 @@ export function Bin() {
           { key: "r", label: "", render: () => <Button variant="outline">Restore</Button> },
         ]} />
       </Card>
-    </>
+    </Page>
   );
 }
 
 function SettingsShell({ children }: { children: preact.ComponentChildren }) {
   return (
-    <>
-      <PageHead title="Settings" />
-      <div class="mb-5"><Tabs tabs={SETTINGS_TABS} /></div>
+    <Page title="Settings"  tabs={SETTINGS_TABS}>
       <div class="max-w-2xl">{children}</div>
-    </>
+    </Page>
   );
 }
 

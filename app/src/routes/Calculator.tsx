@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Card, CardTitle, Field, inputCls, PageHead, Tabs } from "../ui";
+import { Card, CardTitle, Field, inputCls, Page } from "../ui";
 import { inr } from "../data";
 
 type Fields = Record<string, number>;
@@ -25,11 +25,9 @@ function Result({ rows, price }: { rows: [string, number][]; price: number }) {
 
 function Shell({ children }: { children: preact.ComponentChildren }) {
   return (
-    <>
-      <PageHead title="Calculator" sub="Price a job before you quote it" />
-      <div class="mb-5"><Tabs tabs={CALC_TABS} /></div>
+    <Page title="Calculator" sub="Price a job before you quote it"  tabs={CALC_TABS}>
       <div class="grid gap-3 lg:grid-cols-[1fr_320px]">{children}</div>
-    </>
+    </Page>
   );
 }
 

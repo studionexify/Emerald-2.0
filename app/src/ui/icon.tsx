@@ -1,4 +1,5 @@
 const P: Record<string, string> = {
+  menu: "M4 6h16M4 12h16M4 18h10",
   home: "M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
   work: "M4 7h16v12H4zM9 7V5h6v2M4 12h16",
   box: "M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10",

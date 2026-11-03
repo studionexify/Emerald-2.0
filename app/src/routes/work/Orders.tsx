@@ -10,8 +10,8 @@ export default function Orders() {
   const [stage, setStage] = useState<Stage>("quotation");
   const list = ordersSig.value.filter((o) => f === "all" || o.type === f);
   return (
-    <WorkShell title="Orders" sub="Quotations to archive, every order type" actions={<Button icon="plus">New order</Button>}>
-      <div class="flex flex-wrap gap-3 items-center justify-between mb-4">
+    <WorkShell title="Orders" sub="Quotations to archive, every order type" actions={<Button icon="plus">New order</Button>}
+      toolbar={<div class="flex flex-wrap gap-3 items-center justify-between">
         <TypeChips value={f} onChange={setF} />
         <div class="flex bg-c0 rounded-full p-1">
           {(["board", "list"] as const).map((v) => (
@@ -21,7 +21,7 @@ export default function Orders() {
             </button>
           ))}
         </div>
-      </div>
+      </div>}>
       {view === "board" ? (
         <>
           {/* Phone: pick a stage, see its orders */}

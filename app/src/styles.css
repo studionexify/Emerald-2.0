@@ -39,7 +39,8 @@
 }
 
 *, *::before, *::after { transition: none !important; animation: none !important; }
-html, body { height: 100%; }
+html, body, #app { height: 100%; }
+body { overflow: hidden; }
 body { margin: 0; background: var(--c-1); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }

@@ -1,16 +1,14 @@
 import type { ComponentChildren } from "preact";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line, Ring } from "../charts";
-import { Button, Card, CardTitle, Empty, Fact, PageHead, Progress, Status, Table, Tabs } from "../ui";
+import { Button, Card, CardTitle, Empty, Fact, Page, Progress, Section, Status, Table } from "../ui";
 import { db, inr, shortDate } from "../data";
 
 function Shell({ title, sub, actions, children }: { title: string; sub?: string; actions?: ComponentChildren; children: ComponentChildren }) {
   return (
-    <>
-      <PageHead title={title} sub={sub} actions={actions} />
-      <div class="mb-5"><Tabs tabs={MAUNY_TABS} /></div>
+    <Page title={title} sub={sub} actions={actions}  tabs={MAUNY_TABS}>
       {children}
-    </>
+    </Page>
   );
 }
 
@@ -23,7 +21,8 @@ const accounts = [
 export function MaunyHome() {
   return (
     <Shell title="Mauny" sub="Every rupee in and out" actions={<><Button variant="outline">Transfer</Button><Button icon="plus">Add entry</Button></>}>
-      <div class="grid gap-3 md:grid-cols-3 mb-3">
+      <Section title="Balances" note={inr(accounts.reduce((s, a) => s + a.bal, 0)) + " total"}>
+      <div class="grid gap-3 md:grid-cols-3">
         {accounts.map((a, i) => (
           <Card key={a.name} dark={i === 0}>
             <div class="text-sm opacity-80">{a.name}</div>
@@ -31,8 +30,9 @@ export function MaunyHome() {
           </Card>
         ))}
       </div>
+      </Section>
+      <Section title="Day book" note={`${db.money.length} entries`}>
       <Card>
-        <CardTitle>Day book</CardTitle>
         <Table rows={db.money} rowKey={(m) => m.id} cols={[
           { key: "d", label: "Date", render: (m) => shortDate(m.date) },
           { key: "t", label: "Entry", render: (m) => m.title },
@@ -41,6 +41,7 @@ export function MaunyHome() {
           { key: "v", label: "Amount", align: "right", render: (m) => inr(m.amount) },
         ]} />
       </Card>
+      </Section>
     </Shell>
   );
 }
@@ -56,16 +57,20 @@ export function Purchases() {
 export function Finance() {
   return (
     <Shell title="Finance" sub="Month to date vs same days last month">
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4 mb-3">
+      <Section title="Profit & loss" note="MTD">
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Card dark><Fact label="Net revenue" value={<span class="num text-3xl">{inr(142800)}</span>} /></Card>
         <Card><Fact label="Gross profit" value={<span class="num text-3xl">{inr(91300)}</span>} /></Card>
         <Card><Fact label="Expenses" value={<span class="num text-3xl">{inr(38600)}</span>} /></Card>
         <Card><Fact label="Net profit" value={<span class="num text-3xl">{inr(52700)}</span>} /></Card>
       </div>
+      </Section>
+      <Section title="Trend" note="6 months">
       <Card>
         <CardTitle>Revenue vs expenses</CardTitle>
         <Line a={[40, 55, 48, 70, 82, 95]} b={[30, 32, 35, 31, 38, 39]} labels={["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"]} />
       </Card>
+      </Section>
     </Shell>
   );
 }

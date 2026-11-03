@@ -1,12 +1,11 @@
 import { NAV } from "../nav";
-import { Icon, PageHead } from "../ui";
+import { Icon, Page } from "../ui";
 import { theme, toggleTheme } from "../frame/theme";
 
 export default function More() {
   const items = [...NAV, { href: "/settings", label: "Settings", icon: "settings" }];
   return (
-    <>
-      <PageHead title="All sections" />
+    <Page title="All sections" >
       <ul class="bg-c0 rounded-[var(--radius-card)] p-2">
         {items.map((n) => (
           <li key={n.href}><a href={n.href} class="flex items-center gap-3 p-3 rounded-2xl hover:bg-c1">
@@ -20,6 +19,6 @@ export default function More() {
         <span class="w-10 h-10 rounded-full bg-c1 flex items-center justify-center"><Icon name={theme.value === "dark" ? "sun" : "moon"} size={18} /></span>
         <span class="flex-1 text-left font-medium">{theme.value === "dark" ? "Light" : "Dark"} theme</span>
       </button>
-    </>
+    </Page>
   );
 }

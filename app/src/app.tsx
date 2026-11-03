@@ -1,8 +1,9 @@
-import { ErrorBoundary, LocationProvider, Route, Router, lazy } from "preact-iso";
+import { lazy, path } from "./router";
 import { Frame } from "./frame/Frame";
-import { Empty, PageHead } from "./ui";
+import { Empty, Page } from "./ui";
 
 const L = <T extends Record<string, any>>(load: () => Promise<T>, name: keyof T) => lazy(() => load().then((m) => m[name]));
+const D = (load: () => Promise<{ default: any }>) => lazy(() => load().then((m) => m.default));
 const work = () => import("./routes/work/Stages");
 const ws = () => import("./routes/Workshop");
 const calc = () => import("./routes/Calculator");
@@ -10,16 +11,16 @@ const mauny = () => import("./routes/Mauny");
 const g = () => import("./routes/Global");
 
 const routes: [string, any][] = [
-  ["/", lazy(() => import("./routes/Dashboard"))],
-  ["/more", lazy(() => import("./routes/More"))],
-  ["/work", lazy(() => import("./routes/work/Overview"))],
-  ["/work/orders", lazy(() => import("./routes/work/Orders"))],
+  ["/", D(() => import("./routes/Dashboard"))],
+  ["/more", D(() => import("./routes/More"))],
+  ["/work", D(() => import("./routes/work/Overview"))],
+  ["/work/orders", D(() => import("./routes/work/Orders"))],
   ["/work/production", L(work, "Production")],
   ["/work/qc", L(work, "QC")],
   ["/work/packing", L(work, "Packing")],
   ["/work/shipping", L(work, "Shipping")],
   ["/work/archive", L(work, "Archive")],
-  ["/work/bulk", lazy(() => import("./routes/work/Bulk"))],
+  ["/work/bulk", D(() => import("./routes/work/Bulk"))],
   ["/workshop", L(ws, "Printers")],
   ["/workshop/team", L(ws, "Team")],
   ["/workshop/filament", L(ws, "Filament")],
@@ -43,20 +44,12 @@ const routes: [string, any][] = [
 ];
 
 function NotFound() {
-  return <><PageHead title="Not found" /><Empty title="This page doesn't exist" action={<a class="underline" href="/">Go home</a>} /></>;
+  return <Page title="Not found"><Empty title="This page doesn't exist" action={<a class="underline" href="/">Go home</a>} /></Page>;
 }
 
+const table = new Map(routes);
+
 export function App() {
-  return (
-    <LocationProvider>
-      <ErrorBoundary>
-        <Frame>
-          <Router>
-            {routes.map(([p, C]) => <Route key={p} path={p} component={C} />)}
-            <Route default component={NotFound} />
-          </Router>
-        </Frame>
-      </ErrorBoundary>
-    </LocationProvider>
-  );
+  const C = table.get(path.value) ?? NotFound;
+  return <Frame><C key={path.value} /></Frame>;
 }

@@ -1,17 +1,11 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
-import { Button, Chip, Drawer, Fact, PageHead, Progress, Status, Tabs } from "../../ui";
+import { Button, Chip, Drawer, Fact, Page, Progress, Status } from "../../ui";
 import { duplicateOrder, inr, orderCost, orderTotal, shortDate, STAGES, TYPE_LABEL, type Order, type OrderType } from "../../data";
 
-export function WorkShell({ title, sub, actions, children }: { title: string; sub?: string; actions?: ComponentChildren; children: ComponentChildren }) {
-  return (
-    <>
-      <PageHead title={title} sub={sub} actions={actions} />
-      <div class="mb-5"><Tabs tabs={WORK_TABS} /></div>
-      {children}
-    </>
-  );
+export function WorkShell({ title, sub, actions, toolbar, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; children: ComponentChildren }) {
+  return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar}>{children}</Page>;
 }
 
 export type TypeFilter = "all" | OrderType;

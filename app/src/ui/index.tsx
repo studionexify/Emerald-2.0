@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ComponentChildren } from "preact";
-import { useLocation } from "preact-iso";
+import { useLocation } from "../router";
 import { Icon } from "./icon";
 
 export { Icon };
@@ -180,15 +180,42 @@ export function Drawer({ open, onClose, title, children }: { open: boolean; onCl
   );
 }
 
-export function PageHead({ title, sub, actions }: { title: string; sub?: string; actions?: ComponentChildren }) {
+/** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
+export function Page({ title, sub, actions, tabs, toolbar, children }: {
+  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; toolbar?: ComponentChildren; children: ComponentChildren;
+}) {
   return (
-    <header class="flex flex-wrap items-end justify-between gap-3 mb-4">
-      <div>
-        <h1 class="text-2xl xl:text-3xl font-semibold">{title}</h1>
-        {sub && <p class="text-sm text-c3 mt-1">{sub}</p>}
+    <div class="flex flex-col h-full min-h-0">
+      <div class="shrink-0 flex flex-col gap-3 px-4 md:px-5 2xl:px-7 pt-3 md:pt-4 pb-3 border-b border-c1 bg-c1">
+        <header class="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+          <div class="min-w-0">
+            <h1 class="text-xl md:text-2xl 2xl:text-[28px] font-semibold leading-tight">{title}</h1>
+            {sub && <p class="text-sm text-c3 mt-0.5">{sub}</p>}
+          </div>
+          {actions && <div class="flex flex-wrap gap-2">{actions}</div>}
+        </header>
+        {tabs && <Tabs tabs={tabs} />}
+        {toolbar}
       </div>
-      {actions && <div class="flex flex-wrap gap-2">{actions}</div>}
-    </header>
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 md:px-5 2xl:px-7 py-4 md:py-5">
+        <div class="flex flex-col gap-5 2xl:gap-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Section divider: label, count, a rule that runs to the edge, optional action. */
+export function Section({ title, note, action, children }: { title: string; note?: string; action?: ComponentChildren; children: ComponentChildren }) {
+  return (
+    <section class="flex flex-col gap-3 min-w-0">
+      <div class="flex items-center gap-3">
+        <h2 class="text-xs font-semibold uppercase tracking-[0.12em] text-c3 whitespace-nowrap">{title}</h2>
+        {note && <span class="num text-xs text-c3 whitespace-nowrap">{note}</span>}
+        <span class="flex-1 h-px bg-c2 opacity-60" aria-hidden="true" />
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }
 

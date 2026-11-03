@@ -1,14 +1,12 @@
 import { WORKSHOP_TABS } from "../nav";
-import { Button, Card, PageHead, Progress, Status, Table, Tabs } from "../ui";
+import { Button, Card, Page, Progress, Status, Table } from "../ui";
 import { db, inr } from "../data";
 
 function Shell({ children }: { children: preact.ComponentChildren }) {
   return (
-    <>
-      <PageHead title="Workshop & Inventory" sub="Printers, team, filament and packing stock" actions={<Button icon="plus">Add</Button>} />
-      <div class="mb-5"><Tabs tabs={WORKSHOP_TABS} /></div>
+    <Page title="Workshop & Inventory" sub="Printers, team, filament and packing stock" actions={<Button icon="plus">Add</Button>} tabs={WORKSHOP_TABS}>
       {children}
-    </>
+    </Page>
   );
 }
 
