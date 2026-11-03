@@ -400,7 +400,11 @@ export function attention(orders: Order[], spools: { material: string; colour: s
 
 /* ---------------------------------------------------------------- exports */
 export function download(name: string, content: string, type = "text/plain") {
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  // Inside a claude.ai artifact, files go through the viewer's downloads capability; elsewhere a plain link.
+  const c = (window as unknown as { claude?: { use: (n: string) => Promise<{ save: (r: { filename: string; data: Blob }) => Promise<unknown> } | null> } }).claude;
+  const blob = new Blob([content], { type });
+  const plain = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+  if (c?.use) c.use("downloads").then((d) => (d ? d.save({ filename: name, data: blob }).catch(() => {}) : plain())); else plain();
 }
 export const csv = (rows: Record<string, unknown>[]) => { if (!rows.length) return ""; const k = Object.keys(rows[0]); const q = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`; return [k.join(","), ...rows.map((r) => k.map((x) => q(r[x])).join(","))].join("\n"); };
 export function tallyXml(fy: string) {
