@@ -1,5 +1,5 @@
 import { lazy, navigate, path } from "./router";
-import { can, isExternal, me, moduleOf } from "./data";
+import { can, isExternal, me, moduleOf, sessionSig, usersSig } from "./data";
 import { Frame } from "./frame/Frame";
 import { Empty, Page } from "./ui";
 
@@ -62,13 +62,12 @@ function NotFound() {
 
 const table = new Map(routes);
 
-const LoginPage = D(() => import("./routes/Login"));
 const SearchPage = L(g, "Search");
 function NoAccess() {
   return <Page title="No access"><Empty title="Your role can't open this page" hint="Ask the owner to change your role in Settings → Users & roles." /></Page>;
 }
 export function App() {
-  if (!me.value) return <LoginPage />;
+  if (!me.value) { sessionSig.value = { userId: usersSig.value.find((u) => u.role === "owner")!.id, at: Date.now() }; return null; }
   if (isExternal() && !path.value.startsWith("/mauny/gst") && path.value !== "/settings") { navigate("/mauny/gst"); return null; }
   const C = path.value === "/search" ? SearchPage : table.get(path.value) ?? NotFound;
   const ok = path.value === "/search" || path.value === "/settings" || can(moduleOf(path.value));

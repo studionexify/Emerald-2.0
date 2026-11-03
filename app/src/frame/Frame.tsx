@@ -4,7 +4,7 @@ import { useLocation } from "../router";
 import { NAV } from "../nav";
 import { Icon } from "../ui";
 import { searchQ } from "../data/search";
-import { attention, batchesSig, can, isExternal, logout, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
+import { attention, batchesSig, can, isExternal, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
@@ -82,7 +82,7 @@ function TopBar() {
         </button>
         <Bell />
         <a href="/settings" aria-label={`Settings — ${me.value?.name}`} title={me.value?.name} class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-c4 text-c0 flex items-center justify-center font-semibold shrink-0">{me.value?.name[0]}</a>
-        <button onClick={logout} aria-label="Sign out" title="Sign out" class="hidden md:flex w-10 h-10 rounded-full bg-c1 items-center justify-center cursor-pointer text-xs">⎋</button>
+
       </div>
     </header>
   );
