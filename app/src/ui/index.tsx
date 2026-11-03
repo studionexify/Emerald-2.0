@@ -12,7 +12,7 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
     ghost: "bg-transparent text-c4 border-transparent hover:bg-c1",
   }[variant];
   return (
-    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-9 md:h-10 px-4 md:px-5 rounded-full border text-sm font-medium cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
+    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-9 md:h-10 px-4 md:px-5 rounded-full border text-sm font-semibold cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </button>
@@ -27,7 +27,7 @@ export function Card({ children, class: c, dark, dashed }: { children: Component
 export function CardTitle({ children, action }: { children: ComponentChildren; action?: ComponentChildren }) {
   return (
     <div class="flex items-center justify-between gap-2 mb-2 md:mb-3">
-      <h2 class="text-sm md:text-base font-semibold min-w-0">{children}</h2>
+      <h2 class="text-[15px] md:text-base font-bold tracking-tight min-w-0">{children}</h2>
       {action}
     </div>
   );
@@ -36,8 +36,8 @@ export function CardTitle({ children, action }: { children: ComponentChildren; a
 export function Stat({ value, label, dark }: { value: string | number; label: string; dark?: boolean }) {
   return (
     <div class={`rounded-2xl px-1 py-2 xl:py-3 text-center min-w-0 ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
-      <div class="num text-lg md:text-xl xl:text-2xl font-semibold">{value}</div>
-      <div class="text-[11px] xl:text-xs mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
+      <div class="num text-lg md:text-xl xl:text-2xl font-extrabold">{value}</div>
+      <div class="text-[10px] xl:text-[11px] uppercase tracking-[0.08em] font-medium mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
     </div>
   );
 }
@@ -53,7 +53,7 @@ export function Big({ value, label }: { value: string; label: string }) {
 
 export function Chip({ active, children, onClick }: { active?: boolean; children: ComponentChildren; onClick?: () => void }) {
   return (
-    <button onClick={onClick} class={`h-7 2xl:h-8 px-3 rounded-full text-xs 2xl:text-sm cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0" : "bg-c1 text-c3"}`}>
+    <button onClick={onClick} class={`h-7 2xl:h-8 px-3 rounded-full text-xs 2xl:text-sm cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0 font-semibold" : "bg-c1 text-c3 font-normal"}`}>
       {children}
     </button>
   );
@@ -77,7 +77,7 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
       <nav class="hidden xl:flex flex-wrap gap-1" aria-label="Sections">
         {tabs.map((t) => (
           <a key={t.href} href={t.href} aria-current={current?.href === t.href ? "page" : undefined}
-            class={`h-7 2xl:h-8 px-3 inline-flex items-center rounded-full text-[13px] ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
+            class={`h-7 2xl:h-8 px-3 inline-flex items-center rounded-full text-[13px] ${current?.href === t.href ? "bg-c4 text-c0 font-semibold" : "bg-c0 text-c3 font-normal hover:text-c4"}`}>
             {t.label}
           </a>
         ))}
@@ -97,7 +97,7 @@ export function Status({ tone, children }: { tone: Tone; children: ComponentChil
     idle: <span class="w-2.5 h-2.5 rounded-full bg-c2" />,
   }[tone];
   return (
-    <span class={`inline-flex items-center gap-2 text-xs ${tone === "blocked" ? "font-semibold" : ""}`}>
+    <span class={`inline-flex items-center gap-2 text-xs ${tone === "blocked" ? "font-bold" : tone === "done" ? "font-medium" : "font-normal"}`}>
       {mark}
       {children}
     </span>
@@ -134,11 +134,11 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
       <ul class="md:hidden flex flex-col gap-2">
         {rows.map((r) => (
           <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`bg-c1 rounded-xl p-2.5 text-[13px] ${onRow ? "cursor-pointer" : ""}`}>
-            <div class="font-semibold mb-1.5 break-words">{head.render(r)}</div>
+            <div class="text-sm font-bold mb-1.5 break-words">{head.render(r)}</div>
             <dl class="grid grid-cols-3 gap-x-2 gap-y-1">
               {rest.map((c) => (
                 <div key={c.key} class={`min-w-0 ${c.label ? "" : "col-span-3"}`}>
-                  {c.label && <dt class="text-[11px] text-c3">{c.label}</dt>}
+                  {c.label && <dt class="text-[10px] uppercase tracking-[0.08em] font-medium text-c3">{c.label}</dt>}
                   <dd class="break-words">{c.render(r)}</dd>
                 </div>
               ))}
@@ -180,7 +180,7 @@ export function DetailHead({ title, onClose }: { title: ComponentChildren; onClo
   return (
     <div class="flex items-center gap-2 mb-3">
       <button class="w-8 h-8 shrink-0 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close details"><Icon name="close" size={16} /></button>
-      <h2 class="text-base md:text-lg font-semibold min-w-0 break-words">{title}</h2>
+      <h2 class="text-base md:text-xl font-extrabold tracking-tight min-w-0 break-words">{title}</h2>
     </div>
   );
 }
@@ -209,8 +209,8 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
       <div class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-7 py-2 md:py-2.5 border-b border-c2/40 bg-c1">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-baseline gap-3">
-            <h1 class="text-base md:text-xl 2xl:text-2xl font-semibold leading-tight truncate">{title}</h1>
-            {sub && <p class="hidden lg:block text-sm text-c3 truncate">{sub}</p>}
+            <h1 class="text-lg md:text-2xl 2xl:text-[28px] font-extrabold tracking-tight leading-tight truncate">{title}</h1>
+            {sub && <p class="hidden lg:block text-[13px] text-c3 font-normal truncate">{sub}</p>}
           </div>
           {tabs && <div class="xl:hidden w-[46%] md:w-60 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
@@ -243,8 +243,8 @@ export function Section({ title, note, action, children }: { title: string; note
   return (
     <section class="flex flex-col gap-2 md:gap-3 min-w-0">
       <div class="flex items-center gap-3">
-        <h2 class="text-[11px] md:text-xs font-semibold uppercase tracking-[0.12em] text-c3 whitespace-nowrap">{title}</h2>
-        {note && <span class="num text-xs text-c3 whitespace-nowrap">{note}</span>}
+        <h2 class="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.14em] text-c4 whitespace-nowrap">{title}</h2>
+        {note && <span class="text-xs font-normal text-c3 whitespace-nowrap">{note}</span>}
         <span class="flex-1 h-px bg-c2 opacity-60" aria-hidden="true" />
         {action}
       </div>
@@ -256,16 +256,16 @@ export function Section({ title, note, action, children }: { title: string; note
 export function Fact({ label, value }: { label: string; value: ComponentChildren }) {
   return (
     <div>
-      <div class="text-xs text-c3">{label}</div>
-      <div class="font-semibold mt-0.5">{value}</div>
+      <div class="text-[11px] uppercase tracking-[0.08em] font-medium text-c3">{label}</div>
+      <div class="text-[15px] font-bold mt-0.5">{value}</div>
     </div>
   );
 }
 
 export function Field({ label, children }: { label: string; children: ComponentChildren }) {
   return (
-    <label class="flex flex-col gap-1.5 text-sm">
-      <span class="text-c3">{label}</span>
+    <label class="flex flex-col gap-1 text-sm">
+      <span class="text-[11px] uppercase tracking-[0.06em] font-semibold text-c3">{label}</span>
       {children}
     </label>
   );

@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
-import { db, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X } from "../../data";
+import { teamNames, db, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X } from "../../data";
 import { ConsumeForm, WorkShell } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
@@ -54,7 +54,7 @@ export function Production() {
           <Field label="Colour">{sel(["Black", "White", "Grey", "Gold"])}</Field>
           <Field label="Accessories">{sel(["None", "Magnets", "NFC tag", "Brass inserts"])}</Field>
           <Field label="Machine">{sel(db.printers.map((p) => p.name))}</Field>
-          <Field label="Operator">{sel(db.team.map((m) => m.name))}</Field>
+          <Field label="Operator">{sel(teamNames())}</Field>
           <Field label="Layer / infill"><input class={inputCls} value="0.2 mm · 15%" /></Field>
           <Field label="Estimate (g · h)"><input class={inputCls} value="410 g · 4 h" /></Field>
           <Field label="Finishing notes"><input class={inputCls} placeholder="Sand seams, prime" /></Field>
@@ -87,7 +87,7 @@ export function QC() {
               <Field label="Defect">{sel(["—", "Stringing", "Layer shift", "Warping", "Under-extrusion", "Dimensions"])}</Field>
               <Field label="Root cause">{sel(["—", "Material", "Slicer profile", "Machine", "Post-processing", "Design"])}</Field>
               <div class="col-span-2"><Field label="What should we do differently next time?"><input class={inputCls} /></Field></div>
-              <Field label="Checked by">{sel(db.team.map((m) => m.name))}</Field>
+              <Field label="Checked by">{sel(teamNames())}</Field>
               <Field label="Photo"><input class={inputCls} type="file" accept="image/*" /></Field>
             </div>
             <Button class="mt-3">Log check</Button>
@@ -127,7 +127,7 @@ export function Packing() {
                 <Field label="Material">{sel(db.packStock.map((p) => p.name))}</Field>
                 <Field label="Qty used"><input class={inputCls} type="number" /></Field>
                 <div class="col-span-2 sm:col-span-3"><Field label="Special handling"><input class={inputCls} placeholder="Fragile, keep flat" /></Field></div>
-                <Field label="Packed by">{sel(db.team.map((m) => m.name))}</Field>
+                <Field label="Packed by">{sel(teamNames())}</Field>
               </div>
               <div class="flex gap-2 mt-3"><Button>Record packing</Button><Button variant="outline" icon="plus">Material line</Button></div>
             </Card>

@@ -136,20 +136,25 @@ export function Users() {
           ]} />
         </Card>
       </Section>
-      <Section title="Users" action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true })}>Add user</Button>}>
+      <Section title="Team & users" note={`${usersSig.value.filter((u) => u.active).length} active`} action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true, login: false, job: "" })}>Add person</Button>}>
+        <p class="text-xs text-c3">One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</p>
         {edit && (
-          <Card class="grid gap-3 sm:grid-cols-4 items-end">
+          <Card class="grid gap-3 sm:grid-cols-3 xl:grid-cols-6 items-end">
             <Field label="Name"><input class={inputCls} value={edit.name} onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Email"><input class={inputCls} value={edit.email} onInput={(e) => setEdit({ ...edit, email: (e.target as HTMLInputElement).value })} /></Field>
-            <Field label="Role"><select class={inputCls} value={edit.role} onChange={(e) => setEdit({ ...edit, role: (e.target as HTMLSelectElement).value as Role })}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select></Field>
+            <Field label="Job title"><input class={inputCls} value={edit.job} onInput={(e) => setEdit({ ...edit, job: (e.target as HTMLInputElement).value })} /></Field>
+            <label class="flex items-center gap-2 text-sm h-10"><input type="checkbox" checked={edit.login} onChange={() => setEdit({ ...edit, login: !edit.login })} /> Can log in</label>
+            <Field label="Access role"><select class={inputCls} value={edit.role} onChange={(e) => setEdit({ ...edit, role: (e.target as HTMLSelectElement).value as Role })}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select></Field>
             <div class="flex gap-2"><Button onClick={() => { saveUser(edit); setEdit(null); }}>Save</Button><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button></div>
           </Card>
         )}
         <Card>
           <Table rows={usersSig.value} rowKey={(m) => m.id} cols={[
             { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
-            { key: "r", label: "Role", render: (m) => ROLE_LABEL[m.role] },
-            { key: "e", label: "Email", render: (m) => m.email },
+            { key: "j", label: "Job", render: (m) => m.job || "—" },
+            { key: "r", label: "Access", render: (m) => ROLE_LABEL[m.role] },
+            { key: "l", label: "Login", render: (m) => <Status tone={m.login ? "done" : "idle"}>{m.login ? "Yes" : "No"}</Status> },
+            { key: "e", label: "Email", render: (m) => m.email || "—", hideTablet: true },
             { key: "s", label: "Status", render: (m) => <Status tone={m.active ? "done" : "idle"}>{m.active ? "Active" : "Retired"}</Status> },
             { key: "x", label: "", render: (m) => owner && <span class="flex flex-wrap gap-1"><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
           ]} />
@@ -227,21 +232,3 @@ export function Search() {
   );
 }
 
-export function Team() {
-  return (
-    <SettingsShell>
-      <Section title="Team" note={String(db.team.length)} action={<Button variant="outline" icon="plus">Add member</Button>}>
-        <Card>
-          <Table rows={db.team} rowKey={(m) => m.id} cols={[
-            { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
-            { key: "r", label: "Role", render: (m) => m.role },
-            { key: "e", label: "Email", render: (m) => m.email },
-            { key: "s", label: "Active", render: () => <Status tone="done">Active</Status> },
-            { key: "a", label: "", render: () => <span class="flex gap-1"><Button variant="outline">Retire</Button><Button variant="ghost">Delete</Button></span> },
-          ]} />
-        </Card>
-        <p class="text-xs text-c3">Fills every 'who did this?' picker. Retire — off every picker, old records keep the name. Delete — only for a row typed in by mistake.</p>
-      </Section>
-    </SettingsShell>
-  );
-}

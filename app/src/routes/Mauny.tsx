@@ -21,8 +21,8 @@ function Fig({ label, value, note, dark, rule, inputs }: { label: string; value:
   const [o, setO] = useState(false);
   return (
     <Card dark={dark}>
-      <button class="text-xs opacity-80 flex items-center gap-1 cursor-pointer" onClick={() => setO(!o)} aria-expanded={o}>{label} <span aria-hidden="true">ⓘ</span></button>
-      <div class="num text-xl md:text-2xl xl:text-3xl font-semibold mt-1">{value}</div>
+      <button class="text-[11px] uppercase tracking-[0.08em] font-semibold opacity-80 flex items-center gap-1 cursor-pointer" onClick={() => setO(!o)} aria-expanded={o}>{label} <span aria-hidden="true">ⓘ</span></button>
+      <div class="num text-xl md:text-2xl xl:text-3xl font-extrabold mt-1">{value}</div>
       {note && <div class="text-xs opacity-80 mt-0.5">{note}</div>}
       <div class="text-[11px] opacity-60 mt-1 leading-snug">{rule}</div>
       {o && inputs && <ul class="text-[11px] mt-1.5 border-t border-current/20 pt-1">{inputs.map(([a, b]) => <li key={a} class="flex justify-between"><span>{a}</span><span class="num">{b}</span></li>)}</ul>}
@@ -60,7 +60,7 @@ export function MaunyHome() {
         <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
           {accs.map((a) => (
             <button key={a.id} onClick={() => setAcc(a.id)} class={`text-left rounded-[var(--radius-card)] p-3 md:p-4 cursor-pointer ${a.id === acc ? "bg-c4 text-c0" : "bg-c0"}`}>
-              <div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-semibold mt-1">{inr(balanceOf(a.id))}</div>
+              <div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-extrabold mt-1">{inr(balanceOf(a.id))}</div>
               <div class="text-xs opacity-80">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} statement lines to review</div>
             </button>
           ))}
@@ -242,7 +242,7 @@ export function Goals() {
               <Card key={g.id}>
                 <div class="flex justify-between gap-2 text-xs text-c3"><span>{GOAL_LABEL[g.metric]}</span><span>{g.period}</span></div>
                 <div class="font-semibold mt-0.5">{g.title}</div>
-                <div class="flex justify-between items-baseline mt-2"><span class="num text-xl md:text-2xl font-semibold">{fmt(p.value)}</span><span class="num text-sm">{p.pct}%</span></div>
+                <div class="flex justify-between items-baseline mt-2"><span class="num text-xl md:text-2xl font-extrabold">{fmt(p.value)}</span><span class="num text-sm">{p.pct}%</span></div>
                 <div class="relative mt-1"><Progress value={p.pct} /><span class="absolute -top-1 h-4 w-0.5 bg-c3" style={{ left: `${Math.min(100, p.pace)}%` }} title="Where today sits in the window" /></div>
                 <div class="flex justify-between text-xs mt-1.5"><span class="text-c3">of {fmt(g.target)}</span>{p.behind ? <Status tone="blocked">{g.metric === "expense_cap" ? "over pace" : "behind pace"}</Status> : <Status tone="done">on pace</Status>}</div>
                 {g.metric === "custom" && <p class="text-[11px] text-c3 mt-1">Moved by hand — not measured.</p>}
@@ -272,7 +272,7 @@ export function Accounts() {
       toolbar={<div class="flex flex-wrap gap-1.5 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><span class="w-px h-5 bg-c2" />{["review", "confirmed", "rejected", "all"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s}</Chip>)}</div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-        {accountsSig.value.map((a) => <Card key={a.id} dark={a.id === acc}><div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-semibold mt-1">{inr(balanceOf(a.id))}</div><div class="text-xs opacity-80">Opening {inr(a.opening)}</div></Card>)}
+        {accountsSig.value.map((a) => <Card key={a.id} dark={a.id === acc}><div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-extrabold mt-1">{inr(balanceOf(a.id))}</div><div class="text-xs opacity-80">Opening {inr(a.opening)}</div></Card>)}
       </div>
       <p class="text-xs text-c3">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p>
       <Card>

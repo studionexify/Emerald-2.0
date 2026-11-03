@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 /* Five shades, nothing else. Dark theme = exact inversion. */
@@ -34,7 +35,7 @@
   --color-c2: var(--c-2);
   --color-c3: var(--c-3);
   --color-c4: var(--c-4);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --radius-card: 20px;
 }
 
@@ -52,3 +53,14 @@ body { margin: 0; background: var(--c-1); color: var(--c-4); font-family: var(--
   .print-area, .print-area * { visibility: visible !important; }
   .print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000 !important; background: #fff !important; }
 }
+
+/* Type hierarchy — weight, size, case and underline carry meaning; colour stays monochrome. */
+body { font-size: 14px; line-height: 1.45; font-weight: 400; font-feature-settings: "cv11", "ss01"; }
+h1, h2, h3 { letter-spacing: -0.01em; }
+b, strong { font-weight: 650; }
+main a:not([class]), main p a, main .link { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; font-weight: 500; }
+main a:not([class]):hover, main p a:hover { text-decoration-thickness: 2px; }
+.num { font-weight: 600; }
+thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--c-3); }
+tbody td { font-weight: 400; }
+tbody td:first-child { font-weight: 600; }

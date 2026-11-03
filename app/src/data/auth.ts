@@ -5,7 +5,7 @@ import { persisted } from "./store";
 export type Role = "owner" | "manager" | "operator" | "accountant" | "ca";
 export type Module = "dashboard" | "work" | "workshop" | "calculator" | "mauny" | "books" | "gst" | "todo" | "logs" | "bin" | "settings" | "alerts";
 export type Level = "full" | "view" | "none";
-export type User = { id: string; name: string; email: string; role: Role; pass: string; active: boolean };
+export type User = { id: string; name: string; email: string; role: Role; pass: string; active: boolean; login: boolean; job: string };
 
 export const MATRIX: Record<Role, Partial<Record<Module, Level>>> = {
   owner: { dashboard: "full", work: "full", workshop: "full", calculator: "full", mauny: "full", books: "full", gst: "full", todo: "full", logs: "full", bin: "full", settings: "full", alerts: "full" },
@@ -18,18 +18,21 @@ export const ROLE_LABEL: Record<Role, string> = { owner: "Owner", manager: "Mana
 
 const hash = (s: string) => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) | 0; return "h" + (h >>> 0).toString(36); };
 export const usersSig = persisted<User[]>("users", [
-  { id: "u1", name: "Owner", email: "owner@studionexify.com", role: "owner", pass: hash("emerald"), active: true },
-  { id: "u2", name: "Chintan", email: "chintan@studionexify.com", role: "manager", pass: hash("emerald"), active: true },
-  { id: "u3", name: "Meet", email: "meet@studionexify.com", role: "operator", pass: hash("emerald"), active: true },
-  { id: "u4", name: "CA desk", email: "ca@studionexify.com", role: "ca", pass: hash("emerald"), active: true },
+  { id: "u1", name: "Owner", email: "owner@studionexify.com", role: "owner", pass: hash("emerald"), active: true, login: true, job: "Owner" },
+  { id: "u2", name: "Chintan", email: "chintan@studionexify.com", role: "manager", pass: hash("emerald"), active: true, login: true, job: "Co-founder" },
+  { id: "u3", name: "Meet", email: "meet@studionexify.com", role: "operator", pass: hash("emerald"), active: true, login: true, job: "Operator" },
+  { id: "u4", name: "CA desk", email: "ca@studionexify.com", role: "ca", pass: hash("emerald"), active: true, login: true, job: "Chartered accountant" },
 ]);
+if (usersSig.value.some((u) => u.login === undefined)) usersSig.value = usersSig.value.map((u) => ({ ...u, login: u.login ?? true, job: u.job ?? "" }));
+/** The floor roster: everyone active except external roles — fills every "who did this?" picker. */
+export const teamNames = () => usersSig.value.filter((u) => u.active && u.role !== "ca").map((u) => u.name);
 export const sessionSig = persisted<{ userId: string; at: number } | null>("session", null);
 const attempts = persisted<{ n: number; until: number }>("loginAttempts", { n: 0, until: 0 });
 export const me = computed(() => usersSig.value.find((u) => u.id === sessionSig.value?.userId && u.active) ?? null);
 
 export function login(email: string, pass: string): string | null {
   if (Date.now() < attempts.value.until) return `Too many attempts — try again in ${Math.ceil((attempts.value.until - Date.now()) / 1000)} s`;
-  const u = usersSig.value.find((x) => x.email.toLowerCase() === email.trim().toLowerCase() && x.active);
+  const u = usersSig.value.find((x) => x.email.toLowerCase() === email.trim().toLowerCase() && x.active && x.login);
   if (!u || u.pass !== hash(pass)) { const n = attempts.value.n + 1; attempts.value = { n, until: n >= 5 ? Date.now() + 60000 : 0 }; return "Email or password is wrong"; }
   attempts.value = { n: 0, until: 0 }; sessionSig.value = { userId: u.id, at: Date.now() }; return null;
 }

@@ -34,7 +34,7 @@ function Sidebar() {
           const on = isActive(path, n.href);
           return (
             <a key={n.href} href={n.href} aria-current={on ? "page" : undefined} title={n.label}
-              class={`flex items-center rounded-xl ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 py-2 text-[10px] leading-tight text-center" : "gap-3 h-10 px-3 text-sm"} ${on ? "bg-c4 text-c0" : "text-c3 hover:bg-c1 hover:text-c4"}`}>
+              class={`flex items-center rounded-xl ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 py-2 text-[10px] leading-tight text-center" : "gap-3 h-10 px-3 text-sm"} ${on ? "bg-c4 text-c0 font-semibold" : "text-c3 font-normal hover:bg-c1 hover:text-c4"}`}>
               <Icon name={n.icon} size={c ? 20 : 18} />
               <span class="min-w-0">{c ? n.label.split(" ")[0] : n.label}</span>
             </a>
@@ -67,7 +67,7 @@ function TopBar() {
       </button>
       <a href="/" class="flex items-center gap-2 shrink-0 md:w-[120px] 2xl:w-[180px]">
         <span class="w-9 h-9 rounded-lg bg-c4 text-c0 flex items-center justify-center font-bold">E</span>
-        <span class="hidden md:inline text-lg font-semibold tracking-tight">Emerald</span>
+        <span class="hidden md:inline text-lg font-extrabold tracking-tight">Emerald</span>
       </a>
       <label class="flex-1 min-w-0 max-w-xl h-10 bg-c1 rounded-full flex items-center gap-2 px-4 text-c3">
         <Icon name="search" size={18} />

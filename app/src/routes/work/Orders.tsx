@@ -20,7 +20,7 @@ export default function Orders() {
         <TypeChips value={f} onChange={setF} />
         {view === "board" && (
           <select aria-label="Stage" value={stage} onChange={(e) => setStage((e.target as HTMLSelectElement).value as Stage)}
-            class="md:hidden h-7 px-2 rounded-full bg-c0 text-xs font-medium flex-1 min-w-0">
+            class="md:hidden order-last basis-full h-8 px-3 rounded-full bg-c0 text-sm font-semibold min-w-0">
             {STAGES.map((s) => <option key={s.key} value={s.key}>{s.n}. {s.label} ({count(s.key)})</option>)}
           </select>
         )}
