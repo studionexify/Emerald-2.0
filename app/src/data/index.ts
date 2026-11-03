@@ -40,6 +40,8 @@ export function duplicateOrder(o: Order): Order {
 
 export * as X from "../mock/extra";
 export * from "./flows";
+export * from "./rates";
+import { rate } from "./rates";
 
 const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
 export function log(action: string, target: string, kind: LogKind = "order") {
@@ -66,12 +68,13 @@ export function moveTo(o: Order, to: Stage): Order {
 export function batchSet(b: Batch, p: Partial<Batch>, what: string) { putBatch({ ...b, ...p }); log(what, `${b.orderNo} · ${b.name}`); }
 export const batchTo = (b: Batch, to: BatchStage) => batchSet(b, { stage: to }, `Batch → ${to}`);
 
-const RATE: Record<ConKind, number> = { filament: 1.35, packing: 0, accessory: 0, part: 0, machine: 25, power: 8, labour: 100, freight: 1, scrap: 1.25 };
+const perG = (item: string) => rate(/PETG/.test(item) ? "petg" : /TPU/.test(item) ? "tpu" : /ABS/.test(item) ? "abs" : "pla") / 1000;
+const RATE: Record<ConKind, (item: string) => number> = { filament: perG, scrap: perG, packing: () => 0, accessory: () => 0, part: () => 0, machine: () => rate("machine"), power: () => rate("power"), labour: () => rate("labour"), freight: () => 1 };
 export const UNIT: Record<ConKind, string> = { filament: "g", packing: "pcs", accessory: "pcs", part: "pcs", machine: "h", power: "h", labour: "h", freight: "₹", scrap: "g" };
 
 /** Record any consumption; decrements stock where it applies and writes a log row. */
 export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string }) {
-  let cost = d.qty * RATE[d.kind];
+  let cost = d.qty * RATE[d.kind](d.item);
   if (d.kind === "filament") spoolsSig.value = spoolsSig.value.map((s) => (d.item.includes(s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
   if (d.kind === "packing") {
     const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;

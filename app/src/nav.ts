@@ -58,5 +58,6 @@ export const SETTINGS_TABS = [
   { href: "/settings", label: "Profile" },
   { href: "/settings/users", label: "Users & roles" },
   { href: "/settings/business", label: "Business profile" },
+  { href: "/settings/rates", label: "Rates & prices" },
   { href: "/settings/integrations", label: "Integrations" },
 ];

@@ -175,3 +175,6 @@ export function Integrations() {
     </SettingsShell>
   );
 }
+
+import { RatesEditor } from "./Calculator";
+export function Rates() { return <SettingsShell><RatesEditor /></SettingsShell>; }

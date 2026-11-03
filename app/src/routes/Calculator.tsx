@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
 import { Button, Card, CardTitle, Field, inputCls, Page, SubTabs } from "../ui";
-import { inr } from "../data";
+import { inr, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
 
 type Fields = Record<string, number>;
 function useFields(init: Fields) {
@@ -34,7 +34,7 @@ function Shell({ children }: { children: preact.ComponentChildren }) {
 
 export function Nexcal() {
   const [mode, setMode] = useState<"direct" | "upload">("direct");
-  const [v, b] = useFields({ grams: 120, perKg: 1250, hours: 5, machine: 25, power: 8, labour: 50, packing: 30, margin: 60, gst: 18, qty: 1 });
+  const [v, b] = useFields({ grams: 120, perKg: rate("pla"), hours: 5, machine: rate("machine"), power: rate("power"), labour: rate("labour") / 2, packing: rate("packingDefault"), margin: rate("margin"), gst: rate("gst"), qty: 1 });
   const material = (v.grams / 1000) * v.perKg, machine = v.hours * (v.machine + v.power);
   const cost = material + machine + v.labour + v.packing;
   const pre = cost * (1 + v.margin / 100), price = pre * (1 + v.gst / 100);
@@ -63,7 +63,7 @@ export function Nexcal() {
 }
 
 export function NexRes() {
-  const [v, b] = useFields({ ml: 180, perL: 2400, parts: 6, hours: 4, machine: 40, ipa: 25, labour: 80, margin: 70, gst: 18 });
+  const [v, b] = useFields({ ml: 180, perL: rate("resin"), parts: 6, hours: 4, machine: rate("resinMachine"), ipa: rate("ipa"), labour: rate("labour") * 0.8, margin: rate("resinMargin"), gst: rate("gst") });
   const plate = (v.ml / 1000) * v.perL + v.hours * v.machine + v.ipa + v.labour;
   const perPart = plate / Math.max(1, v.parts);
   const pre = perPart * (1 + v.margin / 100), price = pre * (1 + v.gst / 100);
@@ -88,14 +88,28 @@ export function NexRes() {
   );
 }
 
-export function PricingSettings() {
-  const rows: [string, string][] = [["PLA ₹/kg", "1250"], ["PETG ₹/kg", "1350"], ["TPU ₹/kg", "2200"], ["Resin ₹/L", "2400"], ["Machine rate ₹/h", "25"], ["Electricity ₹/h", "8"],
-    ["Labour ₹/h", "100"], ["Material efficiency ×", "1.25"], ["Default margin %", "60"], ["GST %", "18"], ["Bulk tier: 1 spool+", "5% off"], ["Bulk tier: 5 spools+", "12% off"]];
+export function RatesEditor() {
+  const groups = [...new Set(RATE_DEFS.map((r) => r.group))];
   return (
-    <Page title="Calculator" sub="Rates every quote uses" tabs={CALC_TABS} actions={<Button>Save rates</Button>}>
-      <Card class="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-        {rows.map(([l, v]) => <Field key={l} label={l}><input class={inputCls} value={v} /></Field>)}
-      </Card>
-    </Page>
+    <>
+      <p class="text-xs text-c3">Every price and rate used by the calculators, consumption costs, quotes and alerts. Changes apply immediately and are remembered on this device.</p>
+      {groups.map((g) => (
+        <Card key={g}>
+          <CardTitle>{g}</CardTitle>
+          <div class="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+            {RATE_DEFS.filter((r) => r.group === g).map((r) => (
+              <Field key={r.key} label={`${r.label} (${r.unit})`}>
+                <input class={inputCls} type="number" inputMode="decimal" value={ratesSig.value[r.key]} onInput={(e) => setRate(r.key, Number((e.target as HTMLInputElement).value) || 0)} />
+              </Field>
+            ))}
+          </div>
+        </Card>
+      ))}
+      <div><Button variant="outline" onClick={resetRates}>Reset to defaults</Button></div>
+    </>
   );
+}
+
+export function PricingSettings() {
+  return <Page title="Calculator" sub="Rates every quote uses — same list as Settings → Rates & prices" tabs={CALC_TABS}><RatesEditor /></Page>;
 }
