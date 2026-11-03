@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
 import { Button, Card, CardTitle, Chip, Field, inputCls, Page, Section, Status, Table } from "../ui";
-import { db, shortDate, X } from "../data";
+import { db, logsSig, shortDate, X } from "../data";
 
 export function Todo() {
   const [tasks, setTasks] = useState(db.tasks);
@@ -31,12 +31,12 @@ export function Todo() {
 
 export function Logs() {
   const [who, setWho] = useState("all");
-  const people = ["all", ...new Set(db.logs.map((l) => l.who))];
+  const people = ["all", ...new Set(logsSig.value.map((l) => l.who))];
   return (
     <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account"
       toolbar={<div class="flex flex-wrap gap-1.5">{people.map((p) => <Chip key={p} active={who === p} onClick={() => setWho(p)}>{p === "all" ? "Everyone" : p}</Chip>)}</div>}>
       <Card>
-        <Table rows={db.logs.filter((l) => who === "all" || l.who === who)} rowKey={(l) => l.id} cols={[
+        <Table rows={logsSig.value.filter((l) => who === "all" || l.who === who)} rowKey={(l) => l.id} cols={[
           { key: "a", label: "When", render: (l) => l.at },
           { key: "w", label: "Who", render: (l) => <b>{l.who}</b> },
           { key: "x", label: "Action", render: (l) => l.action },

@@ -1,18 +1,21 @@
 import { useState } from "preact/hooks";
-import { Button, Card, Icon, Status, Table } from "../../ui";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
+import { Button, Card, DetailHead, Field, Icon, inputCls, Status, Table } from "../../ui";
+import { batchesSig, createOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 export default function Orders() {
   const [f, setF] = useState<TypeFilter>("all");
   const [view, setView] = useState<"board" | "list">("board");
   const [open, setOpen] = useState<Order | null>(null);
+  const [creating, setCreating] = useState(false);
+  const cur = open && (ordersSig.value.find((o) => o.id === open.id) ?? open);
+  const batchesAt = (k: Stage) => (["production", "qc", "packing", "invoice", "shipping"].includes(k) ? batchesSig.value.filter((b) => b.stage === k && list.some((o) => o.no === b.orderNo)) : []);
   const [stage, setStage] = useState<Stage>("quotation");
   const list = ordersSig.value.filter((o) => f === "all" || o.type === f);
-  const count = (k: Stage) => list.filter((o) => o.stage === k).length;
+  const count = (k: Stage) => list.filter((o) => o.stage === k).length + batchesAt(k).length;
   return (
-    <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy">From template</Button><Button icon="plus">New order</Button></>}
-      detail={open && <OrderDetail order={open} onClose={() => setOpen(null)} onOpen={setOpen} />}
+    <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy">From template</Button><Button icon="plus" onClick={() => { setOpen(null); setCreating(true); }}>New order</Button></>}
+      detail={creating ? <NewOrder onDone={(o) => { setCreating(false); if (o) setOpen(o); }} /> : cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}
       toolbar={<div class="flex flex-wrap gap-2 items-center">
         <TypeChips value={f} onChange={setF} />
         {view === "board" && (
@@ -34,20 +37,22 @@ export default function Orders() {
         <>
           <div class="md:hidden flex flex-col gap-2">
             {list.filter((o) => o.stage === stage).map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
+            {batchesAt(stage).map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
             {!count(stage) && <div class="rounded-xl border-2 border-dashed border-c2 p-5 text-center text-sm text-c3">No orders at this stage</div>}
           </div>
-          <div class={`hidden md:grid gap-2.5 ${open ? "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "grid-cols-4 2xl:grid-cols-7"}`}>
+          <div class={`hidden md:grid gap-2.5 ${open || creating ? "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "grid-cols-4 2xl:grid-cols-8"}`}>
             {STAGES.map((s) => {
-              const col = list.filter((o) => o.stage === s.key);
+              const col = list.filter((o) => o.stage === s.key), bcol = batchesAt(s.key);
               return (
                 <div key={s.key} class="min-w-0">
                   <div class="flex items-center justify-between px-1 mb-1.5">
                     <span class="font-semibold text-xs xl:text-sm">{s.n}. {s.label}</span>
-                    <span class="num text-xs text-c3 bg-c0 rounded-full px-2 py-0.5">{col.length}</span>
+                    <span class="num text-xs text-c3 bg-c0 rounded-full px-2 py-0.5">{col.length + bcol.length}</span>
                   </div>
                   <div class="flex flex-col gap-2">
                     {col.map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
-                    {!col.length && <div class="rounded-xl border-2 border-dashed border-c2 h-12 flex items-center justify-center text-xs text-c3">No orders</div>}
+                    {bcol.map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
+                    {!col.length && !bcol.length && <div class="rounded-xl border-2 border-dashed border-c2 h-12 flex items-center justify-center text-xs text-c3">No orders</div>}
                   </div>
                 </div>
               );
@@ -68,5 +73,42 @@ export default function Orders() {
         </Card>
       )}
     </WorkShell>
+  );
+}
+
+function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () => void }) {
+  return (
+    <button onClick={onOpen} class="w-full text-left rounded-xl p-2.5 cursor-pointer bg-c4 text-c0 text-[13px] border-2 border-dashed border-c2">
+      <div class="flex justify-between text-xs opacity-80"><span>{b.orderNo}</span><span>Bulk batch</span></div>
+      <div class="font-semibold text-sm">{b.name}</div>
+      <div class="text-xs opacity-80">{b.customer} · {b.done}/{b.units}</div>
+    </button>
+  );
+}
+
+function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
+  const [t, setT] = useState<OrderType>("client");
+  const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "" });
+  const f = (k: keyof typeof d) => ({ value: d[k], class: inputCls, onInput: (e: Event) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, [k]: typeof d[k] === "number" ? Number(v) || 0 : v }); } });
+  return (
+    <div>
+      <DetailHead title="New order" onClose={() => onDone(null)} />
+      <div class="grid grid-cols-3 gap-1.5 mb-2">
+        {(["inhouse", "client", "bulk"] as OrderType[]).map((k) => (
+          <button key={k} onClick={() => setT(k)} class={`h-9 rounded-full text-sm cursor-pointer ${t === k ? "bg-c4 text-c0" : "bg-c1"}`}>{TYPE_LABEL[k]}</button>
+        ))}
+      </div>
+      <p class="text-xs text-c3 mb-3">{FLOW_NOTE[t]}</p>
+      <div class="grid grid-cols-2 gap-2.5">
+        {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} /></Field></div>}
+        <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} /></Field></div>
+        <Field label="Quantity"><input type="number" {...f("qty")} /></Field>
+        {t !== "inhouse" ? <Field label="Unit price (₹)"><input type="number" {...f("price")} /></Field> : <Field label="Purpose"><select class={inputCls}><option>Jig / tool</option><option>Sample</option><option>R&D</option><option>Display</option></select></Field>}
+        {t !== "inhouse" && <Field label="Came via"><select class={inputCls} value={d.medium} onChange={(e) => setD({ ...d, medium: (e.target as HTMLSelectElement).value })}>{["Instagram", "WhatsApp", "Website", "Referral", "Word of mouth", "Exhibition", "Phone", "Email"].map((m) => <option key={m}>{m}</option>)}</select></Field>}
+        {t === "bulk" && <Field label="GSTIN"><input class={inputCls} placeholder="24…" /></Field>}
+        <Field label="Due"><input type="date" {...f("due")} /></Field>
+      </div>
+      <Button class="mt-3" onClick={() => onDone(createOrder({ type: t, ...d }))}>{t === "inhouse" ? "Start in Production" : "Create quotation"}</Button>
+    </div>
   );
 }

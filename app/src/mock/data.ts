@@ -1,25 +1,25 @@
 import type { Batch, Binned, Job, Log, Member, Money, Order, PackItem, Printer, QcEntry, Spool, Task } from "./types";
 
 export const orders: Order[] = [
-  { id: "o1", no: "EM-1042", type: "client", customer: "Riya Shah", medium: "Instagram", stage: "quotation", created: "2026-11-01", due: "2026-11-08",
+  { id: "o1", approved: false, buildSheet: true, no: "EM-1042", type: "client", customer: "Riya Shah", medium: "Instagram", stage: "quotation", created: "2026-11-01", due: "2026-11-08",
     items: [{ name: "Custom name keychain", material: "PLA", colour: "Black", qty: 4, price: 249, cost: 60 }] },
-  { id: "o2", no: "EM-1041", type: "bulk", customer: "Paper Lane Stationery", medium: "WhatsApp", stage: "production", created: "2026-10-28", due: "2026-11-10",
+  { id: "o2", approved: true, buildSheet: true, po: "PL/PO/2210", no: "EM-1041", type: "bulk", customer: "Paper Lane Stationery", medium: "WhatsApp", stage: "production", created: "2026-10-28", due: "2026-11-10",
     items: [{ name: "Desk organiser", material: "PETG", colour: "White", qty: 120, price: 349, cost: 110 }, { name: "Pen stand", material: "PLA", colour: "Black", qty: 80, price: 199, cost: 55 }] },
-  { id: "o3", no: "EM-1040", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "production", created: "2026-10-30", due: "2026-11-05",
+  { id: "o3", buildSheet: true, jobsDone: false, skipPacking: true, no: "EM-1040", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "production", created: "2026-10-30", due: "2026-11-05",
     items: [{ name: "Spool holder jig", material: "PETG", colour: "Grey", qty: 2, price: 0, cost: 90 }], blocked: "Waiting for PETG Grey spool" },
-  { id: "o4", no: "EM-1039", type: "client", customer: "Aarav Mehta", medium: "Website", stage: "qc", created: "2026-10-27", due: "2026-11-04",
+  { id: "o4", approved: true, buildSheet: true, jobsDone: true, qcLogged: true, no: "EM-1039", type: "client", customer: "Aarav Mehta", medium: "Website", stage: "qc", created: "2026-10-27", due: "2026-11-04",
     items: [{ name: "Lithophane lamp", material: "PLA", colour: "White", qty: 1, price: 1899, cost: 420 }] },
-  { id: "o5", no: "EM-1038", type: "bulk", customer: "Gift Box Co.", medium: "Email", stage: "packing", created: "2026-10-20", due: "2026-11-03",
+  { id: "o5", approved: true, buildSheet: true, po: "GB/PO/118", no: "EM-1038", type: "bulk", customer: "Gift Box Co.", medium: "Email", stage: "production", created: "2026-10-20", due: "2026-11-03",
     items: [{ name: "Corporate logo coaster", material: "PLA", colour: "Black", qty: 250, price: 129, cost: 38 }] },
-  { id: "o6", no: "EM-1037", type: "client", customer: "Neha Patel", medium: "Instagram", stage: "shipping", created: "2026-10-22", due: "2026-11-02", invoiced: true,
-    items: [{ name: "Planter set", material: "PLA", colour: "White", qty: 3, price: 699, cost: 150 }], blocked: "Tracking number missing" },
-  { id: "o7", no: "EM-1036", type: "client", customer: "Kabir Joshi", medium: "Word of mouth", stage: "archived", created: "2026-10-10", due: "2026-10-18", invoiced: true,
+  { id: "o6", approved: true, buildSheet: true, jobsDone: true, qcLogged: true, packed: true, no: "EM-1037", type: "client", customer: "Neha Patel", medium: "Instagram", stage: "shipping", created: "2026-10-22", due: "2026-11-02", invoiced: true,
+    items: [{ name: "Planter set", material: "PLA", colour: "White", qty: 3, price: 699, cost: 150 }] },
+  { id: "o7", approved: true, buildSheet: true, jobsDone: true, qcLogged: true, packed: true, tracking: "EV221903IN", paid: true, no: "EM-1036", type: "client", customer: "Kabir Joshi", medium: "Word of mouth", stage: "archived", created: "2026-10-10", due: "2026-10-18", invoiced: true,
     items: [{ name: "Cosplay helmet", material: "PLA", colour: "Grey", qty: 1, price: 6499, cost: 1900 }] },
-  { id: "o8", no: "EM-1035", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "archived", created: "2026-10-05", due: "2026-10-07",
+  { id: "o8", buildSheet: true, jobsDone: true, qcLogged: true, packed: true, no: "EM-1035", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "archived", created: "2026-10-05", due: "2026-10-07",
     items: [{ name: "Tool wall hooks", material: "PETG", colour: "Black", qty: 12, price: 0, cost: 140 }] },
-  { id: "o10", no: "EM-1034", type: "client", customer: "Ishaan Desai", medium: "Referral", stage: "invoice", created: "2026-10-18", due: "2026-11-04",
-    items: [{ name: "Architectural model", material: "PLA", colour: "White", qty: 1, price: 8900, cost: 2600 }], blocked: "Tax invoice not raised" },
-  { id: "o9", no: "EM-1043", type: "bulk", customer: "Vadodara Gift House", medium: "Phone", stage: "quotation", created: "2026-11-02", due: "2026-11-20",
+  { id: "o10", approved: true, buildSheet: true, jobsDone: true, qcLogged: true, packed: true, no: "EM-1034", type: "client", customer: "Ishaan Desai", medium: "Referral", stage: "invoice", created: "2026-10-18", due: "2026-11-04",
+    items: [{ name: "Architectural model", material: "PLA", colour: "White", qty: 1, price: 8900, cost: 2600 }] },
+  { id: "o9", approved: true, buildSheet: true, no: "EM-1043", type: "bulk", customer: "Vadodara Gift House", medium: "Phone", stage: "po", created: "2026-11-02", due: "2026-11-20",
     items: [{ name: "Diwali diya stand", material: "PLA", colour: "Gold", qty: 300, price: 159, cost: 45 }] },
 ];
 
@@ -58,9 +58,11 @@ export const packStock: PackItem[] = [
 ];
 
 export const batches: Batch[] = [
-  { id: "b1", orderNo: "EM-1041", customer: "Paper Lane Stationery", name: "Organisers A", units: 60, done: 30, status: "printing" },
-  { id: "b2", orderNo: "EM-1041", customer: "Paper Lane Stationery", name: "Organisers B", units: 60, done: 0, status: "planned" },
-  { id: "b3", orderNo: "EM-1038", customer: "Gift Box Co.", name: "Coasters 1–250", units: 250, done: 250, status: "packed" },
+  { id: "b1", orderNo: "EM-1041", customer: "Paper Lane Stationery", name: "Organisers A", units: 60, done: 60, stage: "invoice" },
+  { id: "b2", orderNo: "EM-1041", customer: "Paper Lane Stationery", name: "Organisers B", units: 60, done: 30, stage: "production" },
+  { id: "b3", orderNo: "EM-1041", customer: "Paper Lane Stationery", name: "Pen stands", units: 80, done: 80, stage: "qc" },
+  { id: "b4", orderNo: "EM-1038", customer: "Gift Box Co.", name: "Coasters 1–150", units: 150, done: 150, stage: "done", invoiceNo: "B/26-27/0062", tracking: "D84719201" },
+  { id: "b5", orderNo: "EM-1038", customer: "Gift Box Co.", name: "Coasters 151–250", units: 100, done: 100, stage: "packing" },
 ];
 
 export const tasks: Task[] = [

@@ -1,6 +1,6 @@
 import { Bars } from "../charts";
 import { Card, CardTitle, Page, Section, Stat, Status } from "../ui";
-import { db, inr, X, orderCost, orderTotal, shortDate, STAGES } from "../data";
+import { db, inr, logsSig, ordersSig, X, orderCost, orderTotal, shortDate, STAGES } from "../data";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 
@@ -43,8 +43,8 @@ export default function Dashboard() {
               <div><div class="num text-3xl md:text-5xl font-semibold leading-none">{open.length}</div><div class="text-sm opacity-80 mt-1">open orders</div></div>
               <div><div class="num text-xl md:text-3xl font-semibold leading-none">{inr(pipeline)}</div><div class="text-sm opacity-80 mt-1">order value in pipeline</div></div>
             </div>
-            <div class="grid grid-cols-4 md:grid-cols-7 gap-1.5">
-              {STAGES.map((s) => <Stat dark key={s.key} value={db.orders.filter((o) => o.stage === s.key).length} label={s.label} />)}
+            <div class="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+              {STAGES.map((s) => <Stat dark key={s.key} value={ordersSig.value.filter((o) => o.stage === s.key).length} label={s.label} />)}
             </div>
           </Card>
           <Card>
@@ -90,7 +90,7 @@ export default function Dashboard() {
           <Card>
             <CardTitle action={<a href="/logs" class="text-sm text-c3">All →</a>}>Recent activity</CardTitle>
             <ul class="flex flex-col gap-3 text-sm">
-              {db.logs.slice(0, 5).map((l) => (
+              {logsSig.value.slice(0, 5).map((l) => (
                 <li key={l.id} class="min-w-0">
                   <span class="block"><b>{l.who}</b> {l.action.toLowerCase()}</span>
                   <span class="text-xs text-c3">{l.target} · {l.at.slice(11)}</span>

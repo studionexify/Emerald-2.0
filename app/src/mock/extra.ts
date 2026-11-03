@@ -166,6 +166,7 @@ export const alerts = {
     { t: "danger", text: "EM-1034 closed out but never invoiced", href: "/work/invoice" },
     { t: "warn", text: "Q-B-0141 lapses in 5 days", href: "/work/quotes" },
     { t: "info", text: "1 uploaded bill waiting for review · 1 unreadable", href: "/mauny/purchases" },
+    { t: "warn", text: "EM-1041 Organisers A packed — dispatch invoice not raised", href: "/work/bulk" },
   ],
   Quality: [
     { t: "danger", text: "EM-1038 coaster run 5 failed — no reprint queued", href: "/work/production" },
@@ -173,7 +174,7 @@ export const alerts = {
     { t: "info", text: "EM-1038 QC ended in scrap (90 g)", href: "/work/qc" },
   ],
   Flow: [
-    { t: "warn", text: "EM-1040 stalled in Production 4 days — PETG Grey out", href: "/work/production" },
+    { t: "warn", text: "In-house EM-1040 stuck in Production 4 days — PETG Grey out", href: "/work/production" },
     { t: "warn", text: "EM-1037 shipping — tracking number missing", href: "/work/shipping" },
     { t: "danger", text: "EM-1038 missed target date (03 Nov)", href: "/work/packing" },
   ],
