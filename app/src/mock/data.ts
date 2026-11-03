@@ -1,4 +1,4 @@
-import type { Batch, Binned, Job, Log, Member, Money, Order, PackItem, Printer, QcEntry, Spool, Task } from "./types";
+import type { Consumption, Batch, Binned, Job, Log, Member, Money, Order, PackItem, Printer, QcEntry, Spool, Task } from "./types";
 
 export const orders: Order[] = [
   { id: "o1", approved: false, buildSheet: true, no: "EM-1042", type: "client", customer: "Riya Shah", medium: "Instagram", stage: "quotation", created: "2026-11-01", due: "2026-11-08",
@@ -99,4 +99,16 @@ export const team: Member[] = [
   { id: "u2", name: "Chintan", role: "Co-founder", email: "chintan@studionexify.com" },
   { id: "u3", name: "Meet", role: "Operator", email: "meet@studionexify.com" },
   { id: "u4", name: "CA desk", role: "CA (GST only)", email: "ca@example.com" },
+];
+
+export const consumption: Consumption[] = [
+  { id: "c1", at: "2026-11-03 10:40", who: "Chintan", orderNo: "EM-1041", batch: "Organisers B", printer: "P1S-01", kind: "filament", item: "PETG White · PETG-WH-02", qty: 820, unit: "g", cost: 1107 },
+  { id: "c2", at: "2026-11-03 10:40", who: "Chintan", orderNo: "EM-1041", printer: "P1S-01", kind: "machine", item: "P1S-01", qty: 6.5, unit: "h", cost: 163 },
+  { id: "c3", at: "2026-11-03 10:40", who: "Chintan", orderNo: "EM-1041", printer: "P1S-01", kind: "power", item: "Electricity", qty: 6.5, unit: "h", cost: 52 },
+  { id: "c4", at: "2026-11-02 18:20", who: "Meet", orderNo: "EM-1038", kind: "scrap", item: "PLA Black · layer shift", qty: 90, unit: "g", cost: 113 },
+  { id: "c5", at: "2026-11-02 17:10", who: "Meet", orderNo: "EM-1038", batch: "Coasters 1–150", kind: "packing", item: "Box 15×15×10", qty: 4, unit: "pcs", cost: 72 },
+  { id: "c6", at: "2026-11-02 17:10", who: "Meet", orderNo: "EM-1038", batch: "Coasters 1–150", kind: "packing", item: "Bubble wrap", qty: 6, unit: "m", cost: 36 },
+  { id: "c7", at: "2026-11-01 15:00", who: "You", orderNo: "EM-1037", kind: "freight", item: "Delhivery Surface", qty: 1, unit: "parcel", cost: 120 },
+  { id: "c8", at: "2026-11-01 12:00", who: "Chintan", orderNo: "EM-1039", kind: "accessory", item: "Brass insert M3", qty: 4, unit: "pcs", cost: 8 },
+  { id: "c9", at: "2026-10-31 09:00", who: "Meet", orderNo: "EM-1040", printer: "A1-01", kind: "labour", item: "Finishing", qty: 1.5, unit: "h", cost: 150 },
 ];

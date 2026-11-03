@@ -2,7 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Button, Chip, DetailHead, Fact, Page, Status } from "../../ui";
-import { addBatch, advance, batchAction, BATCH_LABEL, batchesSig, canAdvance, canAdvanceBatch, checks, duplicateOrder, flowOf, FLOW_NOTE, inr, nextOf, orderCost, orderTotal, patchOrder, satisfy, shortDate, STAGE_LABEL, TYPE_LABEL, type Batch, type Order, type OrderType } from "../../data";
+import { addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 
 export function WorkShell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
   return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{children}</Page>;
@@ -35,94 +35,117 @@ export function OrderCard({ o, onOpen, inset }: { o: Order; onOpen: (o: Order) =
   );
 }
 
-/** Inline order detail (no overlay). Render via the page's `detail` prop. */
+/** Inline order detail (no overlay, no gates). Render via the page's `detail` prop. */
 export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose: () => void; onOpen: (o: Order) => void }) {
   const [msg, setMsg] = useState("");
-  const flow = flowOf(order);
-  const idx = flow.indexOf(order.stage);
-  const next = nextOf(order);
-  const batches = batchesSig.value;
-  const gate = canAdvance(order, batches);
-  const total = orderTotal(order), cost = orderCost(order);
-  const mine = batches.filter((b) => b.orderNo === order.no);
+  const next = nextOf(order), prev = prevOf(order);
+  const sug = SUGGESTED[order.type];
+  const mine = batchesSig.value.filter((b) => b.orderNo === order.no);
+  const cons = orderConsumption(order.no);
+  const used = cons.reduce((s, c) => s + c.cost, 0);
+  const total = orderTotal(order);
   return (
     <div>
       <DetailHead title={`${order.no} · ${order.customer}`} onClose={() => { setMsg(""); onClose(); }} />
       <div class="text-xs text-c3 mb-2">{TYPE_LABEL[order.type]} · via {order.medium} · {FLOW_NOTE[order.type]}</div>
-      <ol class="flex flex-wrap gap-1 mb-3" aria-label="Flow">
-        {flow.map((s, i) => (
-          <li key={s} class={`text-[11px] px-2 h-6 inline-flex items-center rounded-full ${i < idx ? "bg-c2 text-c0" : i === idx ? "bg-c4 text-c0 font-semibold" : "bg-c1 text-c3"}`}>{i + 1}. {STAGE_LABEL[s]}</li>
+      <div class="text-[11px] text-c3 mb-1">Stage — tap any to move (outlined = usual path)</div>
+      <ol class="flex flex-wrap gap-1 mb-2" aria-label="Stages">
+        {STAGE_ORDER.map((s) => (
+          <li key={s}><button onClick={() => onOpen(moveTo(order, s))} aria-pressed={order.stage === s}
+            class={`text-[11px] px-2 h-6 inline-flex items-center rounded-full cursor-pointer ${order.stage === s ? "bg-c4 text-c0 font-semibold" : sug.includes(s) ? "bg-c0 border border-c3" : "bg-c1 text-c3"}`}>{STAGE_LABEL[s]}</button></li>
         ))}
       </ol>
-      {order.stage !== "archived" && (
-        <div class="rounded-xl bg-c1 p-3 mb-3">
-          <div class="text-xs font-semibold mb-1.5">To leave {STAGE_LABEL[order.stage]}</div>
-          <ul class="flex flex-col gap-1.5">
-            {checks(order, batches).map((c) => (
-              <li key={c.label} class="flex items-center justify-between gap-2 text-sm">
-                <Status tone={c.done ? "done" : "waiting"}>{c.label}</Status>
-                {!c.done && c.action && <button class="text-xs underline cursor-pointer whitespace-nowrap" onClick={() => onOpen(satisfy(order, c.field))}>{c.action}</button>}
-              </li>
-            ))}
-          </ul>
-          {order.type === "inhouse" && order.stage === "qc" && (
-            <label class="flex items-center gap-2 text-xs mt-2"><input type="checkbox" checked={!!order.skipPacking} onChange={() => onOpen(patchOrder(order, { skipPacking: !order.skipPacking }))} /> Skip packing for this job</label>
-          )}
-        </div>
-      )}
-      {order.blocked && <div class="mb-3 rounded-xl bg-c4 text-c0 p-3 text-sm"><b>On hold:</b> {order.blocked}</div>}
-      <div class="flex flex-wrap items-center gap-2 mb-1">
-        <Button disabled={!gate.ok} onClick={() => { const n = advance(order); if (n) onOpen(n); }}>{next ? `Move to ${STAGE_LABEL[next]}` : "Final stage"}</Button>
+      <div class="flex flex-wrap gap-2 mb-3">
+        {prev && <Button variant="outline" onClick={() => onOpen(moveTo(order, prev))}>← {STAGE_LABEL[prev]}</Button>}
+        {next && <Button onClick={() => onOpen(moveTo(order, next))}>{STAGE_LABEL[next]} →</Button>}
         <Button variant="outline" icon="copy" onClick={() => { const c = duplicateOrder(order); setMsg(`Created ${c.no}`); onOpen(c); }}>Duplicate</Button>
       </div>
-      {!gate.ok && <p class="text-xs text-c3 mb-3">Can't move yet — {gate.reason}</p>}
-      {msg && <p class="text-sm mb-3 font-medium" role="status">{msg}</p>}
+      {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
 
-      {order.type === "bulk" && order.stage !== "quotation" && order.stage !== "po" && (
-        <>
-          <h3 class="font-semibold text-sm mt-3 mb-2 flex justify-between items-center">Batches · invoice per dispatch <button class="text-xs underline cursor-pointer" onClick={() => { addBatch(order); onOpen({ ...order }); }}>+ Add batch</button></h3>
-          <ul class="flex flex-col gap-1.5 mb-3">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}</ul>
-        </>
-      )}
+      <h3 class="font-semibold text-sm mb-1.5">Recorded</h3>
+      <ul class="grid grid-cols-2 gap-x-3 gap-y-1 mb-3 text-xs">
+        {checks(order, batchesSig.value).map((c) => (
+          <li key={c.label} class="flex items-center justify-between gap-1">
+            <Status tone={c.done ? "done" : "idle"}>{c.label}</Status>
+            {!c.done && <button class="underline cursor-pointer" onClick={() => onOpen(satisfy(order, c.field))}>{c.action}</button>}
+          </li>
+        ))}
+      </ul>
+
+      <h3 class="font-semibold text-sm mb-1.5 flex justify-between">Consumption <span class="num font-normal text-c3">{inr(used)} used{total ? ` · margin ${Math.round((1 - used / total) * 100)}%` : ""}</span></h3>
+      <ConsumeForm orderNo={order.no} batches={mine.map((b) => b.name)} />
+      <ul class="flex flex-col mt-2 mb-3 text-xs">
+        {cons.map((c) => (
+          <li key={c.id} class="flex justify-between gap-2 py-1 border-t border-c1">
+            <span class="min-w-0"><b class="capitalize">{c.kind}</b> · {c.item}{c.batch ? ` · ${c.batch}` : ""}<span class="block text-c3">{c.at} · {c.who}</span></span>
+            <span class="num whitespace-nowrap text-right">{c.qty} {c.unit}<span class="block text-c3">{inr(c.cost)}</span></span>
+          </li>
+        ))}
+        {!cons.length && <li class="text-c3">Nothing logged yet.</li>}
+      </ul>
+
+      <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Batches <button class="text-xs underline cursor-pointer" onClick={() => { addBatch(order); onOpen({ ...order }); }}>+ Add batch</button></h3>
+      <ul class="flex flex-col gap-1.5 mb-3">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}{!mine.length && <li class="text-xs text-c3">No batches — any order can be split.</li>}</ul>
 
       <div class="grid grid-cols-2 gap-3 my-3 text-sm">
         <Fact label="Created" value={shortDate(order.created)} />
         <Fact label="Due" value={shortDate(order.due)} />
-        <Fact label="Value" value={order.type === "inhouse" ? "Internal" : inr(total)} />
-        <Fact label="Internal cost" value={inr(cost)} />
-        {order.type === "client" && <Fact label="Payment" value={order.paid ? "Paid" : "On delivery"} />}
-        {order.type === "bulk" && <Fact label="PO" value={order.po ?? "—"} />}
-        {order.type === "inhouse" && <Fact label="Cost goes to" value="Internal jobs" />}
+        <Fact label="Value" value={total ? inr(total) : "Internal"} />
+        <Fact label="Payment" value={order.paid ? "Paid" : "On delivery"} />
+        <Fact label="PO" value={order.po ?? "—"} />
+        <Fact label="Invoice" value={order.invoiced ? "Raised" : "—"} />
       </div>
       <h3 class="font-semibold text-sm mb-2">Line items</h3>
       <ul class="flex flex-col gap-1.5 mb-3">
         {order.items.map((i, k) => (
           <li key={k} class="bg-c1 rounded-xl p-2.5 text-sm flex justify-between gap-3">
             <span class="min-w-0"><span class="font-medium block">{i.name}</span><span class="text-c3 text-xs">{i.material} · {i.colour} · ×{i.qty}</span></span>
-            <span class="num text-right">{order.type === "inhouse" ? "—" : inr(i.price * i.qty)}<span class="block text-c3 text-xs">cost {inr(i.cost * i.qty)}</span></span>
+            <span class="num text-right">{i.price ? inr(i.price * i.qty) : "—"}<span class="block text-c3 text-xs">est. cost {inr(i.cost * i.qty)}</span></span>
           </li>
         ))}
       </ul>
-      <p class="text-xs text-c3">Tasks linked to {order.no} live in <a class="underline" href="/todo">To-do</a>.</p>
+      <label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!order.paid} onChange={() => onOpen(patchOrder(order, { paid: !order.paid }))} /> Payment received</label>
     </div>
   );
 }
 
+const KINDS: ConKind[] = ["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"];
+export function ConsumeForm({ orderNo, batches = [] }: { orderNo?: string; batches?: string[] }) {
+  const [k, setK] = useState<ConKind>("filament");
+  const [item, setItem] = useState("");
+  const [qty, setQty] = useState(0);
+  const [batch, setBatch] = useState("");
+  const opts = k === "filament" || k === "scrap" ? spoolsSig.value.map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`)
+    : k === "packing" ? packSig.value.map((p) => p.name) : k === "machine" || k === "power" ? ["P1S-01", "A1-01", "A1-02"] : [];
+  const sm = "h-8 px-2 rounded-lg border border-c3 bg-c0 text-xs min-w-0";
+  return (
+    <form class="flex flex-wrap gap-1.5" onSubmit={(e) => { e.preventDefault(); if (!qty) return; consume({ kind: k, item: item || opts[0] || k, qty, orderNo, batch: batch || undefined, printer: k === "machine" || k === "power" ? item || opts[0] : undefined }); setQty(0); }}>
+      <select class={sm} value={k} onChange={(e) => { setK((e.target as HTMLSelectElement).value as ConKind); setItem(""); }}>{KINDS.map((x) => <option key={x}>{x}</option>)}</select>
+      {opts.length ? <select class={`${sm} flex-1`} value={item} onChange={(e) => setItem((e.target as HTMLSelectElement).value)}>{opts.map((o) => <option key={o}>{o}</option>)}</select>
+        : <input class={`${sm} flex-1`} placeholder="What" value={item} onInput={(e) => setItem((e.target as HTMLInputElement).value)} />}
+      <input class={`${sm} w-16`} type="number" placeholder={UNIT[k]} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label={`Quantity (${UNIT[k]})`} />
+      {batches.length > 0 && <select class={sm} value={batch} onChange={(e) => setBatch((e.target as HTMLSelectElement).value)}><option value="">Whole order</option>{batches.map((b) => <option key={b}>{b}</option>)}</select>}
+      <button class="h-8 px-3 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Log</button>
+    </form>
+  );
+}
+
 export function BatchRow({ b, after }: { b: Batch; after?: () => void }) {
-  const g = canAdvanceBatch(b);
-  const act = (w: "print" | "invoice" | "tracking" | "advance") => { batchAction(b, w); after?.(); };
+  const act = (w: "print" | "invoice" | "tracking") => { batchAction(b, w); after?.(); };
   return (
     <li class="bg-c1 rounded-xl p-2.5 text-sm">
-      <div class="flex justify-between gap-2"><span class="font-medium">{b.name}</span><Status tone={b.stage === "done" ? "done" : g.ok ? "active" : "waiting"}>{BATCH_LABEL[b.stage]}</Status></div>
+      <div class="flex justify-between items-center gap-2">
+        <span class="font-medium">{b.name}</span>
+        <select class="h-7 px-2 rounded-full bg-c0 text-xs" value={b.stage} aria-label="Batch stage" onChange={(e) => { batchTo(b, (e.target as HTMLSelectElement).value as Batch["stage"]); after?.(); }}>
+          {BATCH_STAGES.map((s) => <option key={s} value={s}>{BATCH_LABEL[s]}</option>)}
+        </select>
+      </div>
       <div class="text-xs text-c3">{b.done}/{b.units} units{b.invoiceNo ? ` · ${b.invoiceNo}` : ""}{b.tracking ? ` · ${b.tracking}` : ""}</div>
-      {b.stage !== "done" && (
-        <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs">
-          {b.stage === "production" && b.done < b.units && <button class="underline cursor-pointer" onClick={() => act("print")}>Mark printed</button>}
-          {b.stage === "invoice" && !b.invoiceNo && <button class="underline cursor-pointer" onClick={() => act("invoice")}>Raise invoice</button>}
-          {b.stage === "shipping" && !b.tracking && <button class="underline cursor-pointer" onClick={() => act("tracking")}>Add tracking</button>}
-          <button class={`font-semibold ${g.ok ? "underline cursor-pointer" : "text-c3"}`} disabled={!g.ok} onClick={() => act("advance")}>{g.ok ? "Advance →" : g.reason}</button>
-        </div>
-      )}
+      <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs">
+        <button class="underline cursor-pointer" onClick={() => act("print")}>Mark printed</button>
+        <button class="underline cursor-pointer" onClick={() => act("invoice")}>{b.invoiceNo ? "Re-invoice" : "Raise invoice"}</button>
+        <button class="underline cursor-pointer" onClick={() => act("tracking")}>{b.tracking ? "Update tracking" : "Add tracking"}</button>
+      </div>
     </li>
   );
 }

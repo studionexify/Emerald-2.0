@@ -1,8 +1,8 @@
 /** Data access. Phase 1 reads in-memory mock; phase 2 swaps in the API. */
 import { signal } from "@preact/signals";
 import * as M from "../mock/data";
-import type { Batch, Log, Order, OrderType, Stage } from "../mock/types";
-import { BATCH_STAGES, canAdvance, canAdvanceBatch, nextOf, STAGE_LABEL } from "./flows";
+import type { Batch, BatchStage, ConKind, Consumption, Log, LogKind, Order, OrderType, Stage } from "../mock/types";
+import { STAGE_LABEL, STAGE_ORDER } from "./flows";
 
 export * from "../mock/types";
 export const db = M;
@@ -10,9 +10,11 @@ export const db = M;
 export const ordersSig = signal<Order[]>(M.orders);
 export const batchesSig = signal<Batch[]>(M.batches);
 export const logsSig = signal<Log[]>(M.logs);
+export const consSig = signal<Consumption[]>(M.consumption);
+export const spoolsSig = signal(M.spools);
+export const packSig = signal(M.packStock);
 
-export const STAGES: { key: Stage; label: string; n: number }[] = (["quotation", "po", "production", "qc", "packing", "invoice", "shipping", "archived"] as Stage[])
-  .map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
+export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
 
 export const TYPE_LABEL: Record<OrderType, string> = { inhouse: "In-house", client: "Client", bulk: "Bulk" };
 
@@ -40,8 +42,8 @@ export * as X from "../mock/extra";
 export * from "./flows";
 
 const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
-export function log(action: string, target: string) {
-  logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: "You", action, target }, ...logsSig.value];
+export function log(action: string, target: string, kind: LogKind = "order") {
+  logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: "You", action, target, kind }, ...logsSig.value];
 }
 const putOrder = (o: Order) => (ordersSig.value = ordersSig.value.map((x) => (x.id === o.id ? o : x)));
 const putBatch = (b: Batch) => (batchesSig.value = batchesSig.value.map((x) => (x.id === b.id ? b : x)));
@@ -55,24 +57,32 @@ export function satisfy(o: Order, field: keyof Order): Order {
   putOrder(n); log(`Recorded ${String(field)}`, o.no); return n;
 }
 
-export function advance(o: Order): Order | null {
-  if (!canAdvance(o, batchesSig.value).ok) return null;
-  const to = nextOf(o); if (!to) return null;
+/** Move to any stage — no gates. */
+export function moveTo(o: Order, to: Stage): Order {
   const n = { ...o, stage: to };
-  putOrder(n); log(`Moved to ${STAGE_LABEL[to]}`, o.no);
-  if (o.type === "bulk" && to === "production" && !batchesSig.value.some((b) => b.orderNo === o.no)) {
-    const units = orderUnits(o);
-    batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: "Batch 1", units, done: 0, stage: "production" }];
-  }
-  return n;
+  putOrder(n); log(`${STAGE_LABEL[o.stage]} → ${STAGE_LABEL[to]}`, o.no); return n;
 }
 
-export function batchAction(b: Batch, what: "print" | "invoice" | "tracking" | "advance") {
-  if (what === "print") putBatch({ ...b, done: b.units });
-  if (what === "invoice") { putBatch({ ...b, invoiceNo: `B/26-27/${String(Math.floor(Math.random() * 900 + 63)).padStart(4, "0")}` }); log("Raised dispatch invoice", `${b.orderNo} · ${b.name}`); }
-  if (what === "tracking") putBatch({ ...b, tracking: `TRK${Math.floor(Math.random() * 1e8)}` });
-  if (what === "advance" && canAdvanceBatch(b).ok) { const to = BATCH_STAGES[BATCH_STAGES.indexOf(b.stage) + 1]; putBatch({ ...b, stage: to }); log(`Batch → ${to}`, `${b.orderNo} · ${b.name}`); }
+export function batchSet(b: Batch, p: Partial<Batch>, what: string) { putBatch({ ...b, ...p }); log(what, `${b.orderNo} · ${b.name}`); }
+export const batchTo = (b: Batch, to: BatchStage) => batchSet(b, { stage: to }, `Batch → ${to}`);
+
+const RATE: Record<ConKind, number> = { filament: 1.35, packing: 0, accessory: 0, part: 0, machine: 25, power: 8, labour: 100, freight: 1, scrap: 1.25 };
+export const UNIT: Record<ConKind, string> = { filament: "g", packing: "pcs", accessory: "pcs", part: "pcs", machine: "h", power: "h", labour: "h", freight: "₹", scrap: "g" };
+
+/** Record any consumption; decrements stock where it applies and writes a log row. */
+export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string }) {
+  let cost = d.qty * RATE[d.kind];
+  if (d.kind === "filament") spoolsSig.value = spoolsSig.value.map((s) => (d.item.includes(s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
+  if (d.kind === "packing") {
+    const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;
+    packSig.value = packSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p));
+  }
+  const e: Consumption = { id: crypto.randomUUID(), at: now(), who: "You", unit: UNIT[d.kind], cost: Math.round(cost), ...d };
+  consSig.value = [e, ...consSig.value];
+  log(`Consumed ${d.qty} ${e.unit} ${d.item}`, d.orderNo ?? "Workshop", "consumption");
+  return e;
 }
+export const orderConsumption = (no: string) => consSig.value.filter((c) => c.orderNo === no);
 
 export function addBatch(o: Order) {
   const n = batchesSig.value.filter((b) => b.orderNo === o.no).length + 1;
@@ -86,4 +96,10 @@ export function createOrder(d: { type: OrderType; customer: string; item: string
     medium: d.type === "inhouse" ? "Internal" : d.medium, stage: d.type === "inhouse" ? "production" : "quotation", created: today, due: d.due || today,
     items: [{ name: d.item || "Item", material: "PLA", colour: "Black", qty: d.qty || 1, price: d.type === "inhouse" ? 0 : d.price, cost: Math.round((d.price || 100) * 0.3) }] };
   ordersSig.value = [o, ...ordersSig.value]; log("Created order", `${o.no} · ${o.customer}`); return o;
+}
+
+export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
+  if (what === "print") batchSet(b, { done: b.units }, "Batch printed");
+  if (what === "invoice") batchSet(b, { invoiceNo: `B/26-27/${String(Math.floor(Math.random() * 900 + 63)).padStart(4, "0")}` }, "Raised dispatch invoice");
+  if (what === "tracking") batchSet(b, { tracking: `TRK${Math.floor(Math.random() * 1e8)}` }, "Added tracking");
 }

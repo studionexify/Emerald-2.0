@@ -1,6 +1,9 @@
 import { WORKSHOP_TABS } from "../nav";
 import { Button, Card, CardTitle, Page, Progress, Section, Status, Table } from "../ui";
-import { db, inr, shortDate, X } from "../data";
+import { consSig, db, inr, packSig, shortDate, spoolsSig, X, type ConKind } from "../data";
+import { useState } from "preact/hooks";
+import { ConsumeForm } from "./work/shared";
+import { Chip, Stat } from "../ui";
 
 function Shell({ sub, actions, children }: { sub: string; actions?: preact.ComponentChildren; children: preact.ComponentChildren }) {
   return <Page title="Workshop & Inventory" sub={sub} actions={actions ?? <Button icon="plus">Add</Button>} tabs={WORKSHOP_TABS}>{children}</Page>;
@@ -44,12 +47,12 @@ export function Team() {
 }
 
 export function Filament() {
-  const mats = [...new Set(db.spools.map((s) => s.material))];
+  const mats = [...new Set(spoolsSig.value.map((s) => s.material))];
   return (
     <Shell sub="Spools by material · batch, size, spool number · reorder at 1,000 g" actions={<Button icon="plus">Log movement</Button>}>
       <div class="grid gap-2 lg:grid-cols-2">
         {mats.map((m) => {
-          const sp = db.spools.filter((s) => s.material === m), g = sp.reduce((s, x) => s + x.grams, 0);
+          const sp = spoolsSig.value.filter((s) => s.material === m), g = sp.reduce((s, x) => s + x.grams, 0);
           return (
             <Card key={m}>
               <CardTitle action={<span class="num text-sm">{g.toLocaleString("en-IN")} g · {inr((g / 1000) * 1250)}</span>}>{m}</CardTitle>
@@ -92,7 +95,7 @@ export function Parts() {
 export function PackStock() {
   return (
     <Shell sub="Boxes, wrap, tape — consumed at packing" actions={<Button icon="plus">Log movement</Button>}>
-      <Card><Table rows={db.packStock} rowKey={(p) => p.id} cols={stockCols()} /></Card>
+      <Card><Table rows={packSig.value} rowKey={(p) => p.id} cols={stockCols()} /></Card>
     </Shell>
   );
 }
@@ -109,6 +112,34 @@ export function Movements() {
           { key: "c", label: "Cost", align: "right", render: (m) => (m.cost ? inr(m.cost) : "—") },
           { key: "v", label: "Vendor / use", render: (m) => m.vendor },
           { key: "b", label: "By", render: (m) => m.by },
+        ]} />
+      </Card>
+    </Shell>
+  );
+}
+
+export function ConsumptionLog() {
+  const [k, setK] = useState<"all" | ConKind>("all");
+  const rows = consSig.value.filter((c) => k === "all" || c.kind === k);
+  const kinds = ["all", ...new Set(consSig.value.map((c) => c.kind))] as ("all" | ConKind)[];
+  const by = (kk: string) => consSig.value.filter((c) => c.kind === kk).reduce((s, c) => s + c.cost, 0);
+  return (
+    <Shell sub="Everything used — filament, machine hours, power, labour, packing, parts, freight, scrap" actions={<span />}>
+      <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+        <Stat value={inr(consSig.value.reduce((s, c) => s + c.cost, 0))} label="Total" />
+        {["filament", "machine", "packing", "labour", "scrap"].map((x) => <Stat key={x} value={inr(by(x))} label={x} />)}
+      </div>
+      <Card><div class="text-sm font-semibold mb-2">Log consumption (no order = workshop use)</div><ConsumeForm /></Card>
+      <div class="flex flex-wrap gap-1.5">{kinds.map((x) => <Chip key={x} active={k === x} onClick={() => setK(x)}>{x === "all" ? "All" : x}</Chip>)}</div>
+      <Card>
+        <Table rows={rows} rowKey={(c) => c.id} cols={[
+          { key: "i", label: "Item", render: (c) => <b>{c.item}</b> },
+          { key: "k", label: "Kind", render: (c) => <span class="capitalize">{c.kind}</span> },
+          { key: "q", label: "Qty", align: "right", render: (c) => `${c.qty} ${c.unit}` },
+          { key: "c", label: "Cost", align: "right", render: (c) => inr(c.cost) },
+          { key: "o", label: "Order · batch", render: (c) => (c.orderNo ? `${c.orderNo}${c.batch ? " · " + c.batch : ""}` : "Workshop") },
+          { key: "p", label: "Printer", render: (c) => c.printer ?? "—", hideTablet: true },
+          { key: "a", label: "When · who", render: (c) => `${c.at} · ${c.who}` },
         ]} />
       </Card>
     </Shell>

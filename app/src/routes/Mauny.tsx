@@ -3,7 +3,7 @@ import { useState } from "preact/hooks";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
 import { Button, Card, CardTitle, Chip, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
-import { db, inr, shortDate, X } from "../data";
+import { consSig, db, inr, shortDate, X } from "../data";
 
 function Shell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
   return <Page title={title} sub={sub} actions={actions} toolbar={toolbar} detail={detail} tabs={MAUNY_TABS}>{children}</Page>;
@@ -230,6 +230,7 @@ export function Reports() {
           <Table rows={[...ch].sort((a, b) => (b.r[2] as number) / (b.r[1] as number) - (a.r[2] as number) / (a.r[1] as number))} rowKey={(x) => x.id} cols={[
             { key: "c", label: "Channel", render: (x) => <b>{x.r[0]}</b> }, { key: "q", label: "Quotes", align: "right", render: (x) => x.r[1] }, { key: "w", label: "Won", align: "right", render: (x) => x.r[2] },
             { key: "r", label: "Rate", align: "right", render: (x) => `${Math.round(((x.r[2] as number) / (x.r[1] as number)) * 100)}%` }, { key: "v", label: "Value won", align: "right", render: (x) => inr(x.r[3] as number) }, { key: "m", label: "Margin", align: "right", render: (x) => `${x.r[4]}%` }]} /></Card>
+        <Card><CardTitle>Consumption by kind</CardTitle>{(() => { const ks = [...new Set(consSig.value.map((c) => c.kind))]; return <Bars data={ks.map((k) => consSig.value.filter((c) => c.kind === k).reduce((s, c) => s + c.cost, 0))} labels={ks} />; })()}</Card>
         <Card><CardTitle>Machine utilisation</CardTitle><Bars data={X.machineLog.map((m) => m.util)} labels={X.machineLog.map((m) => m.printer)} /></Card>
         <Card><CardTitle>Defect Pareto · by cost</CardTitle><Bars data={[540, 310, 120, 60]} labels={["Layer shift", "Warping", "Stringing", "Dims"]} /></Card>
         <Card><CardTitle>Estimate vs actual</CardTitle><div class="grid grid-cols-3 gap-2 text-sm"><Fact label="Estimated" value={inr(340000)} /><Fact label="Actual" value={inr(412000)} /><Fact label="Drift" value="+21%" /></div><p class="text-xs text-c3 mt-2">Material +9% · machine time +31% · freight absorbed ₹6,400</p></Card>

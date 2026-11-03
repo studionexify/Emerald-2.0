@@ -31,12 +31,13 @@ export function Todo() {
 
 export function Logs() {
   const [who, setWho] = useState("all");
+  const [kind, setKind] = useState("all");
   const people = ["all", ...new Set(logsSig.value.map((l) => l.who))];
   return (
     <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account"
-      toolbar={<div class="flex flex-wrap gap-1.5">{people.map((p) => <Chip key={p} active={who === p} onClick={() => setWho(p)}>{p === "all" ? "Everyone" : p}</Chip>)}</div>}>
+      toolbar={<div class="flex flex-wrap gap-1.5">{["all", "order", "consumption", "stock", "money"].map((x) => <Chip key={x} active={kind === x} onClick={() => setKind(x)}>{x === "all" ? "All kinds" : x}</Chip>)}<span class="w-px bg-c2 mx-1" />{people.map((p) => <Chip key={p} active={who === p} onClick={() => setWho(p)}>{p === "all" ? "Everyone" : p}</Chip>)}</div>}>
       <Card>
-        <Table rows={logsSig.value.filter((l) => who === "all" || l.who === who)} rowKey={(l) => l.id} cols={[
+        <Table rows={logsSig.value.filter((l) => (who === "all" || l.who === who) && (kind === "all" || (l.kind ?? "order") === kind))} rowKey={(l) => l.id} cols={[
           { key: "a", label: "When", render: (l) => l.at },
           { key: "w", label: "Who", render: (l) => <b>{l.who}</b> },
           { key: "x", label: "Action", render: (l) => l.action },

@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
 import { batchAction, batchesSig, db, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X } from "../../data";
-import { WorkShell } from "./shared";
+import { ConsumeForm, WorkShell } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 const sel = (opts: string[]) => <select class={inputCls}>{opts.map((o) => <option key={o}>{o}</option>)}</select>;
@@ -12,6 +12,7 @@ export function Production() {
   return (
     <WorkShell title="Production" sub="Build sheet at approval · one job per line item" actions={<><Button variant="outline">Log block</Button><Button icon="plus">Quick print</Button></>}
       toolbar={<div class="flex flex-wrap gap-1.5">{["all", "queued", "printing", "done", "failed"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s === "all" ? "All jobs" : s}</Chip>)}</div>}>
+      <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
       <Section title="Machines" note={`${db.printers.length} printers`}>
         <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
           {db.printers.map((p) => {
@@ -74,6 +75,7 @@ export function QC() {
         <Stat value={db.qc.filter((q) => q.result === "scrap").length} label="scrap" />
         <Stat value={`${db.qc.reduce((s, q) => s + q.grams, 0)}g`} label="wasted" />
       </div>
+      <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <Section title="Waiting for QC" note={String(done.length)}>
           <Card>
@@ -113,6 +115,7 @@ export function Packing() {
   const list = ordersSig.value.filter((o) => o.stage === "packing");
   return (
     <WorkShell title="Packing" sub="Materials used and their cost, weight, box size, handling notes">
+      <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Section title="To pack" note={String(list.length)}>
           {list.map((o) => (
@@ -156,13 +159,13 @@ export function Packing() {
 
 export function Invoice() {
   const [f, setF] = useState("all");
-  const waiting = ordersSig.value.filter((o) => o.stage === "invoice" && o.type === "client");
+  const waiting = ordersSig.value.filter((o) => o.stage === "invoice");
   const bw = batchesSig.value.filter((b) => b.stage === "invoice");
   const reg = X.invoices.filter((i) => f === "all" || (f === "paid" ? i.paid : !i.paid));
   return (
     <WorkShell title="Invoice" sub="Tax invoices in the studio's series · edit, cancel, rename, resequence" actions={<><Button variant="outline">Resequence</Button><Button icon="plus">New invoice</Button></>}
       toolbar={<div class="flex gap-1.5">{["all", "unpaid", "paid"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s[0].toUpperCase() + s.slice(1)}</Chip>)}</div>}>
-      <Section title="Awaiting invoice" note={`${waiting.length + bw.length} · in-house skips`}>
+      <Section title="Awaiting invoice" note={`${waiting.length + bw.length} · orders + batch dispatches`}>
         <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {waiting.map((o) => (
             <Card key={o.id}>
@@ -173,7 +176,7 @@ export function Invoice() {
           ))}
           {bw.map((b) => (
             <Card key={b.id}>
-              <CardTitle action={<span class="text-xs text-c3">Bulk dispatch</span>}>{b.orderNo} · {b.name}</CardTitle>
+              <CardTitle action={<span class="text-xs text-c3">Batch dispatch</span>}>{b.orderNo} · {b.name}</CardTitle>
               <p class="text-xs text-c3 mb-3">{b.customer} · {b.units} units{b.invoiceNo ? ` · ${b.invoiceNo}` : ""}</p>
               {b.invoiceNo ? <Status tone="done">Invoice raised — advance from Bulk</Status> : <Button onClick={() => batchAction(b, "invoice")}>Raise dispatch invoice</Button>}
             </Card>
@@ -207,9 +210,9 @@ export function Shipping() {
         <Stat value={inr(X.shipments.reduce((s, x) => s + x.recovered, 0))} label="recovered" />
       </div>
       {(() => {
-        const ready = [...ordersSig.value.filter((o) => o.stage === "shipping" && o.type === "client").map((o) => ({ id: o.id, ref: o.no, who: o.customer, kind: "Client" })),
-          ...batchesSig.value.filter((b) => b.stage === "shipping").map((b) => ({ id: b.id, ref: `${b.orderNo} · ${b.name}`, who: b.customer, kind: "Bulk dispatch" }))];
-        return <Section title="Ready to ship" note={`${ready.length} · in-house skips`}><div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{ready.map((r) => <Card key={r.id}><div class="flex justify-between text-xs text-c3"><span>{r.kind}</span></div><div class="font-semibold text-sm">{r.ref}</div><div class="text-xs text-c3">{r.who}</div></Card>)}</div></Section>;
+        const ready = [...ordersSig.value.filter((o) => o.stage === "shipping").map((o) => ({ id: o.id, ref: o.no, who: o.customer, kind: TYPE_LABEL[o.type] })),
+          ...batchesSig.value.filter((b) => b.stage === "shipping").map((b) => ({ id: b.id, ref: `${b.orderNo} · ${b.name}`, who: b.customer, kind: "Batch dispatch" }))];
+        return <Section title="Ready to ship" note={String(ready.length)}><div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{ready.map((r) => <Card key={r.id}><div class="flex justify-between text-xs text-c3"><span>{r.kind}</span></div><div class="font-semibold text-sm">{r.ref}</div><div class="text-xs text-c3">{r.who}</div></Card>)}</div></Section>;
       })()}
       <Card>
         <Table rows={X.shipments} rowKey={(s) => s.id} cols={[

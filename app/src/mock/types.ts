@@ -16,7 +16,11 @@ export type PackItem = { id: string; name: string; unit: string; qty: number; re
 export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";
 export type Task = { id: string; title: string; due: string; done: boolean; who: string; link?: { kind: string; ref: string }; repeat?: string };
-export type Log = { id: string; at: string; who: string; action: string; target: string };
+export type Log = { id: string; at: string; who: string; action: string; target: string; kind?: LogKind };
+export type LogKind = "order" | "stock" | "consumption" | "money";
 export type Binned = { id: string; kind: string; label: string; deletedAt: string; by: string };
 export type Money = { id: string; date: string; title: string; account: string; amount: number; kind: string };
 export type Member = { id: string; name: string; role: string; email: string };
+
+export type ConKind = "filament" | "packing" | "accessory" | "part" | "machine" | "power" | "labour" | "freight" | "scrap";
+export type Consumption = { id: string; at: string; who: string; orderNo?: string; batch?: string; printer?: string; kind: ConKind; item: string; qty: number; unit: string; cost: number };

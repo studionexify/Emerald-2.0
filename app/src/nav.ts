@@ -45,6 +45,7 @@ export const WORKSHOP_TABS = [
   { href: "/workshop/parts", label: "Accessories & parts" },
   { href: "/workshop/packing", label: "Packing stock" },
   { href: "/workshop/movements", label: "Stock ledger" },
+  { href: "/workshop/consumption", label: "Consumption" },
 ];
 
 export const CALC_TABS = [
