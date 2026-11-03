@@ -29,23 +29,6 @@ export function Printers() {
   );
 }
 
-export function Team() {
-  return (
-    <Shell sub="Who is on the floor — fills every 'who did this?' picker" actions={<Button icon="plus">Add member</Button>}>
-      <Card>
-        <Table rows={db.team} rowKey={(m) => m.id} cols={[
-          { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
-          { key: "r", label: "Role", render: (m) => m.role },
-          { key: "e", label: "Email", render: (m) => m.email },
-          { key: "s", label: "Active", render: () => <Status tone="done">Active</Status> },
-          { key: "a", label: "", render: () => <span class="flex gap-1"><Button variant="outline">Retire</Button><Button variant="ghost">Delete</Button></span> },
-        ]} />
-      </Card>
-      <RetireNote />
-    </Shell>
-  );
-}
-
 export function Filament() {
   const mats = [...new Set(spoolsSig.value.map((s) => s.material))];
   return (

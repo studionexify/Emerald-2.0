@@ -226,3 +226,22 @@ export function Search() {
     </Page>
   );
 }
+
+export function Team() {
+  return (
+    <SettingsShell>
+      <Section title="Team" note={String(db.team.length)} action={<Button variant="outline" icon="plus">Add member</Button>}>
+        <Card>
+          <Table rows={db.team} rowKey={(m) => m.id} cols={[
+            { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
+            { key: "r", label: "Role", render: (m) => m.role },
+            { key: "e", label: "Email", render: (m) => m.email },
+            { key: "s", label: "Active", render: () => <Status tone="done">Active</Status> },
+            { key: "a", label: "", render: () => <span class="flex gap-1"><Button variant="outline">Retire</Button><Button variant="ghost">Delete</Button></span> },
+          ]} />
+        </Card>
+        <p class="text-xs text-c3">Fills every 'who did this?' picker. Retire — off every picker, old records keep the name. Delete — only for a row typed in by mistake.</p>
+      </Section>
+    </SettingsShell>
+  );
+}

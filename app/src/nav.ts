@@ -40,7 +40,6 @@ export const MAUNY_TABS = [
 
 export const WORKSHOP_TABS = [
   { href: "/workshop", label: "Printers" },
-  { href: "/workshop/team", label: "Team" },
   { href: "/workshop/filament", label: "Filament" },
   { href: "/workshop/parts", label: "Accessories & parts" },
   { href: "/workshop/packing", label: "Packing stock" },
@@ -57,6 +56,7 @@ export const CALC_TABS = [
 export const SETTINGS_TABS = [
   { href: "/settings", label: "Profile" },
   { href: "/settings/users", label: "Users & roles" },
+  { href: "/settings/team", label: "Team" },
   { href: "/settings/business", label: "Business profile" },
   { href: "/settings/rates", label: "Rates & prices" },
   { href: "/settings/integrations", label: "Integrations" },
