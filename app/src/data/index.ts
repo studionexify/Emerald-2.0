@@ -90,7 +90,7 @@ export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?:
   }
   const e: Consumption = { id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", unit: UNIT[d.kind], cost: Math.round(cost), ...d };
   consSig.value = [e, ...consSig.value];
-  log(`Consumed ${d.qty} ${e.unit} ${d.item}`, d.orderNo ?? "Workshop", "consumption");
+  log(`Consumed ${d.qty} ${e.unit} ${d.item}`, d.orderNo ?? "Store", "consumption");
   return e;
 }
 export const orderConsumption = (no: string) => consSig.value.filter((c) => c.orderNo === no);

@@ -6,7 +6,7 @@ import { ConsumeForm } from "./work/shared";
 import { Chip, Stat } from "../ui";
 
 function Shell({ sub, actions, children }: { sub: string; actions?: preact.ComponentChildren; children: preact.ComponentChildren }) {
-  return <Page title="Workshop & Inventory" sub={sub} actions={actions ?? <Button icon="plus">Add</Button>} tabs={WORKSHOP_TABS}>{children}</Page>;
+  return <Page title="Store" sub={sub} actions={actions ?? <Button icon="plus">Add</Button>} tabs={WORKSHOP_TABS}>{children}</Page>;
 }
 const RetireNote = () => <p class="text-xs text-c3">Retire — off every picker, old records keep the name. Delete — only for a row typed in by mistake.</p>;
 
@@ -129,7 +129,7 @@ export function ConsumptionLog() {
         <Stat value={inr(consSig.value.reduce((s, c) => s + c.cost, 0))} label="Total" />
         {["filament", "machine", "packing", "labour", "scrap"].map((x) => <Stat key={x} value={inr(by(x))} label={x} />)}
       </div>
-      <Card><div class="text-sm font-semibold mb-2">Log consumption (no order = workshop use)</div><ConsumeForm /></Card>
+      <Card><div class="text-sm font-semibold mb-2">Log consumption (no order = store use)</div><ConsumeForm /></Card>
       <div class="flex flex-wrap gap-1.5">{kinds.map((x) => <Chip key={x} active={k === x} onClick={() => setK(x)}>{x === "all" ? "All" : x}</Chip>)}</div>
       <Card>
         <Table rows={rows} rowKey={(c) => c.id} cols={[
@@ -137,7 +137,7 @@ export function ConsumptionLog() {
           { key: "k", label: "Kind", render: (c) => <span class="capitalize">{c.kind}</span> },
           { key: "q", label: "Qty", align: "right", render: (c) => `${c.qty} ${c.unit}` },
           { key: "c", label: "Cost", align: "right", render: (c) => inr(c.cost) },
-          { key: "o", label: "Order · batch", render: (c) => (c.orderNo ? `${c.orderNo}${c.batch ? " · " + c.batch : ""}` : "Workshop") },
+          { key: "o", label: "Order · batch", render: (c) => (c.orderNo ? `${c.orderNo}${c.batch ? " · " + c.batch : ""}` : "Store") },
           { key: "p", label: "Printer", render: (c) => c.printer ?? "—", hideTablet: true },
           { key: "a", label: "When · who", render: (c) => `${c.at} · ${c.who}` },
         ]} />

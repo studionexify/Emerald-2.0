@@ -3,7 +3,7 @@ export type NavItem = { href: string; label: string; icon: string };
 export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "home" },
   { href: "/work", label: "Production", icon: "work" },
-  { href: "/workshop", label: "Workshop & Inventory", icon: "box" },
+  { href: "/workshop", label: "Store", icon: "box" },
   { href: "/calculator", label: "Calculator", icon: "calc" },
   { href: "/mauny", label: "Mauny", icon: "money" },
   { href: "/alerts", label: "Attention", icon: "bell" },
