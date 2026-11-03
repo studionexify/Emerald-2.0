@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/* Five shades, nothing else. Dark theme = exact inversion. */
+:root {
+  --c-0: #ffffff;
+  --c-1: #f3f4f6;
+  --c-2: #9ca3af;
+  --c-3: #1f2937;
+  --c-4: #000000;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --c-0: #000000;
+  --c-1: #1f2937;
+  --c-2: #9ca3af;
+  --c-3: #f3f4f6;
+  --c-4: #ffffff;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-0: #000000;
+    --c-1: #1f2937;
+    --c-2: #9ca3af;
+    --c-3: #f3f4f6;
+    --c-4: #ffffff;
+    color-scheme: dark;
+  }
+}
+
+@theme {
+  --color-c0: var(--c-0);
+  --color-c1: var(--c-1);
+  --color-c2: var(--c-2);
+  --color-c3: var(--c-3);
+  --color-c4: var(--c-4);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius-card: 20px;
+}
+
+*, *::before, *::after { transition: none !important; animation: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--c-1); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
