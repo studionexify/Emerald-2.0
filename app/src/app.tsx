@@ -8,6 +8,7 @@ const work = () => import("./routes/work/Stages");
 const ws = () => import("./routes/Workshop");
 const calc = () => import("./routes/Calculator");
 const mauny = () => import("./routes/Mauny");
+const rec = () => import("./routes/work/Records");
 const g = () => import("./routes/Global");
 
 const routes: [string, any][] = [
@@ -20,6 +21,15 @@ const routes: [string, any][] = [
   ["/work/packing", L(work, "Packing")],
   ["/work/shipping", L(work, "Shipping")],
   ["/work/archive", L(work, "Archive")],
+  ["/work/invoice", L(work, "Invoice")],
+  ["/work/clients", L(rec, "Clients")],
+  ["/work/quotes", L(rec, "Quotes")],
+  ["/work/documents", L(rec, "Documents")],
+  ["/workshop/parts", L(ws, "Parts")],
+  ["/workshop/movements", L(ws, "Movements")],
+  ["/calculator/settings", L(calc, "PricingSettings")],
+  ["/settings/integrations", L(g, "Integrations")],
+  ["/alerts", L(g, "Alerts")],
   ["/work/bulk", D(() => import("./routes/work/Bulk"))],
   ["/workshop", L(ws, "Printers")],
   ["/workshop/team", L(ws, "Team")],

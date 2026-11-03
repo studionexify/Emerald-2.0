@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Card, CardTitle, Field, inputCls, Page } from "../ui";
+import { Button, Card, CardTitle, Field, inputCls, Page, SubTabs } from "../ui";
 import { inr } from "../data";
 
 type Fields = Record<string, number>;
@@ -13,12 +13,13 @@ function useFields(init: Fields) {
 
 function Result({ rows, price }: { rows: [string, number][]; price: number }) {
   return (
-    <Card dark class="lg:sticky lg:top-6 self-start">
+    <Card dark class="self-start">
       <div class="text-sm opacity-80">Suggested price (incl. GST)</div>
-      <div class="num text-4xl xl:text-5xl font-semibold mt-1 mb-3">{inr(price)}</div>
+      <div class="num text-3xl xl:text-5xl font-semibold mt-1 mb-2">{inr(price)}</div>
       <ul class="flex flex-col gap-2 text-sm">
         {rows.map(([l, n]) => <li key={l} class="flex justify-between border-t border-c3 pt-2"><span class="opacity-80">{l}</span><span class="num">{inr(n)}</span></li>)}
       </ul>
+      <Button variant="outline" class="mt-3 w-full">Use in quotation</Button>
     </Card>
   );
 }
@@ -32,6 +33,7 @@ function Shell({ children }: { children: preact.ComponentChildren }) {
 }
 
 export function Nexcal() {
+  const [mode, setMode] = useState<"direct" | "upload">("direct");
   const [v, b] = useFields({ grams: 120, perKg: 1250, hours: 5, machine: 25, power: 8, labour: 50, packing: 30, margin: 60, gst: 18, qty: 1 });
   const material = (v.grams / 1000) * v.perKg, machine = v.hours * (v.machine + v.power);
   const cost = material + machine + v.labour + v.packing;
@@ -40,6 +42,8 @@ export function Nexcal() {
     <Shell>
       <Card>
         <CardTitle>Nexcal · FDM</CardTitle>
+        <div class="mb-3"><SubTabs value={mode} onChange={setMode} items={[["direct", "Direct input"], ["upload", "Upload models"]]} /></div>
+        {mode === "upload" && <div class="rounded-xl border-2 border-dashed border-c2 p-4 text-center text-sm text-c3 mb-3">Drop STL / OBJ / STEP — weight and time are estimated per file (units, axis, qty, walls, infill, supports)</div>}
         <div class="grid sm:grid-cols-2 gap-4">
           <Field label="Filament used (g)"><input {...b("grams")} /></Field>
           <Field label="Filament price (₹/kg)"><input {...b("perKg")} /></Field>
@@ -81,5 +85,17 @@ export function NexRes() {
       </Card>
       <Result price={price} rows={[["Plate cost", plate], ["Cost per part", perPart], ["Price per part (ex-GST)", pre]]} />
     </Shell>
+  );
+}
+
+export function PricingSettings() {
+  const rows: [string, string][] = [["PLA ₹/kg", "1250"], ["PETG ₹/kg", "1350"], ["TPU ₹/kg", "2200"], ["Resin ₹/L", "2400"], ["Machine rate ₹/h", "25"], ["Electricity ₹/h", "8"],
+    ["Labour ₹/h", "100"], ["Material efficiency ×", "1.25"], ["Default margin %", "60"], ["GST %", "18"], ["Bulk tier: 1 spool+", "5% off"], ["Bulk tier: 5 spools+", "12% off"]];
+  return (
+    <Page title="Calculator" sub="Rates every quote uses" tabs={CALC_TABS} actions={<Button>Save rates</Button>}>
+      <Card class="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+        {rows.map(([l, v]) => <Field key={l} label={l}><input class={inputCls} value={v} /></Field>)}
+      </Card>
+    </Page>
   );
 }

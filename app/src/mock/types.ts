@@ -1,5 +1,5 @@
 export type OrderType = "inhouse" | "client" | "bulk";
-export type Stage = "quotation" | "production" | "qc" | "packing" | "shipping" | "archived";
+export type Stage = "quotation" | "production" | "qc" | "packing" | "invoice" | "shipping" | "archived";
 
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number };
 export type Order = {

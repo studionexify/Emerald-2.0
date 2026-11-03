@@ -17,6 +17,8 @@ export const orders: Order[] = [
     items: [{ name: "Cosplay helmet", material: "PLA", colour: "Grey", qty: 1, price: 6499, cost: 1900 }] },
   { id: "o8", no: "EM-1035", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "archived", created: "2026-10-05", due: "2026-10-07",
     items: [{ name: "Tool wall hooks", material: "PETG", colour: "Black", qty: 12, price: 0, cost: 140 }] },
+  { id: "o10", no: "EM-1034", type: "client", customer: "Ishaan Desai", medium: "Referral", stage: "invoice", created: "2026-10-18", due: "2026-11-04",
+    items: [{ name: "Architectural model", material: "PLA", colour: "White", qty: 1, price: 8900, cost: 2600 }], blocked: "Tax invoice not raised" },
   { id: "o9", no: "EM-1043", type: "bulk", customer: "Vadodara Gift House", medium: "Phone", stage: "quotation", created: "2026-11-02", due: "2026-11-20",
     items: [{ name: "Diwali diya stand", material: "PLA", colour: "Gold", qty: 300, price: 159, cost: 45 }] },
 ];

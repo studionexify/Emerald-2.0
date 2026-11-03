@@ -11,10 +11,11 @@ export const ordersSig = signal<Order[]>(M.orders);
 export const STAGES: { key: Stage; label: string; n: number }[] = [
   { key: "quotation", label: "Quotation", n: 1 },
   { key: "production", label: "Production", n: 2 },
-  { key: "qc", label: "QC", n: 3 },
+  { key: "qc", label: "QC & Logging", n: 3 },
   { key: "packing", label: "Packing", n: 4 },
-  { key: "shipping", label: "Shipping", n: 5 },
-  { key: "archived", label: "Archive", n: 6 },
+  { key: "invoice", label: "Invoice", n: 5 },
+  { key: "shipping", label: "Shipping", n: 6 },
+  { key: "archived", label: "Archive", n: 7 },
 ];
 
 export const TYPE_LABEL: Record<OrderType, string> = { inhouse: "In-house", client: "Client", bulk: "Bulk" };
@@ -36,3 +37,14 @@ export function duplicateOrder(o: Order): Order {
   ordersSig.value = [copy, ...ordersSig.value];
   return copy;
 }
+
+export const GATE: Record<Stage, string> = {
+  quotation: "Needs customer approval and a build sheet",
+  production: "Every job must be off the floor",
+  qc: "Needs at least one QC entry",
+  packing: "Needs packing materials recorded",
+  invoice: "Needs a tax invoice raised",
+  shipping: "Needs a tracking number",
+  archived: "Read-only — cost rollup final",
+};
+export * as X from "../mock/extra";

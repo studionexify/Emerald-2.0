@@ -1,10 +1,9 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
 import { signal } from "@preact/signals";
 import { useLocation } from "../router";
 import { NAV } from "../nav";
 import { Icon } from "../ui";
-import { db } from "../data";
+import { X } from "../data";
 import { theme, toggleTheme } from "./theme";
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
@@ -44,34 +43,14 @@ function Sidebar() {
   );
 }
 
+/** Bell: a link to the Attention page (inline, never a popup). Badge counts urgent items only. */
 function Bell() {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const alerts = db.orders.filter((o) => o.blocked);
-  useEffect(() => {
-    if (!open) return;
-    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("click", off);
-    return () => document.removeEventListener("click", off);
-  }, [open]);
+  const n = Object.values(X.alerts).flat().filter((a) => a.t === "danger").length;
   return (
-    <div class="relative" ref={ref}>
-      <button onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`Alerts (${alerts.length})`} class="w-10 h-10 rounded-full bg-c1 flex items-center justify-center cursor-pointer relative">
-        <Icon name="bell" size={18} />
-        {alerts.length > 0 && <span class="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 rounded-full bg-c4 text-c0 text-[10px] leading-4 text-center num">{alerts.length}</span>}
-      </button>
-      {open && (
-        <div class="absolute right-0 top-12 z-30 w-[min(22rem,calc(100vw-2rem))] max-h-[60vh] overflow-y-auto bg-c0 rounded-2xl p-4 border border-c2">
-          <div class="font-semibold mb-2">Needs attention</div>
-          {alerts.map((o) => (
-            <a key={o.id} href="/work/orders" onClick={() => setOpen(false)} class="block py-2 border-t border-c1 text-sm">
-              <div class="font-medium">{o.no} · {o.customer}</div>
-              <div class="text-c3">{o.blocked}</div>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
+    <a href="/alerts" aria-label={`Attention (${n} urgent)`} class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-c1 flex items-center justify-center relative shrink-0">
+      <Icon name="bell" size={18} />
+      {n > 0 && <span class="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-c4 text-c0 text-[10px] leading-4 text-center num">{n}</span>}
+    </a>
   );
 }
 
@@ -108,7 +87,7 @@ function TopBar() {
 /** Phone bottom bar: in the layout flow, so it never covers content. */
 function BottomBar() {
   const { path } = useLocation();
-  const items = [NAV[0], NAV[1], NAV[4], NAV[5], { href: "/more", label: "More", icon: "grid" }];
+  const items = [NAV[0], NAV[1], NAV[4], NAV[6], { href: "/more", label: "More", icon: "grid" }];
   const moreOn = !items.slice(0, 4).some((n) => isActive(path, n.href));
   return (
     <nav class="md:hidden shrink-0 bg-c0 border-t border-c1 grid grid-cols-5 px-2 pt-1 pb-[max(4px,env(safe-area-inset-bottom))]" aria-label="Main">

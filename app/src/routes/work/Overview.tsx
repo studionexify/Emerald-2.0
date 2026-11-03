@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import { Card, CardTitle, Section, Stat, Status } from "../../ui";
 import { Ring } from "../../charts";
 import { db, ordersSig, shortDate, STAGES, type Order } from "../../data";
-import { OrderCard, OrderDrawer, TypeChips, WorkShell, type TypeFilter } from "./shared";
+import { OrderCard, OrderDetail, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 
@@ -14,12 +14,12 @@ export default function Overview() {
   const busy = db.printers.filter((p) => p.status === "printing").length;
   const tasks = db.tasks.filter((t) => !t.done);
   return (
-    <WorkShell title="Work Area" sub="Everything on the floor, in one place" toolbar={<TypeChips value={f} onChange={setF} />}>
+    <WorkShell detail={open && <OrderDetail order={open} onClose={() => setOpen(null)} onOpen={setOpen} />} title="Work Area" sub="Everything on the floor, in one place" toolbar={<TypeChips value={f} onChange={setF} />}>
       <Section title="Pipeline" note={`${live.length} live`}>
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[3fr_1fr]">
           <Card dark class="md:col-span-2 xl:col-span-1">
             <CardTitle>Orders by stage</CardTitle>
-            <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+            <div class="grid grid-cols-4 md:grid-cols-7 gap-1.5 md:gap-2">
               {STAGES.map((s) => (
                 <a key={s.key} href="/work/orders"><Stat dark value={list.filter((o) => o.stage === s.key).length} label={s.label} /></a>
               ))}
@@ -70,7 +70,6 @@ export default function Overview() {
           </div>
         </Section>
       </div>
-      <OrderDrawer order={open} onClose={() => setOpen(null)} onOpen={setOpen} />
     </WorkShell>
   );
 }

@@ -12,7 +12,7 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
     ghost: "bg-transparent text-c4 border-transparent hover:bg-c1",
   }[variant];
   return (
-    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-10 px-5 rounded-full border text-sm font-medium cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
+    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-9 md:h-10 px-4 md:px-5 rounded-full border text-sm font-medium cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </button>
@@ -21,13 +21,13 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
 
 export function Card({ children, class: c, dark, dashed }: { children: ComponentChildren; class?: string; dark?: boolean; dashed?: boolean }) {
   const base = dark ? "bg-c4 text-c0" : dashed ? "bg-transparent border-2 border-dashed border-c2" : "bg-c0";
-  return <section class={`rounded-[var(--radius-card)] p-4 xl:p-5 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
+  return <section class={`rounded-[var(--radius-card)] p-3 md:p-4 xl:p-5 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
 }
 
 export function CardTitle({ children, action }: { children: ComponentChildren; action?: ComponentChildren }) {
   return (
-    <div class="flex items-center justify-between gap-2 mb-3">
-      <h2 class="text-base font-semibold min-w-0">{children}</h2>
+    <div class="flex items-center justify-between gap-2 mb-2 md:mb-3">
+      <h2 class="text-sm md:text-base font-semibold min-w-0">{children}</h2>
       {action}
     </div>
   );
@@ -35,8 +35,8 @@ export function CardTitle({ children, action }: { children: ComponentChildren; a
 
 export function Stat({ value, label, dark }: { value: string | number; label: string; dark?: boolean }) {
   return (
-    <div class={`rounded-2xl px-1 py-2.5 xl:py-3 text-center min-w-0 ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
-      <div class="num text-xl xl:text-2xl font-semibold">{value}</div>
+    <div class={`rounded-2xl px-1 py-2 xl:py-3 text-center min-w-0 ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
+      <div class="num text-lg md:text-xl xl:text-2xl font-semibold">{value}</div>
       <div class="text-[11px] xl:text-xs mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
     </div>
   );
@@ -45,15 +45,15 @@ export function Stat({ value, label, dark }: { value: string | number; label: st
 export function Big({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <div class="num text-5xl md:text-6xl font-semibold leading-none">{value}</div>
-      <div class="text-sm mt-2 opacity-80">{label}</div>
+      <div class="num text-3xl md:text-5xl 2xl:text-6xl font-semibold leading-none">{value}</div>
+      <div class="text-xs md:text-sm mt-1.5 opacity-80">{label}</div>
     </div>
   );
 }
 
 export function Chip({ active, children, onClick }: { active?: boolean; children: ComponentChildren; onClick?: () => void }) {
   return (
-    <button onClick={onClick} class={`h-8 px-4 rounded-full text-sm cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0" : "bg-c1 text-c3"}`}>
+    <button onClick={onClick} class={`h-7 2xl:h-8 px-3 rounded-full text-xs 2xl:text-sm cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0" : "bg-c1 text-c3"}`}>
       {children}
     </button>
   );
@@ -65,7 +65,7 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
   return (
     <>
       {/* Phone: one compact switcher, nothing cropped */}
-      <label class="md:hidden relative block">
+      <label class="xl:hidden relative block">
         <span class="sr-only">Section</span>
         <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
           class="appearance-none w-full h-9 pl-3 pr-8 rounded-full truncate bg-c4 text-c0 font-medium text-sm">
@@ -74,10 +74,10 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
         <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c0 text-xs">▼</span>
       </label>
       {/* iPad + desktop: wrapping pills */}
-      <nav class="hidden md:flex flex-wrap gap-2" aria-label="Sections">
+      <nav class="hidden xl:flex flex-wrap gap-1" aria-label="Sections">
         {tabs.map((t) => (
           <a key={t.href} href={t.href} aria-current={current?.href === t.href ? "page" : undefined}
-            class={`h-8 xl:h-9 px-3 xl:px-4 inline-flex items-center rounded-full text-sm ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
+            class={`h-7 2xl:h-8 px-3 inline-flex items-center rounded-full text-[13px] ${current?.href === t.href ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:text-c4"}`}>
             {t.label}
           </a>
         ))}
@@ -114,7 +114,7 @@ export function Progress({ value }: { value: number }) {
 
 export function Empty({ title, hint, action }: { title: string; hint?: string; action?: ComponentChildren }) {
   return (
-    <div class="flex flex-col items-center justify-center text-center py-12 gap-3">
+    <div class="flex flex-col items-center justify-center text-center py-6 md:py-10 gap-2">
       <div class="w-12 h-12 rounded-full bg-c4 text-c0 flex items-center justify-center"><Icon name="plus" /></div>
       <div class="font-semibold">{title}</div>
       {hint && <div class="text-sm text-c3 max-w-xs">{hint}</div>}
@@ -133,12 +133,12 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
     <>
       <ul class="md:hidden flex flex-col gap-2">
         {rows.map((r) => (
-          <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`bg-c1 rounded-2xl p-3 ${onRow ? "cursor-pointer" : ""}`}>
-            <div class="font-semibold mb-2 break-words">{head.render(r)}</div>
-            <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+          <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`bg-c1 rounded-xl p-2.5 text-[13px] ${onRow ? "cursor-pointer" : ""}`}>
+            <div class="font-semibold mb-1.5 break-words">{head.render(r)}</div>
+            <dl class="grid grid-cols-3 gap-x-2 gap-y-1">
               {rest.map((c) => (
-                <div key={c.key} class={`min-w-0 ${c.label ? "" : "col-span-2"}`}>
-                  {c.label && <dt class="text-xs text-c3">{c.label}</dt>}
+                <div key={c.key} class={`min-w-0 ${c.label ? "" : "col-span-3"}`}>
+                  {c.label && <dt class="text-[11px] text-c3">{c.label}</dt>}
                   <dd class="break-words">{c.render(r)}</dd>
                 </div>
               ))}
@@ -155,7 +155,7 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
         <tbody>
           {rows.map((r) => (
             <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-t border-c1 align-top ${onRow ? "cursor-pointer hover:bg-c1" : ""}`}>
-              {cols.map((c) => <td key={c.key} class={`py-2.5 pr-3 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
+              {cols.map((c) => <td key={c.key} class={`py-2 pr-3 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
             </tr>
           ))}
         </tbody>
@@ -164,56 +164,75 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
   );
 }
 
-export function Drawer({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ComponentChildren }) {
-  if (!open) return null;
+/** Inline detail: phone shows the detail in place of the list; iPad/desktop put it in a fixed right column. Nothing overlays. */
+export function Split({ detail, children }: { detail: ComponentChildren | null; children: ComponentChildren }) {
   return (
-    <div class="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
-      <div class="absolute inset-0 bg-c4 opacity-40" onClick={onClose} />
-      <aside class="relative bg-c0 w-full md:max-w-lg h-full overflow-y-auto p-4 md:p-6">
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-semibold">{title}</h2>
-          <button class="w-10 h-10 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
-        </div>
-        {children}
-      </aside>
+    <div class={`min-h-0 h-full ${detail ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
+      <div class={`min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-7 py-3 md:py-4 ${detail ? "hidden md:block" : ""}`}>
+        <div class="flex flex-col gap-4 2xl:gap-6">{children}</div>
+      </div>
+      {detail && <aside class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 md:border-l border-c2/40 p-3 md:p-4 xl:p-5">{detail}</aside>}
     </div>
   );
 }
 
+export function DetailHead({ title, onClose }: { title: ComponentChildren; onClose: () => void }) {
+  return (
+    <div class="flex items-center gap-2 mb-3">
+      <button class="w-8 h-8 shrink-0 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close details"><Icon name="close" size={16} /></button>
+      <h2 class="text-base md:text-lg font-semibold min-w-0 break-words">{title}</h2>
+    </div>
+  );
+}
+
+/** In-page sub-sections: select on phone, pills on iPad/desktop. */
+export function SubTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: [T, string][] }) {
+  return (
+    <>
+      <select class="xl:hidden h-8 px-3 rounded-full bg-c0 text-sm font-medium w-full md:w-60" value={value} onChange={(e) => onChange((e.target as HTMLSelectElement).value as T)}>
+        {items.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <div class="hidden xl:flex flex-wrap gap-1.5">
+        {items.map(([k, l]) => <Chip key={k} active={value === k} onClick={() => onChange(k)}>{l}</Chip>)}
+      </div>
+    </>
+  );
+}
+
 /** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
-export function Page({ title, sub, actions, tabs, toolbar, children }: {
-  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; toolbar?: ComponentChildren; children: ComponentChildren;
+export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
+  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; toolbar?: ComponentChildren;
+  /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
   return (
     <div class="flex flex-col h-full min-h-0">
-      {/* Fixed head. Phone: one row (title + section switcher). iPad/desktop: title, actions, tabs, toolbar kept compact. */}
-      <div class="shrink-0 flex flex-col gap-2 xl:gap-2.5 px-3 md:px-5 2xl:px-7 py-2 md:py-3 border-b border-c2/40 bg-c1">
-        <header class="flex items-center gap-3 min-w-0">
+      <div class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-7 py-2 md:py-2.5 border-b border-c2/40 bg-c1">
+        <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-baseline gap-3">
-            <h1 class="text-lg md:text-xl 2xl:text-2xl font-semibold leading-tight truncate">{title}</h1>
+            <h1 class="text-base md:text-xl 2xl:text-2xl font-semibold leading-tight truncate">{title}</h1>
             {sub && <p class="hidden lg:block text-sm text-c3 truncate">{sub}</p>}
           </div>
-          {tabs && <div class="md:hidden w-[48%] shrink-0"><Tabs tabs={tabs} /></div>}
+          {tabs && <div class="xl:hidden w-[46%] md:w-60 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
-        {(tabs || toolbar) && (
-          <div class="hidden md:flex flex-wrap items-center gap-x-4 gap-y-2">
-            {tabs && <Tabs tabs={tabs} />}
-            {toolbar && <div class="flex flex-wrap items-center gap-2 lg:ml-auto">{toolbar}</div>}
+        {(toolbar || tabs) && (
+          <div class="empty:hidden flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
+            {tabs && <div class="hidden xl:block min-w-0"><Tabs tabs={tabs} /></div>}
+            {toolbar && <div class="min-w-0 w-full xl:w-auto xl:ml-auto">{toolbar}</div>}
           </div>
         )}
       </div>
-      {/* Only this area scrolls. On phone, actions + toolbar live here and scroll away. */}
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-7 py-3 md:py-4">
-        <div class="flex flex-col gap-4 2xl:gap-6">
-          {(actions || toolbar) && (
-            <div class="md:hidden flex flex-col gap-2">
-              {actions && <div class="flex flex-wrap gap-2">{actions}</div>}
-              {toolbar}
+      <div class="flex-1 min-h-0">
+        {detail !== undefined ? (
+          <Split detail={detail}>{actions && <div class="md:hidden flex flex-wrap gap-2">{actions}</div>}{children}</Split>
+        ) : (
+          <div class="h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-7 py-3 md:py-4">
+            <div class="flex flex-col gap-4 2xl:gap-6">
+              {actions && <div class="md:hidden flex flex-wrap gap-2">{actions}</div>}
+              {children}
             </div>
-          )}
-          {children}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -222,9 +241,9 @@ export function Page({ title, sub, actions, tabs, toolbar, children }: {
 /** Section divider: label, count, a rule that runs to the edge, optional action. */
 export function Section({ title, note, action, children }: { title: string; note?: string; action?: ComponentChildren; children: ComponentChildren }) {
   return (
-    <section class="flex flex-col gap-3 min-w-0">
+    <section class="flex flex-col gap-2 md:gap-3 min-w-0">
       <div class="flex items-center gap-3">
-        <h2 class="text-xs font-semibold uppercase tracking-[0.12em] text-c3 whitespace-nowrap">{title}</h2>
+        <h2 class="text-[11px] md:text-xs font-semibold uppercase tracking-[0.12em] text-c3 whitespace-nowrap">{title}</h2>
         {note && <span class="num text-xs text-c3 whitespace-nowrap">{note}</span>}
         <span class="flex-1 h-px bg-c2 opacity-60" aria-hidden="true" />
         {action}
@@ -252,4 +271,4 @@ export function Field({ label, children }: { label: string; children: ComponentC
   );
 }
 
-export const inputCls = "h-11 px-4 rounded-xl border border-c3 bg-c0 text-c4 placeholder:text-c2 w-full";
+export const inputCls = "h-10 md:h-11 px-3 md:px-4 rounded-xl border border-c3 bg-c0 text-c4 placeholder:text-c2 w-full";
