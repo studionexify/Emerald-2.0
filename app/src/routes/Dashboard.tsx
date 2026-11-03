@@ -1,6 +1,6 @@
 import { Bars } from "../charts";
-import { Card, CardTitle, Icon, Page, Section, Stat, Status } from "../ui";
-import { db, inr, orderCost, orderTotal, shortDate, STAGES } from "../data";
+import { Card, CardTitle, Page, Section, Stat, Status } from "../ui";
+import { db, inr, X, orderCost, orderTotal, shortDate, STAGES } from "../data";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 
@@ -21,6 +21,20 @@ export default function Dashboard() {
   ];
   return (
     <Page title="Hi, Studio Nexify" sub="Tuesday, 3 November">
+      <Section title="Needs attention" note={`${Object.values(X.alerts).flat().length} items`} action={<a href="/alerts" class="text-xs text-c3 whitespace-nowrap">All →</a>}>
+        <div class="grid gap-2 grid-cols-1 md:grid-cols-2 2xl:grid-cols-4">
+          {Object.entries(X.alerts).map(([g, list]) => (
+            <Card key={g}>
+              <CardTitle action={<span class="num text-xs text-c3">{list.length}</span>}>{g}</CardTitle>
+              <ul class="flex flex-col">
+                {[...list].sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t)).slice(0, 3).map((a, i) => (
+                  <li key={i} class="border-t border-c1 first:border-0"><a href={a.href} class="flex items-start gap-2 py-1.5 text-sm"><Status tone={a.t === "danger" ? "blocked" : a.t === "warn" ? "waiting" : "idle"}>{""}</Status><span class="min-w-0">{a.text}</span></a></li>
+                ))}
+              </ul>
+            </Card>
+          ))}
+        </div>
+      </Section>
       <Section title="At a glance">
         <div class="grid gap-3 md:grid-cols-2 2xl:grid-cols-[1.4fr_1fr_1fr]">
           <Card dark class="md:col-span-2 2xl:col-span-1">
@@ -29,7 +43,7 @@ export default function Dashboard() {
               <div><div class="num text-3xl md:text-5xl font-semibold leading-none">{open.length}</div><div class="text-sm opacity-80 mt-1">open orders</div></div>
               <div><div class="num text-xl md:text-3xl font-semibold leading-none">{inr(pipeline)}</div><div class="text-sm opacity-80 mt-1">order value in pipeline</div></div>
             </div>
-            <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+            <div class="grid grid-cols-4 md:grid-cols-7 gap-1.5">
               {STAGES.map((s) => <Stat dark key={s.key} value={db.orders.filter((o) => o.stage === s.key).length} label={s.label} />)}
             </div>
           </Card>
@@ -50,18 +64,7 @@ export default function Dashboard() {
       </Section>
 
       <Section title="Today" note={`${attention.length} alerts · ${todo.length} tasks`}>
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Card>
-            <CardTitle>Needs attention</CardTitle>
-            <ul class="flex flex-col gap-3 text-sm">
-              {attention.map((x) => (
-                <li key={x.id}><a href={x.href} class="flex items-start gap-3">
-                  <span class={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center ${x.dark ? "bg-c4 text-c0" : "bg-c1"}`}><Icon name={x.icon} size={14} /></span>
-                  <span class="min-w-0"><span class="font-semibold block">{x.t}</span><span class="text-c3">{x.d}</span></span>
-                </a></li>
-              ))}
-            </ul>
-          </Card>
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Card>
             <CardTitle action={<a href="/work/orders" class="text-sm text-c3">All →</a>}>Due soonest</CardTitle>
             <ul class="flex flex-col gap-3 text-sm">

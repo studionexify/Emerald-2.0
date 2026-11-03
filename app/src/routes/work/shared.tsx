@@ -2,7 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Button, Chip, DetailHead, Fact, Page, Progress, Status } from "../../ui";
-import { duplicateOrder, GATE, inr, orderCost, orderTotal, shortDate, STAGES, TYPE_LABEL, type Order, type OrderType } from "../../data";
+import { duplicateOrder, GATE, inr, orderCost, orderTotal, shortDate, nextStage, STAGES, stagesFor, TYPE_LABEL, type Order, type OrderType } from "../../data";
 
 export function WorkShell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
   return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{children}</Page>;
@@ -39,7 +39,9 @@ export function OrderCard({ o, onOpen, inset }: { o: Order; onOpen: (o: Order) =
 /** Inline order detail (no overlay). Render via the page's `detail` prop. */
 export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose: () => void; onOpen: (o: Order) => void }) {
   const [msg, setMsg] = useState("");
-  const idx = stageIndex(order);
+  const flow = stagesFor(order);
+  const idx = flow.findIndex((s) => s.key === order.stage);
+  const next = nextStage(order);
   const total = orderTotal(order), cost = orderCost(order);
   return (
     <div>
@@ -48,8 +50,8 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
         <Status tone={order.blocked ? "blocked" : order.stage === "archived" ? "done" : "active"}>{stageLabel(order)}</Status>
         <span class="text-xs text-c3">· {TYPE_LABEL[order.type]} · via {order.medium}</span>
       </div>
-      <div class="mb-1 flex justify-between text-xs text-c3"><span>Stage {idx + 1} of {STAGES.length}</span><span>{Math.round(((idx + 1) / STAGES.length) * 100)}%</span></div>
-      <Progress value={((idx + 1) / STAGES.length) * 100} />
+      <div class="mb-1 flex justify-between text-xs text-c3"><span>Stage {idx + 1} of {flow.length}{order.type === "inhouse" ? " · skips Invoice" : ""}</span><span>{Math.round(((idx + 1) / flow.length) * 100)}%</span></div>
+      <Progress value={((idx + 1) / flow.length) * 100} />
       <div class="mt-3 rounded-xl bg-c1 p-3 text-xs"><b>Gate:</b> {GATE[order.stage]}</div>
       {order.blocked && <div class="mt-2 rounded-xl bg-c4 text-c0 p-3 text-sm"><b>Blocked:</b> {order.blocked}</div>}
       <div class="grid grid-cols-2 gap-3 my-4 text-sm">
@@ -74,7 +76,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       <h3 class="font-semibold text-sm mb-1">Tasks</h3>
       <p class="text-xs text-c3 mb-4">Tasks linked to {order.no} appear here. <a class="underline" href="/todo">Open To-do</a></p>
       <div class="flex flex-wrap gap-2">
-        <Button disabled={!!order.blocked || order.stage === "archived"}>Move to next stage</Button>
+        <Button disabled={!!order.blocked || order.stage === "archived"}>{next ? `Move to ${next.label}` : "Final stage"}</Button>
         <Button variant="outline" icon="copy" onClick={() => { const c = duplicateOrder(order); setMsg(`Created ${c.no}`); onOpen(c); }}>Duplicate</Button>
         <Button variant="ghost">Documents</Button>
       </div>

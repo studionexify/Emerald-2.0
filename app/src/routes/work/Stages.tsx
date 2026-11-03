@@ -156,12 +156,12 @@ export function Packing() {
 
 export function Invoice() {
   const [f, setF] = useState("all");
-  const waiting = ordersSig.value.filter((o) => o.stage === "invoice");
+  const waiting = ordersSig.value.filter((o) => o.stage === "invoice" && o.type !== "inhouse");
   const reg = X.invoices.filter((i) => f === "all" || (f === "paid" ? i.paid : !i.paid));
   return (
     <WorkShell title="Invoice" sub="Tax invoices in the studio's series · edit, cancel, rename, resequence" actions={<><Button variant="outline">Resequence</Button><Button icon="plus">New invoice</Button></>}
       toolbar={<div class="flex gap-1.5">{["all", "unpaid", "paid"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s[0].toUpperCase() + s.slice(1)}</Chip>)}</div>}>
-      <Section title="Awaiting invoice" note={String(waiting.length)}>
+      <Section title="Awaiting invoice" note={`${waiting.length} · in-house orders skip this stage`}>
         <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {waiting.map((o) => (
             <Card key={o.id}>

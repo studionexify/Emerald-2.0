@@ -48,3 +48,7 @@ export const GATE: Record<Stage, string> = {
   archived: "Read-only — cost rollup final",
 };
 export * as X from "../mock/extra";
+
+/** In-house work has no customer to bill: it skips the Invoice stage. */
+export const stagesFor = (o: Order) => (o.type === "inhouse" ? STAGES.filter((s) => s.key !== "invoice") : STAGES);
+export const nextStage = (o: Order) => { const l = stagesFor(o); const i = l.findIndex((s) => s.key === o.stage); return l[i + 1]; };
