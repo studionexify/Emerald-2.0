@@ -28,13 +28,13 @@ function Sidebar() {
   const c = collapsed.value;
   return (
     <aside aria-label="Main navigation"
-      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-c0 border-r border-c1 ${c ? "w-[84px]" : "w-60 2xl:w-64"}`}>
-      <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-1.5 p-2.5">
+      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-c0 border-r border-c1 ${c ? "w-[96px]" : "w-60 2xl:w-64"}`}>
+      <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col gap-1.5 p-2">
         {ALL.filter((n) => (isExternal() ? n.href === "/settings" : can(moduleOf(n.href)))).concat(isExternal() ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }] : []).map((n) => {
           const on = isActive(path, n.href);
           return (
             <a key={n.href} href={n.href} aria-current={on ? "page" : undefined} title={n.label}
-              class={`flex items-center rounded-xl ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 py-2.5 px-1 text-[11px] leading-tight text-center" : "gap-3 h-10 px-3 text-sm"} ${on ? "bg-c4 text-c0 font-semibold" : "text-c3 font-normal hover:bg-c1 hover:text-c4"}`}>
+              class={`flex items-center rounded-xl ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 py-2.5 px-1.5 text-[10.5px] leading-tight tracking-tight text-center" : "gap-3 h-10 px-3 text-sm"} ${on ? "bg-c4 text-c0 font-semibold" : "text-c3 font-normal hover:bg-c1 hover:text-c4"}`}>
               <Icon name={n.icon} size={c ? 20 : 18} />
               <span class="min-w-0">{c ? n.label.split(" ")[0] : n.label}</span>
             </a>

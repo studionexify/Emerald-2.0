@@ -37,7 +37,7 @@ export function Stat({ value, label, dark }: { value: string | number; label: st
   return (
     <div class={`rounded-2xl px-1 py-2 xl:py-3 text-center min-w-0 ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
       <div class="num text-lg md:text-xl xl:text-2xl font-extrabold">{value}</div>
-      <div class="text-[10px] xl:text-[11px] uppercase tracking-[0.08em] font-medium mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
+      <div class="text-[9.5px] xl:text-[11px] uppercase tracking-[0.02em] xl:tracking-[0.08em] font-medium mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
     </div>
   );
 }
