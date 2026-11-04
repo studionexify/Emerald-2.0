@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
+import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
 import {
   accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, ordersSig, photosSig, quotesSig, raiseInvoice,
   rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, X, log, patchOrder, nowS, consume,
@@ -17,7 +17,7 @@ function LinesEditor({ lines, on, locked }: { lines: InvLine[]; on: (l: InvLine[
   const set = (k: number, p: Partial<InvLine>) => on(lines.map((l, i) => (i === k ? { ...l, ...p } : l)));
   const c = "h-8 px-2 rounded-lg border border-c3 bg-c0 text-xs min-w-0";
   return (
-    <div class="flex flex-col gap-1.5">
+    <div class="flex flex-col gap-2">
       {lines.map((l, k) => (
         <div key={k} class="grid grid-cols-[1fr_56px_44px_72px_24px] gap-1">
           <input class={c} disabled={locked} value={l.desc} onInput={(e) => set(k, { desc: (e.target as HTMLInputElement).value })} aria-label="Description" />
@@ -53,7 +53,7 @@ export function Invoice() {
   return (
     <WorkShell title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
       actions={<><Button variant="outline" onClick={() => confirm("Renumber this FY's series in date order?") && resequence(fyOf(today()))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
-      toolbar={<div class="flex flex-wrap gap-1.5">{["all", "unpaid", "paid", "credit", "cancelled"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s[0].toUpperCase() + s.slice(1)}</Chip>)}</div>}
+      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
       detail={cur && (
         <div>
           <DetailHead title={`${cur.no} · ${cur.customer}`} onClose={() => setOpen(null)} />
@@ -135,7 +135,7 @@ export function Quotes() {
   const cnt = (s: string) => quotesSig.value.filter((q) => q.outcome === s);
   return (
     <WorkShell title="Quotation register" sub="Every quote and its outcome — unknown is never folded into lost" actions={<Button icon="plus" onClick={() => make()}>New quotation</Button>}
-      toolbar={<div class="flex flex-wrap gap-1.5">{["all", "open", "approved", "lost", "unrecorded"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s[0].toUpperCase() + s.slice(1)}</Chip>)}</div>}
+      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "open", "approved", "lost", "unrecorded"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
       detail={cur && (
         <div>
           <DetailHead title={`${cur.no} · ${cur.customer || "new"}`} onClose={() => setOpen(null)} />
@@ -148,7 +148,7 @@ export function Quotes() {
               </div>
               <LinesEditor lines={cur.lines} on={(l) => upd(cur, { lines: l })} />
               <div class="flex justify-between text-sm font-semibold border-t border-c1 pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
-              <div class="flex flex-wrap gap-1.5">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => upd(cur, { outcome: o })}>{o}</Chip>)}</div>
+              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => upd(cur, { outcome: o })}>{o}</Chip>)}</div>
               {cur.orderNo && <p class="text-xs text-c3">Linked to {cur.orderNo}. Approving here doesn't move the order — stages are free.</p>}
             </div>
           )}
@@ -184,7 +184,7 @@ export function Documents() {
   ].filter((d) => kind === "all" || d.kind === kind).sort((a, b) => b.date.localeCompare(a.date));
   return (
     <WorkShell title="Documents" sub="The generator — every quotation, invoice, credit note and challan, printable"
-      toolbar={<div class="flex flex-wrap gap-1.5">{["all", "Quotation", "Tax invoice", "Credit note", "Delivery challan"].map((k) => <Chip key={k} active={kind === k} onClick={() => setKind(k)}>{k === "all" ? "All" : k}</Chip>)}</div>}
+      toolbar={<div class="flex flex-wrap gap-2"><Pick value={kind} on={setKind} items={["all", "Quotation", "Tax invoice", "Credit note", "Delivery challan"]} label={(k) => k === "all" ? "All" : k} /></div>}
       detail={sel && <div><DetailHead title={`${sel.title} · ${sel.no}`} onClose={() => setSel(null)} /><DocSheet d={sel} /><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></div>}>
       <Card>
         {docs.length ? <Table rows={docs} rowKey={(d) => d.id} onRow={(d) => setSel(d.d())} cols={[

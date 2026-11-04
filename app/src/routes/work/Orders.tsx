@@ -93,7 +93,7 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
   return (
     <div>
       <DetailHead title="New order" onClose={() => onDone(null)} />
-      <div class="grid grid-cols-3 gap-1.5 mb-2">
+      <div class="grid grid-cols-3 gap-2 mb-2">
         {(["inhouse", "client", "bulk"] as OrderType[]).map((k) => (
           <button key={k} onClick={() => setT(k)} class={`h-9 rounded-full text-sm cursor-pointer ${t === k ? "bg-c4 text-c0" : "bg-c1"}`}>{TYPE_LABEL[k]}</button>
         ))}

@@ -150,7 +150,7 @@ function ModelUpload({ onTotal }: { onTotal: (g: number, h: number) => void }) {
       {err && <p class="text-xs mt-1">{err}</p>}
       <ul class="text-xs mt-2 flex flex-col gap-1">
         {parts.map((p, i) => { const e = est(p); return (
-          <li key={i} class="flex flex-wrap items-center gap-1.5 border-t border-c1 pt-1">
+          <li key={i} class="flex flex-wrap items-center gap-2 border-t border-c1 pt-1">
             <input type="checkbox" checked={p.on} onChange={() => set(i, { on: !p.on })} aria-label="Include" /><b class="min-w-0 truncate max-w-[10rem]">{p.name}</b>
             <select class={c} value={p.unit} onChange={(ev) => set(i, { unit: Number((ev.target as HTMLSelectElement).value) })}><option value={1}>mm</option><option value={10}>cm</option><option value={25.4}>in</option></select>
             <select class={c} value={p.mat} onChange={(ev) => set(i, { mat: (ev.target as HTMLSelectElement).value })}>{Object.keys(DENS).map((m) => <option key={m}>{m}</option>)}</select>

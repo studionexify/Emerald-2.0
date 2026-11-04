@@ -17,6 +17,7 @@ const P: Record<string, string> = {
   moon: "M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10",
   copy: "M8 8h12v12H8zM4 16V4h12",
   close: "M6 6l12 12M18 6 6 18",
+  down: "M6 9l6 6 6-6",
   edit: "M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
   scale: "M5 20h14M12 4v16M6 8h12M6 8l-3 6a3 3 0 0 0 6 0zM18 8l-3 6a3 3 0 0 0 6 0z",
   in: "M12 4v12M6 10l6 6 6-6M4 20h16",

@@ -6,9 +6,14 @@ import * as XX from "../mock/extra";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
 
 /** Persisted list that fills new fields from the seed (by id) so old saved rows gain them. */
+const SEED_V = "3";
+let fresh = false;
+try { fresh = localStorage.getItem("emerald:seedv") !== SEED_V; } catch {}
+/** Persisted list. On a new sample-data version, sample rows are refreshed; rows you added are kept. */
 function list<T extends { id: string }>(key: string, seed: T[], fill: Partial<T> = {}): Signal<T[]> {
   const s = persisted<T[]>(key, seed);
-  s.value = s.value.map((r) => ({ ...fill, ...(seed.find((x) => x.id === r.id) ?? {}), ...r }));
+  s.value = fresh ? [...seed.map((r) => ({ ...fill, ...r })), ...s.value.filter((r) => !seed.some((x) => x.id === r.id))]
+    : s.value.map((r) => ({ ...fill, ...(seed.find((x) => x.id === r.id) ?? {}), ...r }));
   return s;
 }
 export const printersSig = list<Printer>("printers", M.printers, { active: true });
@@ -59,3 +64,11 @@ export const stockNames = (cat: string) =>
   cat === "filament" ? spoolsSig.value.filter((s) => s.active !== false).map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`)
   : cat === "packing" ? packSig.value.filter((p) => p.active !== false).map((p) => p.name)
   : itemsSig.value.filter((p) => p.active !== false && (cat === "part" ? p.cat === "Part" : cat === "accessory" ? p.cat === "Accessory" : true)).map((p) => p.name);
+
+try { localStorage.setItem("emerald:seedv", SEED_V); } catch {}
+
+/** Which spool a job draws from: its own, else the spool loaded on its printer. */
+export const jobSpool = (j: Job) => spoolsSig.value.find((s) => s.spoolNo === j.spool) ?? spoolsSig.value.find((s) => s.status === "loaded" && s.printer === j.printer);
+/** Grams already promised to queued or printing jobs. */
+export const committed = (s: Spool) => jobsSig.value.filter((j) => (j.status === "queued" || j.status === "printing") && jobSpool(j)?.id === s.id).reduce((a, j) => a + j.grams, 0);
+export const spoolLabel = (s: Spool) => `${s.material} ${s.colour} · ${s.spoolNo}`;

@@ -35,7 +35,7 @@ export default function Bulk() {
             return (
               <Card key={st}>
                 <CardTitle action={<span class="num text-xs text-c3">{col.length}</span>}>{BATCH_LABEL[st]}</CardTitle>
-                <ul class="flex flex-col gap-1.5">
+                <ul class="flex flex-col gap-2">
                   {col.map((b) => <div key={b.id}><div class="text-[11px] text-c3 px-1">{b.orderNo} · {b.customer}</div><BatchRow b={b} /></div>)}
                   {!col.length && <li class="text-xs text-c3">None</li>}
                 </ul>

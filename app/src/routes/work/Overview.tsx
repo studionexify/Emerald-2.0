@@ -19,7 +19,7 @@ export default function Overview() {
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[3fr_1fr]">
           <Card dark class="md:col-span-2 xl:col-span-1">
             <CardTitle>Orders by stage</CardTitle>
-            <div class="grid grid-cols-4 md:grid-cols-8 gap-1.5 md:gap-2">
+            <div class="grid grid-cols-4 md:grid-cols-8 gap-2 md:gap-2">
               {STAGES.map((s) => (
                 <a key={s.key} href="/work/orders"><Stat dark value={list.filter((o) => o.stage === s.key).length} label={s.label} /></a>
               ))}

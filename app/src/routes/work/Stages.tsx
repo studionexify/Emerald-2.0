@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
-import { Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
-import { teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order } from "../../data";
+import { Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
+import { teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
 import { ConsumeForm, OrderDetail, WorkShell } from "./shared";
 
@@ -17,16 +17,21 @@ const jFields: FDef<Job>[] = [
 ];
 const spoolOpts = () => spoolsSig.value.filter((s) => s.active !== false && s.grams > 0).map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`);
 function JobRun({ j, put }: { j: Job; put: (p: Partial<Job>, why?: string) => void }) {
-  const [sp, setSp] = useState(spoolOpts()[0] ?? "");
+  const js = jobSpool(j);
+  const sp = js ? spoolLabel(js) : "";
+  const setSp = (v: string) => put({ spool: spoolsSig.value.find((s) => spoolLabel(s) === v)?.spoolNo }, `Spool → ${v}`);
   const [reason, setReason] = useState("");
+  const after = js ? js.grams - j.grams : 0;
   const done = () => {
-    put({ status: "done" }, "Job done");
+    put({ status: "done", spool: js?.spoolNo }, "Job done");
     if (sp) consume({ kind: "filament", item: sp, qty: j.grams, orderNo: j.orderNo, printer: j.printer });
     if (j.printer !== "—") { consume({ kind: "machine", item: j.printer, qty: j.hours, orderNo: j.orderNo, printer: j.printer }); consume({ kind: "power", item: "Electricity", qty: j.hours, orderNo: j.orderNo, printer: j.printer }); }
   };
   return (
     <PaneSection title="Run">
-      <Field label="Spool used"><select class={inputCls} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)}>{spoolOpts().map((o) => <option key={o}>{o}</option>)}</select></Field>
+      <Field label="Spool used"><select class={inputCls} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)}><option value="">Choose spool</option>{spoolOpts().map((o) => <option key={o}>{o}</option>)}</select></Field>
+      {js && j.status !== "done" && <div class="rounded-xl bg-c1 px-3 py-2.5 text-sm flex items-center justify-between gap-3"><span>Spool after this job</span><b class="num">{js.grams.toLocaleString("en-IN")} − {j.grams} = {after.toLocaleString("en-IN")} g</b></div>}
+      {js && j.status !== "done" && after < 250 && <p class="text-xs font-semibold">{after < 0 ? `⚠ Not enough filament — short by ${-after} g. Load another spool.` : "⚠ Spool will be low after this job."}</p>}
       <Actions>
         {j.status === "queued" && <Button onClick={() => put({ status: "printing" }, "Job started")}>Start print</Button>}
         {j.status !== "done" && <Button onClick={done}>Mark done · draw {j.grams} g</Button>}
@@ -50,7 +55,7 @@ export function Production() {
   return (
     <WorkShell title="Production" sub="Build sheet at approval · one job per line item · tap a job to run it" detail={r.detail}
       actions={<><Button variant="outline" onClick={() => { const p = prompt("Which printer is blocked, and why? (e.g. A1-02 — nozzle clog)"); if (p) log("Logged block", p, "order"); }}>Log block</Button><Button icon="plus" onClick={() => r.add()}>New job</Button></>}
-      toolbar={<div class="flex flex-wrap gap-1.5">{["all", "queued", "printing", "done", "failed"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s === "all" ? "All jobs" : s}</Chip>)}</div>}>
+      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "queued", "printing", "done", "failed"]} label={(s) => s === "all" ? "All jobs" : s} /></div>}>
       <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
       <Section title="Machines" note={`${printersSig.value.filter((p) => p.active !== false).length} printers`}>
         <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
@@ -140,7 +145,7 @@ export function QC() {
           <Card>
             {cur ? <>
               <Field label="Job"><select class={inputCls} value={pick} onChange={(e) => setPick(Number((e.target as HTMLSelectElement).value))}>{done.map((j, i) => <option key={j.id} value={i}>{j.orderNo} · {j.item} ({j.printer})</option>)}</select></Field>
-              <div class="flex gap-1.5 my-3">{(["pass", "rework", "scrap"] as const).map((x) => <Chip key={x} active={d.res === x} onClick={() => setD({ ...d, res: x })}>{x[0].toUpperCase() + x.slice(1)}</Chip>)}</div>
+              <div class="flex gap-2 my-3">{(["pass", "rework", "scrap"] as const).map((x) => <Chip key={x} active={d.res === x} onClick={() => setD({ ...d, res: x })}>{x[0].toUpperCase() + x.slice(1)}</Chip>)}</div>
               <div class="grid grid-cols-2 gap-3">
                 <Field label="Units reworked"><input class={inputCls} type="number" value={d.units} onInput={(e) => setD({ ...d, units: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
                 <Field label="Wasted (g)"><input class={inputCls} type="number" value={d.grams} onInput={(e) => setD({ ...d, grams: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>

@@ -46,7 +46,7 @@ export default function Dashboard() {
               <div><div class="num text-3xl md:text-5xl font-semibold leading-none">{open.length}</div><div class="text-sm opacity-80 mt-1">open orders</div></div>
               <div><div class="num text-xl md:text-3xl font-semibold leading-none">{inr(pipeline)}</div><div class="text-sm opacity-80 mt-1">order value in pipeline</div></div>
             </div>
-            <div class="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+            <div class="grid grid-cols-4 md:grid-cols-8 gap-2">
               {STAGES.map((s) => <Stat dark key={s.key} value={ordersSig.value.filter((o) => o.stage === s.key).length} label={s.label} />)}
             </div>
           </Card>

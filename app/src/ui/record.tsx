@@ -103,13 +103,13 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
       <div>
         <DetailHead title={c.title(cur)} onClose={close} />
         {retired && <p class="text-xs font-semibold bg-c1 rounded-lg px-3 py-2 mb-3">Retired — off every picker. Old records keep the name.</p>}
-        <div class="mb-4"><Actions>
+        <div class="mb-4 grid grid-cols-2 gap-2 [&>*]:w-full [&>*]:min-w-0">
           <Button icon="edit" onClick={() => setDraft({ ...cur })}>Edit</Button>
           {c.actions?.(cur, p)}
           {!c.noDuplicate && <Button variant="outline" icon="copy" onClick={() => { const n = { ...cur, id: uid() }; c.sig.value = [n, ...c.sig.value]; log(`Duplicated ${c.kind.toLowerCase()}`, c.title(n), c.logKind ?? "stock"); setId(n.id); }}>Duplicate</Button>}
           {"active" in cur && <Button variant="outline" onClick={() => p({ active: retired } as Partial<T>, retired ? `Restored ${c.kind.toLowerCase()}` : `Retired ${c.kind.toLowerCase()}`)}>{retired ? "Restore" : "Retire"}</Button>}
-          {!c.noDelete && <Button variant="ghost" icon="bin" onClick={() => { if (confirm(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`)) { toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); } }}>Delete</Button>}
-        </Actions></div>
+          {!c.noDelete && <Button variant="outline" icon="bin" onClick={() => { if (confirm(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`)) { toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); } }}>Delete</Button>}
+        </div>
         {c.facts && <Facts items={c.facts(cur)} />}
         {c.extra?.(cur, p)}
         <PaneSection title="Details">

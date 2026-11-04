@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
-import { Button, Card, CardTitle, Chip, Empty, Field, Icon, inputCls, Page, Section, Status, Table } from "../ui";
+import { Pick, Button, Card, CardTitle, Empty, Field, Icon, inputCls, Page, Section, Status, Table } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
 
@@ -21,7 +21,7 @@ export function Todo() {
   const list = tasks.filter((t) => (f === "repeat" ? !!t.repeat : f === "mine" ? t.who === (me.value?.name ?? "You") || t.who === "You" : f === "open" ? !t.done : t.done)).sort((x, y) => x.due.localeCompare(y.due));
   return (
     <Page title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus" onClick={() => r.add()}>New task</Button>} detail={r.detail}
-      toolbar={<div class="flex flex-wrap gap-1.5"><Chip active={f === "open"} onClick={() => setF("open")}>Open ({tasks.filter((t) => !t.done).length})</Chip><Chip active={f === "mine"} onClick={() => setF("mine")}>Mine</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip><Chip active={f === "repeat"} onClick={() => setF("repeat")}>Recurring</Chip></div>}>
+      toolbar={<Pick title="Show" value={f} on={setF} items={["open", "mine", "done", "repeat"] as const} label={(k) => ({ open: `Open (${tasks.filter((t) => !t.done).length})`, mine: "Mine", done: "Done", repeat: "Recurring" })[k]} />}>
       <Card>
         {list.length ? <ul>
           {list.map((t) => (
@@ -48,7 +48,7 @@ export function Logs() {
   const people = ["all", ...new Set(logsSig.value.map((l) => l.who))];
   return (
     <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account" detail={open && <Inspect title={open.action} row={{ when: open.at, who: open.who, action: open.action, record: open.target, kind: open.kind ?? "order" }} onClose={() => setOpen(null)} />}
-      toolbar={<div class="flex flex-wrap items-center gap-1.5">{["all", "order", "consumption", "stock", "money"].map((x) => <Chip key={x} active={kind === x} onClick={() => setKind(x)}>{x === "all" ? "All kinds" : x[0].toUpperCase() + x.slice(1)}</Chip>)}<span class="w-px h-5 bg-c2 mx-1" />{people.map((p) => <Chip key={p} active={who === p} onClick={() => setWho(p)}>{p === "all" ? "Everyone" : p}</Chip>)}</div>}>
+      toolbar={<div class="flex flex-wrap items-center gap-2"><Pick title="Kind" value={kind} on={setKind} items={["all", "order", "consumption", "stock", "money"]} label={(x) => x === "all" ? "All kinds" : x[0].toUpperCase() + x.slice(1)} /><Pick title="Who" value={who} on={setWho} items={people} label={(p) => (p === "all" ? "Everyone" : p)} /></div>}>
       <Card>
         <Table rows={logsSig.value.filter((l) => (who === "all" || l.who === who) && (kind === "all" || (l.kind ?? "order") === kind))} rowKey={(l) => l.id} onRow={setOpen} cols={[
           { key: "x", label: "Action", render: (l) => l.action },

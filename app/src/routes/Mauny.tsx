@@ -3,7 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
-import { Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
+import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
 import {
   accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, books, can, confirmBill, confirmLine, consSig, csv, daySummary, download, expensesSig,
   financeSummary, fyOf, GOAL_HINT, GOAL_LABEL, goalProgress, goalsSig, gstMonths, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
@@ -108,7 +108,7 @@ export function Purchases() {
   const txt = (k: keyof Bill) => ({ class: inputCls, value: String(open?.[k] ?? ""), onInput: (e: Event) => upd({ [k]: (e.target as HTMLInputElement).value } as Partial<Bill>) });
   return (
     <Shell title="Purchases" sub="Bill vault — filed by the bill's own FY, figures confirmed by a person"
-      toolbar={<div class="flex flex-wrap gap-1.5">{[["all", "All"], ["needs_review", "To review"], ["logged", "Logged"], ["failed", "Unreadable"], ["rejected", "Rejected"]].map(([k, l]) => <Chip key={k} active={f === k} onClick={() => setF(k)}>{l} ({k === "all" ? billsSig.value.length : billsSig.value.filter((b) => b.status === k).length})</Chip>)}</div>}
+      toolbar={<Pick title="Show" value={f} on={setF} items={["all", "needs_review", "logged", "failed", "rejected"]} label={(k) => `${({ all: "All", needs_review: "To review", logged: "Logged", failed: "Unreadable", rejected: "Rejected" } as Record<string, string>)[k]} (${k === "all" ? billsSig.value.length : billsSig.value.filter((b) => b.status === k).length})`} />}
       detail={open && chk && (
         <div>
           <DetailHead title={`Review · ${open.vendor || "new bill"}`} onClose={() => setOpen(null)} />
@@ -168,7 +168,7 @@ export function Finance() {
   ];
   return (
     <Shell title="Finance" sub="Five figures, one rule each · everything narrows to the window"
-      toolbar={<div class="flex flex-wrap items-center gap-1.5"><FY v={fy} on={setFy} />{[["mtd", "MTD"], ["last", "Last month"], ["qtd", "QTD"], ["fy", "Full FY"]].map(([k, l]) => <Chip key={k} active={p === k} onClick={() => setP(k)}>{l}</Chip>)}</div>}
+      toolbar={<div class="flex flex-wrap items-center gap-2"><FY v={fy} on={setFy} /><Pick title="Period" value={p} on={setP} items={["mtd", "last", "qtd", "fy"]} label={(k) => ({ mtd: "MTD", last: "Last month", qtd: "QTD", fy: "Full FY" } as Record<string, string>)[k]} /></div>}
       actions={can("mauny", "full") && <Button icon="plus" onClick={() => setAdd(!add)}>Add expense</Button>}>
       {add && (
         <Card class="grid gap-2 grid-cols-2 md:grid-cols-6 items-end">
@@ -218,7 +218,7 @@ export function Goals() {
   return (
     <Shell title="Goals" sub="A number and a window — measured off the ledger, never stored"
       actions={<Button icon="plus" onClick={() => setEdit({ id: uid(), title: "", metric: "revenue", start: today().slice(0, 8) + "01", end: today(), period: "This month", target: 100000, note: "", archived: false })}>New goal</Button>}
-      toolbar={<div class="flex gap-1.5"><Chip active={!arch} onClick={() => setArch(false)}>Active</Chip><Chip active={arch} onClick={() => setArch(true)}>Archived</Chip></div>}
+      toolbar={<div class="flex gap-2"><Chip active={!arch} onClick={() => setArch(false)}>Active</Chip><Chip active={arch} onClick={() => setArch(true)}>Archived</Chip></div>}
       detail={edit && (
         <div>
           <DetailHead title={edit.title || "New goal"} onClose={() => setEdit(null)} />
@@ -271,7 +271,7 @@ export function Accounts() {
     <Shell title="Accounts & statements" sub="Upload a statement → lines matched → confirm or reject · duplicates never import twice"
       actions={<><Button variant="outline" onClick={() => { const name = prompt("Account name"); if (name) accountsSig.value = [...accountsSig.value, { id: uid(), name, opening: Number(prompt("Opening balance ₹") || 0) }]; }}>Add account</Button>
         <label class="inline-flex items-center justify-center h-9 md:h-10 px-4 rounded-full bg-c4 text-c0 text-sm font-medium cursor-pointer">Upload CSV statement<input type="file" accept=".csv,.pdf,.xlsx" class="sr-only" onChange={(e) => onFile((e.target as HTMLInputElement).files)} /></label></>}
-      toolbar={<div class="flex flex-wrap gap-1.5 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><span class="w-px h-5 bg-c2" />{["review", "confirmed", "rejected", "all"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s}</Chip>)}</div>}>
+      toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
         {accountsSig.value.map((a) => <Card key={a.id} dark={a.id === acc}><div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-extrabold mt-1">{inr(balanceOf(a.id))}</div><div class="text-xs opacity-80">Opening {inr(a.opening)}</div></Card>)}
@@ -312,7 +312,7 @@ export function Books() {
   return (
     <Shell title="Books" sub="Double-entry view derived from invoices, bills and Mauny — never retyped"
       actions={<><Button variant="outline" onClick={() => download(`Emerald-FY${fy}-tally.xml`, tallyXml(fy), "application/xml")}>Tally XML</Button><Button variant="outline" onClick={() => window.print()}>Print</Button><Button onClick={pack}>Year-end pack</Button></>}
-      toolbar={<div class="flex flex-wrap items-center gap-1.5"><FY v={fy} on={setFy} /><SubTabs value={t} onChange={setT} items={BOOK_TABS} /></div>}>
+      toolbar={<div class="flex flex-wrap items-center gap-2"><FY v={fy} on={setFy} /><SubTabs value={t} onChange={setT} items={BOOK_TABS} /></div>}>
       {B.bs.suspense !== 0 && t === "bs" && <div class="rounded-xl bg-c1 p-2.5 text-xs">Suspense {inr(B.bs.suspense)} — opening balances not fully compiled; visible and wrong in a way somebody will fix, never hidden.</div>}
       <Card>
         {t === "sales" && <Table rows={B.sales} rowKey={(r) => r.id} onRow={peek} cols={tax} />}

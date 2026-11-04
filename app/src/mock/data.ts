@@ -24,8 +24,8 @@ export const orders: Order[] = [
 ];
 
 export const jobs: Job[] = [
-  { id: "j1", orderNo: "EM-1041", item: "Desk organiser · 30/120", printer: "P1S-01", operator: "Chintan", status: "printing", hours: 6.5, grams: 820 },
-  { id: "j2", orderNo: "EM-1041", item: "Pen stand · 0/80", printer: "A1-01", operator: "Meet", status: "queued", hours: 4, grams: 410 },
+  { id: "j1", orderNo: "EM-1041", item: "Desk organiser · 30/120", printer: "P1S-01", operator: "Chintan", status: "printing", hours: 6.5, grams: 820, spool: "PLA-BK-07" },
+  { id: "j2", orderNo: "EM-1041", item: "Pen stand · 0/80", printer: "A1-01", operator: "Meet", status: "queued", hours: 4, grams: 410, spool: "PETG-WH-02" },
   { id: "j3", orderNo: "EM-1040", item: "Spool holder jig", printer: "—", operator: "—", status: "queued", hours: 2, grams: 160 },
   { id: "j4", orderNo: "EM-1039", item: "Lithophane lamp", printer: "P1S-01", operator: "Chintan", status: "done", hours: 9, grams: 310 },
   { id: "j5", orderNo: "EM-1038", item: "Coaster · run 5", printer: "A1-01", operator: "Meet", status: "failed", hours: 1.2, grams: 90 },

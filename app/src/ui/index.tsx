@@ -9,10 +9,10 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
   const v = {
     primary: "bg-c4 text-c0 border-c4",
     outline: "bg-c0 text-c4 border-c4",
-    ghost: "bg-transparent text-c4 border-transparent hover:bg-c1",
+    ghost: "bg-transparent text-c4 border-transparent hover:border-c2",
   }[variant];
   return (
-    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-9 md:h-10 px-4 md:px-5 rounded-full border text-sm font-semibold cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
+    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-9 md:h-10 px-4 md:px-5 rounded-full border text-[13px] md:text-sm font-semibold whitespace-nowrap cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </button>
@@ -53,7 +53,7 @@ export function Big({ value, label }: { value: string; label: string }) {
 
 export function Chip({ active, children, onClick }: { active?: boolean; children: ComponentChildren; onClick?: () => void }) {
   return (
-    <button onClick={onClick} class={`h-7 2xl:h-8 px-3 rounded-full text-xs 2xl:text-sm cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0 font-semibold" : "bg-c1 text-c3 font-normal"}`}>
+    <button onClick={onClick} class={`h-8 px-3.5 inline-flex items-center rounded-full text-xs cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0 font-semibold border border-c4" : "bg-c0 text-c4 font-normal border border-c2"}`}>
       {children}
     </button>
   );
@@ -63,26 +63,30 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
   const { path, route } = useLocation();
   const current = [...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => path === t.href || path.startsWith(t.href + "/"));
   return (
-    <>
-      {/* Phone: one compact switcher, nothing cropped */}
-      <label class="xl:hidden relative block">
-        <span class="sr-only">Section</span>
-        <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
-          class="appearance-none w-full h-9 pl-3 pr-8 rounded-full truncate bg-c4 text-c0 font-medium text-sm">
-          {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
-        </select>
-        <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c0 text-xs">▼</span>
-      </label>
-      {/* iPad + desktop: wrapping pills */}
-      <nav class="hidden xl:flex flex-wrap gap-1" aria-label="Sections">
-        {tabs.map((t) => (
-          <a key={t.href} href={t.href} aria-current={current?.href === t.href ? "page" : undefined}
-            class={`h-7 2xl:h-8 px-3 inline-flex items-center rounded-full text-[13px] ${current?.href === t.href ? "bg-c4 text-c0 font-semibold" : "bg-c0 text-c3 font-normal hover:text-c4"}`}>
-            {t.label}
-          </a>
-        ))}
-      </nav>
-    </>
+    <label class="relative block">
+      <span class="sr-only">Section</span>
+      <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
+        class="appearance-none cursor-pointer w-full h-9 pl-4 pr-9 rounded-full truncate bg-c4 text-c0 font-semibold text-[13px]">
+        {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
+      </select>
+      <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-c0"><Icon name="down" size={14} /></span>
+    </label>
+  );
+}
+
+/** Filter control: chips for up to 3 options, a dropdown beyond that. */
+export function Pick<T extends string>({ value, on, items, label, title }: { value: T; on: (v: T) => void; items: readonly T[] | T[]; label?: (v: T) => string; title?: string }) {
+  const L = label ?? ((x: T) => x[0].toUpperCase() + x.slice(1));
+  if (items.length <= 3) return <div class="inline-flex flex-wrap items-center gap-2">{items.map((x) => <Chip key={x} active={value === x} onClick={() => on(x)}>{L(x)}</Chip>)}</div>;
+  return (
+    <label class="relative inline-block min-w-0">
+      <span class="sr-only">{title ?? "Filter"}</span>
+      <select value={value} onChange={(e) => on((e.target as HTMLSelectElement).value as T)} aria-label={title ?? "Filter"}
+        class="appearance-none cursor-pointer h-8 pl-3.5 pr-8 rounded-full bg-c0 border border-c2 text-xs font-semibold max-w-full truncate">
+        {items.map((x) => <option key={x} value={x}>{title ? `${title}: ${L(x)}` : L(x)}</option>)}
+      </select>
+      <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c3"><Icon name="down" size={12} /></span>
+    </label>
   );
 }
 
@@ -149,13 +153,13 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
       <table class="hidden md:table w-full text-sm table-auto">
         <thead>
           <tr class="text-left text-c3 text-xs">
-            {cols.map((c) => <th key={c.key} class={`font-medium py-2 pr-3 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
+            {cols.map((c) => <th key={c.key} class={`font-medium py-2 pr-4 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-t border-c1 align-top ${onRow ? "cursor-pointer hover:bg-c1" : ""}`}>
-              {cols.map((c) => <td key={c.key} class={`py-2 pr-3 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
+              {cols.map((c) => <td key={c.key} class={`py-2.5 pr-4 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
             </tr>
           ))}
         </tbody>
@@ -185,18 +189,10 @@ export function DetailHead({ title, onClose }: { title: ComponentChildren; onClo
   );
 }
 
-/** In-page sub-sections: select on phone, pills on iPad/desktop. */
+/** In-page sub-sections: chips for ≤3, dropdown beyond. */
 export function SubTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: [T, string][] }) {
-  return (
-    <>
-      <select class="xl:hidden h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs font-medium w-full md:w-60" value={value} onChange={(e) => onChange((e.target as HTMLSelectElement).value as T)}>
-        {items.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-      </select>
-      <div class="hidden xl:flex flex-wrap gap-1.5">
-        {items.map(([k, l]) => <Chip key={k} active={value === k} onClick={() => onChange(k)}>{l}</Chip>)}
-      </div>
-    </>
-  );
+  const m = new Map(items);
+  return <Pick value={value} on={onChange} items={items.map(([k]) => k)} label={(k) => m.get(k) ?? k} />;
 }
 
 /** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
@@ -206,21 +202,16 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
 }) {
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-7 py-2 md:py-2.5 border-b border-c2/40 bg-c1">
+      <div class="shrink-0 flex flex-col gap-2 md:gap-2 px-3 md:px-5 2xl:px-7 py-2 md:py-2.5 border-b border-c2/40 bg-c1">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-baseline gap-3">
             <h1 class="text-lg md:text-2xl 2xl:text-[28px] font-extrabold tracking-tight leading-tight truncate">{title}</h1>
             {sub && <p class="hidden lg:block text-[13px] text-c3 font-normal truncate">{sub}</p>}
           </div>
-          {tabs && <div class="xl:hidden w-[46%] md:w-60 shrink-0"><Tabs tabs={tabs} /></div>}
+          {tabs && <div class="w-[46%] md:w-56 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
-        {(toolbar || tabs) && (
-          <div class="empty:hidden flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
-            {tabs && <div class="hidden xl:block min-w-0"><Tabs tabs={tabs} /></div>}
-            {toolbar && <div class="min-w-0 w-full xl:w-auto xl:ml-auto">{toolbar}</div>}
-          </div>
-        )}
+        {toolbar && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}
       </div>
       <div class="flex-1 min-h-0">
         {detail !== undefined ? (

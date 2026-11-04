@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
-import { Button, Chip, DetailHead, Fact, Page, Status } from "../../ui";
+import { Pick, Button, DetailHead, Fact, Page, Status } from "../../ui";
 import { addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 
 export function WorkShell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
@@ -12,9 +12,7 @@ export type TypeFilter = "all" | OrderType;
 export function TypeChips({ value, onChange }: { value: TypeFilter; onChange: (v: TypeFilter) => void }) {
   const opts: TypeFilter[] = ["all", "client", "bulk", "inhouse"];
   return (
-    <div class="flex flex-wrap gap-1.5">
-      {opts.map((o) => <Chip key={o} active={value === o} onClick={() => onChange(o)}>{o === "all" ? "All" : TYPE_LABEL[o]}</Chip>)}
-    </div>
+    <Pick title="Type" value={value} on={onChange} items={opts} label={(o) => (o === "all" ? "All types" : TYPE_LABEL[o as OrderType])} />
   );
 }
 
@@ -91,7 +89,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       </ul>
 
       <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Batches <button class="text-xs underline cursor-pointer" onClick={() => { addBatch(order); onOpen({ ...order }); }}>+ Add batch</button></h3>
-      <ul class="flex flex-col gap-1.5 mb-3">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}{!mine.length && <li class="text-xs text-c3">No batches — any order can be split.</li>}</ul>
+      <ul class="flex flex-col gap-2 mb-3">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}{!mine.length && <li class="text-xs text-c3">No batches — any order can be split.</li>}</ul>
 
       <div class="grid grid-cols-2 gap-3 my-3 text-sm">
         <Fact label="Created" value={shortDate(order.created)} />
@@ -102,7 +100,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
         <Fact label="Invoice" value={order.invoiced ? "Raised" : "—"} />
       </div>
       <h3 class="font-semibold text-sm mb-2">Line items</h3>
-      <ul class="flex flex-col gap-1.5 mb-3">
+      <ul class="flex flex-col gap-2 mb-3">
         {order.items.map((i, k) => (
           <li key={k} class="bg-c1 rounded-xl p-2.5 text-sm flex justify-between gap-3">
             <span class="min-w-0"><span class="font-medium block">{i.name}</span><span class="text-c3 text-xs">{i.material} · {i.colour} · ×{i.qty}</span></span>
@@ -131,7 +129,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       </div>
 
       <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Photos <label class="text-xs underline cursor-pointer">+ Add (QC / packing)<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: String(r.result), at: nowS() }]; onOpen({ ...order }); }; r.readAsDataURL(f); }} /></label></h3>
-      <div class="grid grid-cols-4 gap-1.5 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><img src={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
+      <div class="grid grid-cols-4 gap-2 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><img src={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
 
       <h3 class="font-semibold text-sm mb-1.5">Stage history</h3>
       <ul class="text-xs mb-3">{hist.map((h) => <li key={h.id} class="py-1 border-t border-c1">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>
@@ -150,7 +148,7 @@ export function ConsumeForm({ orderNo, batches = [] }: { orderNo?: string; batch
     : k === "packing" ? packSig.value.map((p) => p.name) : k === "machine" || k === "power" ? ["P1S-01", "A1-01", "A1-02"] : [];
   const sm = "h-8 px-2 rounded-lg border border-c3 bg-c0 text-xs min-w-0";
   return (
-    <form class="flex flex-wrap gap-1.5" onSubmit={(e) => { e.preventDefault(); if (!qty) return; consume({ kind: k, item: item || opts[0] || k, qty, orderNo, batch: batch || undefined, printer: k === "machine" || k === "power" ? item || opts[0] : undefined }); setQty(0); }}>
+    <form class="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); if (!qty) return; consume({ kind: k, item: item || opts[0] || k, qty, orderNo, batch: batch || undefined, printer: k === "machine" || k === "power" ? item || opts[0] : undefined }); setQty(0); }}>
       <select class={sm} value={k} onChange={(e) => { setK((e.target as HTMLSelectElement).value as ConKind); setItem(""); }}>{KINDS.map((x) => <option key={x}>{x}</option>)}</select>
       {opts.length ? <select class={`${sm} flex-1`} value={item || opts[0]} onChange={(e) => setItem((e.target as HTMLSelectElement).value)}>{opts.map((o) => <option key={o}>{o}</option>)}</select>
         : <input class={`${sm} flex-1`} placeholder="What" value={item} onInput={(e) => setItem((e.target as HTMLInputElement).value)} />}

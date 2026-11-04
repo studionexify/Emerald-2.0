@@ -2,10 +2,10 @@ import { useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Button, Card, Chip, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Pick, Button, Card, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
-  applyMove, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
+  applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
 import { ConsumeForm } from "./work/shared";
@@ -18,7 +18,7 @@ function Shell({ sub, actions, toolbar, detail, children }: { sub: string; actio
   return <Page title="Store" sub={sub} actions={actions} toolbar={toolbar} detail={detail ?? null} tabs={WORKSHOP_TABS}>{children}</Page>;
 }
 const ActiveChips = ({ v, on }: { v: string; on: (x: string) => void }) => (
-  <div class="flex flex-wrap items-center gap-1.5">{["active", "retired", "all"].map((x) => <Chip key={x} active={v === x} onClick={() => on(x)}>{x[0].toUpperCase() + x.slice(1)}</Chip>)}</div>
+  <div class="flex flex-wrap items-center gap-2"><Pick value={v} on={on} items={["active", "retired", "all"]} label={(x) => x[0].toUpperCase() + x.slice(1)} /></div>
 );
 const byActive = <T extends { active?: boolean }>(rows: T[], f: string) => rows.filter((r) => (f === "all" ? true : f === "retired" ? r.active === false : r.active !== false));
 const stockTone = (q: number, at: number) => (q <= 0 ? <Status tone="blocked">Out</Status> : q <= at ? <Status tone="waiting">Reorder</Status> : <Status tone="done">OK</Status>);
@@ -44,7 +44,7 @@ export function Printers() {
     blank: () => ({ id: uid(), name: "", model: "", status: "idle", hours: 0, nozzle: "0.4 mm", volume: "256×256×256", serviceEvery: 300, active: true }),
     facts: (p) => { const m = mlog(p); return [["Status", <Status tone={pTone(p.status)}>{p.status}</Status>], ["Current job", p.job ?? "—"], ["Utilisation", `${m.util}%`], ["Uptime", `${m.uptime}%`], ["Fail rate", `${m.fail}%`], ["Hours lost to blocks", `${m.lost} h`]]; },
     actions: (p, put) => <>
-      <select class="h-9 md:h-10 px-3 rounded-full border border-c4 bg-c0 text-sm font-semibold" value={p.status} aria-label="Set status" onChange={(e) => put({ status: (e.target as HTMLSelectElement).value as Printer["status"] }, `Status → ${(e.target as HTMLSelectElement).value}`)}>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
+      <select class="h-9 md:h-10 pl-4 pr-3 rounded-full border border-c4 bg-c0 text-[13px] md:text-sm font-semibold cursor-pointer" value={p.status} aria-label="Set status" onChange={(e) => put({ status: (e.target as HTMLSelectElement).value as Printer["status"] }, `Status → ${(e.target as HTMLSelectElement).value}`)}>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
       <Button variant="outline" onClick={() => put({ lastService: today() }, "Serviced")}>Log service</Button>
     </>,
     extra: (p) => {
@@ -105,16 +105,16 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
   const tare = s.tare ?? 0, net = Math.max(0, g - tare), diff = net - s.grams;
   return (
     <PaneSection title="Weigh-in">
-      <p class="text-xs text-c3">Put the spool on the scale and type the gross weight. Net = gross − tare ({tare} g).</p>
+      <p class="text-xs text-c3">Finished jobs already deducted their planned grams. Weigh to correct the record: net = gross − tare ({tare} g); the difference is logged as variance.</p>
       <div class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
         <Field label="Gross on scale (g)"><input class={inputCls} type="number" value={g || ""} onInput={(e) => setG(num(e))} /></Field>
         <Button icon="scale" class="!h-10 md:!h-11" disabled={!g} onClick={() => {
           put({ gross: g, grams: net, weighed: today(), status: net <= 0 ? "empty" : s.status }, `Weighed ${s.spoolNo}: ${g} g gross → ${net} g net`);
-          if (diff) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: diff > 0 ? "in" : "out", qty: Math.abs(diff), unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: "Weigh-in adjustment", by: who() }, ...movesSig.value];
+          if (diff) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: diff > 0 ? "in" : "out", qty: Math.abs(diff), unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: "Weigh-in variance", by: who() }, ...movesSig.value];
           setG(0);
         }}>Save</Button>
       </div>
-      {g > 0 && <Facts items={[["Net", `${net.toLocaleString("en-IN")} g`], ["Change vs record", `${diff > 0 ? "+" : ""}${diff} g`]]} />}
+      {g > 0 && <Facts items={[["Expected (record)", `${s.grams.toLocaleString("en-IN")} g`], ["Scale net", `${net.toLocaleString("en-IN")} g`], ["Variance vs slicer", `${diff > 0 ? "+" : ""}${diff} g`], ["Variance %", s.grams ? `${((diff / s.grams) * 100).toFixed(1)}%` : "—"]]} />}
     </PaneSection>
   );
 }
@@ -130,10 +130,11 @@ export function Filament() {
     facts: (s) => [
       ["Net remaining", <span class="text-lg font-extrabold num">{s.grams.toLocaleString("en-IN")} g</span>], ["Remaining", <span class="flex items-center gap-2"><span class="num">{spoolPct(s)}%</span><span class="flex-1"><Progress value={spoolPct(s)} /></span></span>],
       ["Gross · tare", `${(s.gross ?? s.grams + (s.tare ?? 0)).toLocaleString("en-IN")} g · ${s.tare ?? 0} g`], ["Value left", inr(spoolValue(s))],
+      ["Committed to queued jobs", `${committed(s).toLocaleString("en-IN")} g`], ["Expected after queue", <span class="num">{(s.grams - committed(s)).toLocaleString("en-IN")} g</span>],
       ["Cost per gram", `₹${((s.costKg ?? 0) / 1000).toFixed(2)}`], ["State", spTone(s)],
     ],
     actions: (s, put) => <>
-      <select class="h-9 md:h-10 px-3 rounded-full border border-c4 bg-c0 text-sm font-semibold" value={s.status === "loaded" ? s.printer ?? "" : ""} aria-label="Load on printer"
+      <select class="h-9 md:h-10 pl-4 pr-3 rounded-full border border-c4 bg-c0 text-[13px] md:text-sm font-semibold cursor-pointer" value={s.status === "loaded" ? s.printer ?? "" : ""} aria-label="Load on printer"
         onChange={(e) => { const p = (e.target as HTMLSelectElement).value; put(p ? { status: "loaded", printer: p, opened: s.opened || today() } : { status: s.grams > 0 ? "open" : "empty", printer: "" }, p ? `Loaded on ${p}` : "Unloaded"); }}>
         <option value="">Not loaded</option>{printersSig.value.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.name}>Load on {p.name}</option>)}
       </select>
@@ -157,10 +158,10 @@ export function Filament() {
   const tot = spoolsSig.value.filter((s) => s.active !== false);
   return (
     <Shell sub="Every spool — weight, colour, brand, cost, storage · tap a spool for weigh-in and history" actions={<><Button variant="outline" icon="in" onClick={() => navigate("/workshop/movements")}>Log movement</Button><Button icon="plus" onClick={() => r.add()}>Add spool</Button></>}
-      toolbar={<div class="flex flex-wrap items-center gap-1.5">
+      toolbar={<div class="flex flex-wrap items-center gap-2">
         <input class="h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs w-36" placeholder="Search colour, brand…" value={q} onInput={(e) => setQ(val(e))} aria-label="Search spools" />
-        <span class="w-px h-5 bg-c2 mx-1" />{["all", ...mats].map((m) => <Chip key={m} active={mat === m} onClick={() => setMat(m)}>{m === "all" ? "All materials" : m}</Chip>)}
-        <span class="w-px h-5 bg-c2 mx-1" />{["in stock", "sealed", "open", "loaded", "empty", "retired", "all"].map((x) => <Chip key={x} active={st === x} onClick={() => setSt(x)}>{x[0].toUpperCase() + x.slice(1)}</Chip>)}
+        <Pick title="Material" value={mat} on={setMat} items={["all", ...mats]} label={(m) => m === "all" ? "All materials" : m} />
+        <Pick title="Status" value={st} on={setSt} items={["in stock", "sealed", "open", "loaded", "empty", "retired", "all"]} label={(x) => x[0].toUpperCase() + x.slice(1)} />
       </div>} detail={r.detail}>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
         <Stat value={`${(tot.reduce((s, x) => s + x.grams, 0) / 1000).toFixed(2)} kg`} label="on shelf" />
@@ -181,6 +182,7 @@ export function Filament() {
                 { key: "n", label: "Spool no.", render: (s) => s.spoolNo },
                 { key: "g", label: "Net", align: "right", render: (s) => `${s.grams.toLocaleString("en-IN")} g` },
                 { key: "p", label: "Left", render: (s) => <span class="flex items-center gap-2 min-w-[90px]"><span class="flex-1"><Progress value={spoolPct(s)} /></span><span class="num text-xs w-10 text-right whitespace-nowrap">{spoolPct(s)}%</span></span> },
+                { key: "a", label: "After queue", align: "right", render: (s) => { const a = s.grams - committed(s); return committed(s) ? `${a.toLocaleString("en-IN")} g` : "—"; }, hideTablet: true },
                 { key: "l", label: "Where", render: (s) => (s.status === "loaded" ? s.printer : s.location) || "—", hideTablet: true },
                 { key: "v", label: "Value", align: "right", render: (s) => inr(spoolValue(s)), hideTablet: true },
                 { key: "s", label: "State", render: (s) => spTone(s) },
@@ -310,7 +312,7 @@ export function Movements() {
   ) : open && <Inspect title={`${open.dir === "in" ? "In" : "Out"} · ${open.item}`} row={{ date: open.date, category: open.cat, direction: open.dir, quantity: `${open.qty} ${open.unit}`, unitCost: `₹${open.unitCost}`, value: inr(open.qty * open.unitCost), vendor: open.vendor, colour: open.colour ?? "", brand: open.brand ?? "", notes: open.notes, loggedBy: open.by }} onClose={() => setOpen(null)} />;
   return (
     <Shell sub="Purchases and manual adjustments — every movement in and out" detail={detail}
-      toolbar={<div class="flex flex-wrap gap-1.5">{["all", ...CATS].map((c) => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c === "all" ? "All" : c[0].toUpperCase() + c.slice(1)}</Chip>)}</div>}
+      toolbar={<div class="flex flex-wrap gap-2"><Pick title="Category" value={cat} on={setCat} items={["all", ...CATS]} label={(c) => c === "all" ? "All" : c[0].toUpperCase() + c.slice(1)} /></div>}
       actions={<Button icon="plus" onClick={() => { setOpen(null); setForm(true); }}>Log movement</Button>}>
       <div class="grid grid-cols-3 gap-2">
         <Stat value={rows.filter((m) => m.dir === "in").length} label="in" />
@@ -342,7 +344,7 @@ export function ConsumptionLog() {
   const by = (kk: string) => consSig.value.filter((c) => c.kind === kk).reduce((s, c) => s + c.cost, 0);
   return (
     <Shell sub="Everything used — filament, machine hours, power, labour, packing, parts, freight, scrap"
-      toolbar={<div class="flex flex-wrap gap-1.5">{kinds.map((x) => <Chip key={x} active={k === x} onClick={() => setK(x)}>{x === "all" ? "All" : x[0].toUpperCase() + x.slice(1)}</Chip>)}</div>}
+      toolbar={<Pick title="Kind" value={k} on={setK} items={kinds} label={(x) => (x === "all" ? "All" : x[0].toUpperCase() + x.slice(1))} />}
       detail={open && <Inspect title={`${open.item}`} row={{ kind: open.kind, quantity: `${open.qty} ${open.unit}`, cost: inr(open.cost), order: open.orderNo ?? "Store use", batch: open.batch ?? "", printer: open.printer ?? "", when: open.at, who: open.who }} onClose={() => setOpen(null)} />}>
       <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
         <Stat value={inr(consSig.value.reduce((s, c) => s + c.cost, 0))} label="Total" />
