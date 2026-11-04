@@ -1,24 +1,63 @@
 import { useState } from "preact/hooks";
 import { Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
-import { teamNames, db, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X } from "../../data";
-import { ConsumeForm, WorkShell } from "./shared";
+import { teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order } from "../../data";
+import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
+import { ConsumeForm, OrderDetail, WorkShell } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 const sel = (opts: string[]) => <select class={inputCls}>{opts.map((o) => <option key={o}>{o}</option>)}</select>;
 
+const jFields: FDef<Job>[] = [
+  { k: "orderNo", label: "Order", type: "select", options: () => ordersSig.value.filter((o) => o.stage !== "archived").map((o) => o.no) },
+  { k: "item", label: "Item · run" },
+  { k: "printer", label: "Printer", type: "select", options: () => ["—", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
+  { k: "operator", label: "Operator", type: "select", options: () => ["—", ...teamNames()] },
+  { k: "status", label: "Status", type: "select", options: ["queued", "printing", "done", "failed"] },
+  { k: "hours", label: "Print time", type: "number", suffix: "h" }, { k: "grams", label: "Filament", type: "number", suffix: "g" },
+];
+const spoolOpts = () => spoolsSig.value.filter((s) => s.active !== false && s.grams > 0).map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`);
+function JobRun({ j, put }: { j: Job; put: (p: Partial<Job>, why?: string) => void }) {
+  const [sp, setSp] = useState(spoolOpts()[0] ?? "");
+  const [reason, setReason] = useState("");
+  const done = () => {
+    put({ status: "done" }, "Job done");
+    if (sp) consume({ kind: "filament", item: sp, qty: j.grams, orderNo: j.orderNo, printer: j.printer });
+    if (j.printer !== "—") { consume({ kind: "machine", item: j.printer, qty: j.hours, orderNo: j.orderNo, printer: j.printer }); consume({ kind: "power", item: "Electricity", qty: j.hours, orderNo: j.orderNo, printer: j.printer }); }
+  };
+  return (
+    <PaneSection title="Run">
+      <Field label="Spool used"><select class={inputCls} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)}>{spoolOpts().map((o) => <option key={o}>{o}</option>)}</select></Field>
+      <Actions>
+        {j.status === "queued" && <Button onClick={() => put({ status: "printing" }, "Job started")}>Start print</Button>}
+        {j.status !== "done" && <Button onClick={done}>Mark done · draw {j.grams} g</Button>}
+        {j.status !== "failed" && <Button variant="outline" onClick={() => { put({ status: "failed" }, `Job failed${reason ? ` — ${reason}` : ""}`); if (sp) consume({ kind: "scrap", item: sp, qty: Math.round(j.grams / 2), orderNo: j.orderNo, printer: j.printer }); }}>Mark failed</Button>}
+        {(j.status === "failed" || j.status === "done") && <Button variant="outline" onClick={() => { jobsSig.value = [{ ...j, id: uid(), status: "queued" }, ...jobsSig.value]; log("Re-queued job", `${j.orderNo} · ${j.item}`); }}>Reprint</Button>}
+      </Actions>
+      <Field label="Failure / block reason"><input class={inputCls} value={reason} onInput={(e) => setReason((e.target as HTMLInputElement).value)} placeholder="Nozzle clog, spaghetti, power cut…" /></Field>
+    </PaneSection>
+  );
+}
+
 export function Production() {
   const [f, setF] = useState("all");
-  const jobs = db.jobs.filter((j) => f === "all" || j.status === f);
+  const r = useRecord<Job>({
+    sig: jobsSig, kind: "Job", title: (j) => `${j.orderNo} · ${j.item}`, fields: jFields, logKind: "order",
+    blank: () => ({ id: uid(), orderNo: ordersSig.value.find((o) => o.stage === "production")?.no ?? ordersSig.value[0].no, item: "", printer: printersSig.value[0]?.name ?? "—", operator: me.value?.name ?? "—", status: "queued", hours: 1, grams: 100 }),
+    facts: (j) => { const o = ordersSig.value.find((x) => x.no === j.orderNo); return [["Status", <Status tone={jobTone(j.status)}>{j.status}</Status>], ["Customer", o?.customer ?? "—"], ["Printer · operator", `${j.printer} · ${j.operator}`], ["Estimate", `${j.grams} g · ${j.hours} h`]]; },
+    extra: (j, put) => <JobRun j={j} put={put} />,
+  });
+  const jobs = jobsSig.value.filter((j) => f === "all" || j.status === f);
   return (
-    <WorkShell title="Production" sub="Build sheet at approval · one job per line item" actions={<><Button variant="outline">Log block</Button><Button icon="plus">Quick print</Button></>}
+    <WorkShell title="Production" sub="Build sheet at approval · one job per line item · tap a job to run it" detail={r.detail}
+      actions={<><Button variant="outline" onClick={() => { const p = prompt("Which printer is blocked, and why? (e.g. A1-02 — nozzle clog)"); if (p) log("Logged block", p, "order"); }}>Log block</Button><Button icon="plus" onClick={() => r.add()}>New job</Button></>}
       toolbar={<div class="flex flex-wrap gap-1.5">{["all", "queued", "printing", "done", "failed"].map((s) => <Chip key={s} active={f === s} onClick={() => setF(s)}>{s === "all" ? "All jobs" : s}</Chip>)}</div>}>
       <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
-      <Section title="Machines" note={`${db.printers.length} printers`}>
+      <Section title="Machines" note={`${printersSig.value.filter((p) => p.active !== false).length} printers`}>
         <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-          {db.printers.map((p) => {
-            const m = X.machineLog.find((x) => x.printer === p.name)!;
+          {printersSig.value.filter((p) => p.active !== false).map((p) => {
+            const m = X.machineLog.find((x) => x.printer === p.name) ?? { util: 0, uptime: 100, lost: 0, fail: 0 };
             return (
-              <Card key={p.id} dark={p.status === "printing"}>
+              <a key={p.id} href="#workshop" class="block"><Card dark={p.status === "printing"}>
                 <div class="flex justify-between items-start gap-2">
                   <div class="min-w-0"><div class="font-semibold">{p.name}</div><div class="text-xs opacity-80">{p.model}</div></div>
                   <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
@@ -30,15 +69,15 @@ export function Production() {
                   <div><div class="num text-base font-semibold">{m.fail}%</div>fail</div>
                 </div>
                 <div class="text-xs opacity-80 mt-2">{p.job ? `Printing: ${p.job}` : `${p.hours} lifetime hours`}</div>
-              </Card>
+              </Card></a>
             );
           })}
         </div>
       </Section>
       <Section title="Job queue" note={`${jobs.length} jobs`}>
         <Card>
-          <Table rows={jobs} rowKey={(j) => j.id} cols={[
-            { key: "o", label: "Order", render: (j) => <b>{j.orderNo}</b> },
+          <Table rows={jobs} rowKey={(j) => j.id} onRow={r.open} cols={[
+            { key: "o", label: "Order", render: (j) => j.orderNo },
             { key: "i", label: "Item · run", render: (j) => j.item },
             { key: "p", label: "Printer", render: (j) => j.printer },
             { key: "op", label: "Operator", render: (j) => j.operator },
@@ -48,15 +87,15 @@ export function Production() {
           ]} />
         </Card>
       </Section>
-      <Section title="Build sheet" note="filled at approval">
+      <Section title="Build sheet" note="filled at approval" action={<Button variant="outline" onClick={() => log("Saved build sheet", ordersSig.value.find((o) => o.stage === "production")?.no ?? "—")}>Save build sheet</Button>}>
         <Card class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Field label="Raw material">{sel(["PLA", "PETG", "TPU", "ABS", "Resin"])}</Field>
           <Field label="Colour">{sel(["Black", "White", "Grey", "Gold"])}</Field>
           <Field label="Accessories">{sel(["None", "Magnets", "NFC tag", "Brass inserts"])}</Field>
-          <Field label="Machine">{sel(db.printers.map((p) => p.name))}</Field>
+          <Field label="Machine">{sel(printersSig.value.filter((p) => p.active !== false).map((p) => p.name))}</Field>
           <Field label="Operator">{sel(teamNames())}</Field>
-          <Field label="Layer / infill"><input class={inputCls} value="0.2 mm · 15%" /></Field>
-          <Field label="Estimate (g · h)"><input class={inputCls} value="410 g · 4 h" /></Field>
+          <Field label="Layer / infill"><input class={inputCls} defaultValue="0.2 mm · 15%" /></Field>
+          <Field label="Estimate (g · h)"><input class={inputCls} defaultValue="410 g · 4 h" /></Field>
           <Field label="Finishing notes"><input class={inputCls} placeholder="Sand seams, prime" /></Field>
         </Card>
       </Section>
@@ -64,43 +103,66 @@ export function Production() {
   );
 }
 
+const DEFECTS = ["—", "Stringing", "Layer shift", "Warping", "Under-extrusion", "Over-extrusion", "Dimensions", "Surface finish", "Colour mismatch", "Broken in removal"];
+const CAUSES = ["—", "Material", "Slicer profile", "Machine", "Post-processing", "Design", "Handling"];
+const qFields: FDef<QcEntry>[] = [
+  { k: "orderNo", label: "Order" }, { k: "item", label: "Item" }, { k: "result", label: "Result", type: "select", options: ["pass", "rework", "scrap"] },
+  { k: "grams", label: "Wasted", type: "number", suffix: "g" }, { k: "defect", label: "Defect", type: "select", options: DEFECTS },
+  { k: "by", label: "Checked by", type: "select", options: () => teamNames() }, { k: "date", label: "Date", type: "date" },
+];
 export function QC() {
-  const [res, setRes] = useState("pass");
-  const done = db.jobs.filter((j) => j.status === "done");
+  const done = jobsSig.value.filter((j) => j.status === "done" && !qcSig.value.some((q) => q.orderNo === j.orderNo && q.item === j.item));
+  const [pick, setPick] = useState(0);
+  const cur = done[Math.min(pick, done.length - 1)];
+  const [d, setD] = useState({ res: "pass" as QcEntry["result"], units: 0, grams: 0, defect: "—", cause: "—", lesson: "", by: teamNames()[0] ?? "You" });
+  const r = useRecord<QcEntry>({ sig: qcSig, kind: "QC entry", title: (q) => `${q.orderNo} · ${q.item}`, fields: qFields, logKind: "order",
+    blank: () => ({ id: uid(), orderNo: "", item: "", result: "pass", grams: 0, by: me.value?.name ?? "You", date: today() }),
+    facts: (q) => [["Result", <Status tone={q.result === "pass" ? "done" : q.result === "scrap" ? "blocked" : "waiting"}>{q.result}</Status>], ["Wasted", `${q.grams} g`]] });
+  const save = () => {
+    if (!cur) return;
+    const e: QcEntry = { id: uid(), orderNo: cur.orderNo, item: cur.item, result: d.res, grams: d.grams, defect: d.defect === "—" ? undefined : `${d.defect}${d.cause !== "—" ? ` · ${d.cause}` : ""}`, by: d.by, date: today() };
+    qcSig.value = [e, ...qcSig.value];
+    if (d.grams) consume({ kind: "scrap", item: `${d.defect} · ${cur.item}`, qty: d.grams, orderNo: cur.orderNo });
+    log(`QC ${d.res}${d.lesson ? ` — ${d.lesson}` : ""}`, `${cur.orderNo} · ${cur.item}`);
+    setD({ ...d, res: "pass", units: 0, grams: 0, defect: "—", cause: "—", lesson: "" });
+  };
+  const qc = qcSig.value;
   return (
-    <WorkShell title="QC & Logging" sub="A work queue, not a form — pass, rework or scrap, reason kept">
+    <WorkShell title="QC & Logging" sub="A work queue, not a form — pass, rework or scrap, reason kept" detail={r.detail}>
       <div class="grid grid-cols-4 gap-2">
-        <Stat value={db.qc.filter((q) => q.result === "pass").length} label="passed" />
-        <Stat value={db.qc.filter((q) => q.result === "rework").length} label="rework" />
-        <Stat value={db.qc.filter((q) => q.result === "scrap").length} label="scrap" />
-        <Stat value={`${db.qc.reduce((s, q) => s + q.grams, 0)}g`} label="wasted" />
+        <Stat value={qc.filter((q) => q.result === "pass").length} label="passed" />
+        <Stat value={qc.filter((q) => q.result === "rework").length} label="rework" />
+        <Stat value={qc.filter((q) => q.result === "scrap").length} label="scrap" />
+        <Stat value={`${qc.reduce((s, q) => s + q.grams, 0)}g`} label="wasted" />
       </div>
-      <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <Section title="Waiting for QC" note={String(done.length)}>
           <Card>
-            <CardTitle>{done[0] ? `${done[0].orderNo} · ${done[0].item} (${done[0].printer})` : "Nothing waiting"}</CardTitle>
-            <div class="flex gap-1.5 mb-3">{["pass", "rework", "scrap"].map((r) => <Chip key={r} active={res === r} onClick={() => setRes(r)}>{r[0].toUpperCase() + r.slice(1)}</Chip>)}</div>
-            <div class="grid grid-cols-2 gap-3">
-              <Field label="Units reworked"><input class={inputCls} type="number" value="0" /></Field>
-              <Field label="Wasted (g)"><input class={inputCls} type="number" value="0" /></Field>
-              <Field label="Defect">{sel(["—", "Stringing", "Layer shift", "Warping", "Under-extrusion", "Dimensions"])}</Field>
-              <Field label="Root cause">{sel(["—", "Material", "Slicer profile", "Machine", "Post-processing", "Design"])}</Field>
-              <div class="col-span-2"><Field label="What should we do differently next time?"><input class={inputCls} /></Field></div>
-              <Field label="Checked by">{sel(teamNames())}</Field>
-              <Field label="Photo"><input class={inputCls} type="file" accept="image/*" /></Field>
-            </div>
-            <Button class="mt-3">Log check</Button>
+            {cur ? <>
+              <Field label="Job"><select class={inputCls} value={pick} onChange={(e) => setPick(Number((e.target as HTMLSelectElement).value))}>{done.map((j, i) => <option key={j.id} value={i}>{j.orderNo} · {j.item} ({j.printer})</option>)}</select></Field>
+              <div class="flex gap-1.5 my-3">{(["pass", "rework", "scrap"] as const).map((x) => <Chip key={x} active={d.res === x} onClick={() => setD({ ...d, res: x })}>{x[0].toUpperCase() + x.slice(1)}</Chip>)}</div>
+              <div class="grid grid-cols-2 gap-3">
+                <Field label="Units reworked"><input class={inputCls} type="number" value={d.units} onInput={(e) => setD({ ...d, units: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
+                <Field label="Wasted (g)"><input class={inputCls} type="number" value={d.grams} onInput={(e) => setD({ ...d, grams: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
+                <Field label="Defect"><select class={inputCls} value={d.defect} onChange={(e) => setD({ ...d, defect: (e.target as HTMLSelectElement).value })}>{DEFECTS.map((o) => <option key={o}>{o}</option>)}</select></Field>
+                <Field label="Root cause"><select class={inputCls} value={d.cause} onChange={(e) => setD({ ...d, cause: (e.target as HTMLSelectElement).value })}>{CAUSES.map((o) => <option key={o}>{o}</option>)}</select></Field>
+                <div class="col-span-2"><Field label="What should we do differently next time?"><input class={inputCls} value={d.lesson} onInput={(e) => setD({ ...d, lesson: (e.target as HTMLInputElement).value })} /></Field></div>
+                <Field label="Checked by"><select class={inputCls} value={d.by} onChange={(e) => setD({ ...d, by: (e.target as HTMLSelectElement).value })}>{teamNames().map((o) => <option key={o}>{o}</option>)}</select></Field>
+                <Field label="Photo"><input class={`${inputCls} py-2`} type="file" accept="image/*" /></Field>
+              </div>
+              <div class="mt-3"><Actions><Button icon="check" onClick={save}>Log check</Button></Actions></div>
+            </> : <p class="text-sm text-c3 py-4 text-center">Nothing waiting — finished jobs appear here.</p>}
           </Card>
+          <Card><div class="text-sm font-bold mb-2">Log consumption</div><ConsumeForm /></Card>
         </Section>
         <Section title="Log" note="newest first">
           <Card>
-            <Table rows={db.qc} rowKey={(q) => q.id} cols={[
-              { key: "o", label: "Order", render: (q) => <b>{q.orderNo}</b> },
+            <Table rows={qc} rowKey={(q) => q.id} onRow={r.open} cols={[
+              { key: "o", label: "Order", render: (q) => q.orderNo },
               { key: "d", label: "Date", render: (q) => shortDate(q.date) },
               { key: "i", label: "Item", render: (q) => q.item },
               { key: "r", label: "Result", render: (q) => <Status tone={q.result === "pass" ? "done" : q.result === "scrap" ? "blocked" : "waiting"}>{q.result}</Status> },
-              { key: "x", label: "Defect", render: (q) => q.defect ?? "—" },
+              { key: "x", label: "Defect", render: (q) => q.defect ?? "—", hideTablet: true },
               { key: "b", label: "By", render: (q) => q.by },
               { key: "g", label: "Lost g", align: "right", render: (q) => q.grams },
             ]} />
@@ -111,43 +173,69 @@ export function QC() {
   );
 }
 
+const pkFields: FDef<PackRecord>[] = [
+  { k: "order", label: "Order" }, { k: "date", label: "Date", type: "date" }, { k: "box", label: "Box size" }, { k: "weight", label: "Gross weight" },
+  { k: "materials", label: "Materials", wide: true }, { k: "cost", label: "Cost", type: "number", suffix: "₹" },
+  { k: "by", label: "Packed by", type: "select", options: () => teamNames() }, { k: "notes", label: "Special handling", type: "textarea" },
+];
+function PackCard({ o }: { o: Order }) {
+  const [d, setD] = useState({ box: "", weight: "", notes: "", by: teamNames()[0] ?? "You", lines: [{ item: packSig.value[0]?.name ?? "", qty: 1 }] });
+  const inp = (k: "box" | "weight" | "notes") => (e: Event) => setD({ ...d, [k]: (e.target as HTMLInputElement).value });
+  const save = () => {
+    const ls = d.lines.filter((l) => l.qty > 0 && l.item);
+    const cost = ls.reduce((s, l) => s + (packSig.value.find((p) => p.name === l.item)?.cost ?? 0) * l.qty, 0);
+    ls.forEach((l) => consume({ kind: "packing", item: l.item, qty: l.qty, orderNo: o.no }));
+    packRecSig.value = [{ id: uid(), order: o.no, box: d.box, weight: d.weight, materials: ls.map((l) => `${l.item} ×${l.qty}`).join(", "), cost, by: d.by, notes: d.notes, date: today() }, ...packRecSig.value];
+    log("Recorded packing", o.no);
+    setD({ ...d, box: "", weight: "", notes: "", lines: [{ item: packSig.value[0]?.name ?? "", qty: 1 }] });
+  };
+  return (
+    <Card>
+      <CardTitle action={<span class="text-xs text-c3">{TYPE_LABEL[o.type]} · {orderUnits(o)} units</span>}>{o.no} · {o.customer}</CardTitle>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Field label="Box size"><input class={inputCls} placeholder="30×20×15" value={d.box} onInput={inp("box")} /></Field>
+        <Field label="Gross weight"><input class={inputCls} placeholder="kg" value={d.weight} onInput={inp("weight")} /></Field>
+        <Field label="Packed by"><select class={inputCls} value={d.by} onChange={(e) => setD({ ...d, by: (e.target as HTMLSelectElement).value })}>{teamNames().map((n) => <option key={n}>{n}</option>)}</select></Field>
+        {d.lines.map((l, i) => (
+          <div key={i} class="col-span-2 sm:col-span-3 grid grid-cols-[minmax(0,1fr)_88px] gap-3">
+            <Field label={`Material ${i + 1}`}><select class={inputCls} value={l.item} onChange={(e) => setD({ ...d, lines: d.lines.map((x, k) => (k === i ? { ...x, item: (e.target as HTMLSelectElement).value } : x)) })}>{packSig.value.filter((p) => p.active !== false).map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
+            <Field label="Qty"><input class={inputCls} type="number" value={l.qty} onInput={(e) => setD({ ...d, lines: d.lines.map((x, k) => (k === i ? { ...x, qty: Number((e.target as HTMLInputElement).value) || 0 } : x)) })} /></Field>
+          </div>
+        ))}
+        <div class="col-span-2 sm:col-span-3"><Field label="Special handling"><input class={inputCls} placeholder="Fragile, keep flat" value={d.notes} onInput={inp("notes")} /></Field></div>
+      </div>
+      <div class="mt-3"><Actions><Button icon="check" onClick={save}>Record packing</Button><Button variant="outline" icon="plus" onClick={() => setD({ ...d, lines: [...d.lines, { item: packSig.value[0]?.name ?? "", qty: 1 }] })}>Material line</Button></Actions></div>
+    </Card>
+  );
+}
+
 export function Packing() {
   const list = ordersSig.value.filter((o) => o.stage === "packing");
+  const r = useRecord<PackRecord>({ sig: packRecSig, kind: "Packing record", title: (p) => `${p.order} · ${p.box || "packing"}`, fields: pkFields, logKind: "order",
+    blank: () => ({ id: uid(), order: "", box: "", weight: "", materials: "", cost: 0, by: me.value?.name ?? "You", notes: "", date: today() }) });
   return (
-    <WorkShell title="Packing" sub="Materials used and their cost, weight, box size, handling notes">
-      <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
+    <WorkShell title="Packing" sub="Materials used and their cost, weight, box size, handling notes" detail={r.detail}>
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Section title="To pack" note={String(list.length)}>
-          {list.map((o) => (
-            <Card key={o.id}>
-              <CardTitle action={<span class="text-xs text-c3">{TYPE_LABEL[o.type]} · {orderUnits(o)} units</span>}>{o.no} · {o.customer}</CardTitle>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Field label="Box size"><input class={inputCls} placeholder="30×20×15" /></Field>
-                <Field label="Gross weight"><input class={inputCls} placeholder="kg" /></Field>
-                <Field label="Material">{sel(db.packStock.map((p) => p.name))}</Field>
-                <Field label="Qty used"><input class={inputCls} type="number" /></Field>
-                <div class="col-span-2 sm:col-span-3"><Field label="Special handling"><input class={inputCls} placeholder="Fragile, keep flat" /></Field></div>
-                <Field label="Packed by">{sel(teamNames())}</Field>
-              </div>
-              <div class="flex gap-2 mt-3"><Button>Record packing</Button><Button variant="outline" icon="plus">Material line</Button></div>
-            </Card>
-          ))}
+          {list.map((o) => <PackCard key={o.id} o={o} />)}
+          {!list.length && <Card><p class="text-sm text-c3 text-center py-4">Nothing at Packing.</p></Card>}
+          <Card><div class="text-sm font-bold mb-2">Log consumption</div><ConsumeForm /></Card>
         </Section>
-        <Section title="Recorded" note={String(X.packRecords.length)}>
+        <Section title="Recorded" note={String(packRecSig.value.length)}>
           <Card>
-            <Table rows={X.packRecords} rowKey={(r) => r.id} cols={[
-              { key: "o", label: "Order", render: (r) => <b>{r.order}</b> },
-              { key: "b", label: "Box", render: (r) => r.box },
-              { key: "w", label: "Weight", render: (r) => r.weight },
-              { key: "m", label: "Materials", render: (r) => r.materials },
+            <Table rows={packRecSig.value} rowKey={(r) => r.id} onRow={r.open} cols={[
+              { key: "o", label: "Order", render: (r) => r.order },
+              { key: "b", label: "Box", render: (r) => r.box || "—" },
+              { key: "w", label: "Weight", render: (r) => r.weight || "—" },
+              { key: "m", label: "Materials", render: (r) => r.materials, hideTablet: true },
               { key: "c", label: "Cost", align: "right", render: (r) => inr(r.cost) },
             ]} />
           </Card>
           <Card>
-            <CardTitle action={<a href="/workshop/packing" class="text-xs text-c3">Stock →</a>}>Packing stock</CardTitle>
+            <CardTitle action={<a href="#workshop-packing" class="text-xs font-semibold underline">Stock</a>}>Packing stock</CardTitle>
             <ul class="flex flex-col gap-2 text-sm">
-              {db.packStock.map((p) => (
-                <li key={p.id}><div class="flex justify-between mb-1"><span>{p.name}</span><span class="num">{p.qty} {p.unit}</span></div><Progress value={(p.qty / (p.reorderAt * 3)) * 100} /></li>
+              {packSig.value.filter((p) => p.active !== false).map((p) => (
+                <li key={p.id}><div class="flex justify-between mb-1"><span>{p.name}</span><span class="num font-semibold">{p.qty} {p.unit}</span></div><Progress value={(p.qty / Math.max(1, p.reorderAt * 3)) * 100} /></li>
               ))}
             </ul>
           </Card>
@@ -159,11 +247,13 @@ export function Packing() {
 
 export function Archive() {
   const list = ordersSig.value.filter((o) => o.stage === "archived");
+  const [open, setOpen] = useState<Order | null>(null);
+  const cur = open && (ordersSig.value.find((o) => o.id === open.id) ?? open);
   return (
-    <WorkShell title="Archive" sub="Final cost rollup · records read-only · revenue never double-counted">
+    <WorkShell title="Archive" sub="Final cost rollup · tap an order to see its cost lines or reopen it" detail={cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}>
       <Card>
-        <Table rows={list} rowKey={(o) => o.id} cols={[
-          { key: "o", label: "Order", render: (o) => <b>{o.no} · {o.customer}</b> },
+        <Table rows={list} rowKey={(o) => o.id} onRow={setOpen} cols={[
+          { key: "o", label: "Order", render: (o) => `${o.no} · ${o.customer}` },
           { key: "t", label: "Type", render: (o) => TYPE_LABEL[o.type] },
           { key: "r", label: "Revenue", align: "right", render: (o) => (o.type === "inhouse" ? "—" : inr(orderTotal(o))) },
           { key: "m1", label: "Material", align: "right", render: (o) => inr(orderCost(o) * 0.45), hideTablet: true },

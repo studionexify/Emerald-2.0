@@ -11,8 +11,8 @@ export const ordersSig = P<Order[]>("orders", M.orders);
 export const batchesSig = P<Batch[]>("batches", M.batches);
 export const logsSig = P<Log[]>("logs", M.logs);
 export const consSig = P<Consumption[]>("consumption", M.consumption);
-export const spoolsSig = P("spools", M.spools);
-export const packSig = P("packStock", M.packStock);
+import { spoolsSig, packSig } from "./inventory";
+export * from "./inventory";
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
 

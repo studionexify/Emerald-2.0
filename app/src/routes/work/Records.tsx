@@ -5,6 +5,8 @@ import {
   rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, X, log, patchOrder, nowS, consume,
   type InvLine, type Invoice, type Order, type Quote, type Shipment,
 } from "../../data";
+import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
+import { clientsSig, type Client } from "../../data";
 import { DocSheet, fromInvoice, fromQuote, type DocData } from "./Doc";
 import { WorkShell } from "./shared";
 
@@ -196,6 +198,7 @@ export function Documents() {
 
 /* ======================================================= Shipping · partial dispatch */
 export function Shipping() {
+  const [sel, setSel] = useState<Shipment | null>(null);
   const ships = ordersSig.value.filter((o) => o.stage === "shipping" || o.stage === "invoice" || o.stage === "packing");
   const [orderNo, setOrderNo] = useState(ships[0]?.no ?? "");
   const o = ordersSig.value.find((x) => x.no === orderNo);
@@ -213,7 +216,10 @@ export function Shipping() {
     setD({ ...d, tracking: "", qty: {}, photo: "" });
   };
   return (
-    <WorkShell title="Shipping" sub="Courier, tracking, freight paid vs recovered · many dispatches per order, part quantities allowed">
+    <WorkShell title="Shipping" sub="Courier, tracking, freight paid vs recovered · many dispatches per order, part quantities allowed"
+      detail={sel && <Inspect title={`${sel.orderNo} · ${sel.courier}`} row={{ order: sel.orderNo, sent: shortDate(sel.date), eta: shortDate(sel.eta), courier: sel.courier, service: sel.service, tracking: sel.tracking || "Missing", contents: sel.lines.map((l) => `${l.qty}× ${l.name}`).join(", "), freightPaid: inr(sel.freightPaid), recovered: inr(sel.freightRecovered), net: inr(sel.freightPaid - sel.freightRecovered) }} onClose={() => setSel(null)}>
+        <div class="flex flex-wrap items-end gap-2"><input class={`${inputCls} flex-1 min-w-0`} placeholder="Tracking no." defaultValue={sel.tracking} id="trk" /><Button onClick={() => { const v = (document.getElementById("trk") as HTMLInputElement).value; shipmentsSig.value = shipmentsSig.value.map((x) => (x.id === sel.id ? { ...x, tracking: v } : x)); setSel({ ...sel, tracking: v }); log("Updated tracking", sel.orderNo); }}>Save tracking</Button></div>
+        {sel.photo && <img src={sel.photo} alt="Handover" class="mt-3 rounded-xl max-h-48" />}</Inspect>}>
       <div class="grid grid-cols-3 gap-2">
         <Stat value={shipmentsSig.value.length} label="dispatches" />
         <Stat value={inr(shipmentsSig.value.reduce((s, x) => s + x.freightPaid, 0))} label="freight paid" />
@@ -240,7 +246,7 @@ export function Shipping() {
       </Section>
       <Section title="Dispatches" note={String(shipmentsSig.value.length)}>
         <Card>
-          <Table rows={shipmentsSig.value} rowKey={(s) => s.id} cols={[
+          <Table rows={shipmentsSig.value} rowKey={(s) => s.id} onRow={setSel} cols={[
             { key: "o", label: "Order", render: (s) => <b>{s.orderNo}</b> },
             { key: "l", label: "Contents", render: (s) => s.lines.map((l) => `${l.qty}× ${l.name}`).join(", ") },
             { key: "c", label: "Courier", render: (s) => `${s.courier} · ${s.service}` },
@@ -254,26 +260,38 @@ export function Shipping() {
   );
 }
 
-/* ======================================================= Clients (derived from orders + client records) */
+/* ======================================================= Clients (records + figures derived from orders) */
+const cFields: FDef<Client>[] = [
+  { k: "name", label: "Name", wide: true }, { k: "kind", label: "Kind", type: "select", options: ["Individual", "Business", "Reseller"] },
+  { k: "medium", label: "Came via", type: "select", options: ["Instagram", "WhatsApp", "Website", "Referral", "Phone", "Email", "Walk-in", "Shopify"] },
+  { k: "phone", label: "Phone" }, { k: "email", label: "Email" }, { k: "city", label: "City" }, { k: "gstin", label: "GSTIN" },
+  { k: "address", label: "Billing address", type: "textarea" }, { k: "notes", label: "Notes", type: "textarea" },
+];
 export function Clients() {
-  const names = [...new Set([...X.clients.map((c) => c.name), ...ordersSig.value.filter((o) => o.type !== "inhouse").map((o) => o.customer)])];
-  const rows = names.map((n) => { const c = X.clients.find((x) => x.name === n); const os = ordersSig.value.filter((o) => o.customer === n);
-    const inv = invoicesSig.value.filter((i) => i.customer === n && i.status === "issued");
-    return { id: n, name: n, kind: c?.kind ?? "Individual", phone: c?.phone ?? "—", city: c?.city ?? "—", gstin: c?.gstin ?? "", medium: c?.medium ?? os[0]?.medium ?? "—", orders: os.length,
-      value: os.reduce((s, o) => s + o.items.reduce((a, i) => a + i.qty * i.price, 0), 0), owed: inv.filter((i) => !i.paidOn && i.kind === "invoice").reduce((s, i) => s + invTax(i).total, 0) }; });
+  const [q, setQ] = useState("");
+  const known = new Set(clientsSig.value.map((c) => c.name));
+  const extra: Client[] = [...new Set(ordersSig.value.filter((o) => o.type !== "inhouse" && !known.has(o.customer)).map((o) => o.customer))].map((n) => ({ id: `o:${n}`, name: n, kind: "Individual", phone: "", city: "", gstin: "", medium: ordersSig.value.find((o) => o.customer === n)?.medium ?? "", active: true }));
+  const stats = (n: string) => { const os = ordersSig.value.filter((o) => o.customer === n); const inv = invoicesSig.value.filter((i) => i.customer === n && i.status === "issued");
+    return { os, orders: os.length, value: os.reduce((s, o) => s + o.items.reduce((a, i) => a + i.qty * i.price, 0), 0), owed: inv.filter((i) => !i.paidOn && i.kind === "invoice").reduce((s, i) => s + invTax(i).total, 0), inv }; };
+  const r = useRecord<Client>({ sig: clientsSig, kind: "Client", title: (c) => c.name, fields: cFields, logKind: "order",
+    blank: () => ({ id: uid(), name: "", kind: "Individual", phone: "", email: "", city: "", gstin: "", medium: "Instagram", address: "", notes: "", active: true }),
+    facts: (c) => { const x = stats(c.name); return [["Orders", x.orders], ["Lifetime value", inr(x.value)], ["Owes", x.owed ? inr(x.owed) : "Nothing"], ["Invoices", x.inv.length]]; },
+    extra: (c) => { const x = stats(c.name); return <PaneSection title="Orders">{x.os.length ? x.os.map((o) => <div key={o.id} class="flex justify-between gap-2 text-sm py-1 border-t border-c1 first:border-0"><span class="min-w-0"><b>{o.no}</b> · {o.items.map((i) => i.name).join(", ")}</span><span class="text-c3 whitespace-nowrap">{o.stage}</span></div>) : <p class="text-sm text-c3">No orders yet.</p>}</PaneSection>; } });
+  const rows = [...clientsSig.value.filter((c) => c.active !== false), ...extra].filter((c) => !q || `${c.name} ${c.city} ${c.phone} ${c.gstin}`.toLowerCase().includes(q.toLowerCase()));
   return (
-    <WorkShell title="Clients" sub="Every customer — orders, value and what they owe, derived from records">
+    <WorkShell title="Clients" sub="Every customer — contact, GSTIN, orders, value and what they owe" detail={r.detail} actions={<Button icon="plus" onClick={() => r.add()}>Add client</Button>}
+      toolbar={<input class="h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs w-full sm:w-56" placeholder="Search name, city, phone, GSTIN" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} aria-label="Search clients" />}>
       <Card>
-        <Table rows={rows} rowKey={(c) => c.id} cols={[
-          { key: "n", label: "Client", render: (c) => <b>{c.name}</b> },
+        <Table rows={rows} rowKey={(c) => c.id} onRow={(c) => { if (c.id.startsWith("o:")) { const n = { ...c, id: uid() }; clientsSig.value = [n, ...clientsSig.value]; r.open(n); } else r.open(c); }} cols={[
+          { key: "n", label: "Client", render: (c) => c.name },
           { key: "k", label: "Kind", render: (c) => c.kind },
-          { key: "p", label: "Phone", render: (c) => c.phone },
-          { key: "c", label: "City", render: (c) => c.city, hideTablet: true },
+          { key: "p", label: "Phone", render: (c) => c.phone || "—" },
+          { key: "c", label: "City", render: (c) => c.city || "—", hideTablet: true },
           { key: "g", label: "GSTIN", render: (c) => c.gstin || "—", hideTablet: true },
-          { key: "m", label: "Came via", render: (c) => c.medium },
-          { key: "o", label: "Orders", align: "right", render: (c) => c.orders },
-          { key: "v", label: "Lifetime", align: "right", render: (c) => inr(c.value) },
-          { key: "w", label: "Owes", align: "right", render: (c) => (c.owed ? inr(c.owed) : "—") },
+          { key: "m", label: "Came via", render: (c) => c.medium || "—" },
+          { key: "o", label: "Orders", align: "right", render: (c) => stats(c.name).orders },
+          { key: "v", label: "Lifetime", align: "right", render: (c) => inr(stats(c.name).value) },
+          { key: "w", label: "Owes", align: "right", render: (c) => { const o = stats(c.name).owed; return o ? inr(o) : "—"; } },
         ]} />
       </Card>
     </WorkShell>

@@ -1,21 +1,21 @@
 import { Bars } from "../charts";
 import { Card, CardTitle, Page, Section, Stat, Status } from "../ui";
-import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, db, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, STAGES } from "../data";
+import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, STAGES , printersSig, jobsSig, tasksSig } from "../data";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 
 export default function Dashboard() {
-  const open = db.orders.filter((o) => o.stage !== "archived");
-  const blocked = db.orders.filter((o) => o.blocked);
-  const low = db.packStock.filter((p) => p.qty <= p.reorderAt);
-  const out = db.spools.filter((s) => s.grams === 0);
+  const open = ordersSig.value.filter((o) => o.stage !== "archived");
+  const blocked = ordersSig.value.filter((o) => o.blocked);
+  const low = packSig.value.filter((p) => p.qty <= p.reorderAt);
+  const out = spoolsSig.value.filter((s) => s.grams === 0);
   const paid = open.filter((o) => o.type !== "inhouse");
   const pipeline = paid.reduce((s, o) => s + orderTotal(o), 0);
   const margin = Math.round((1 - paid.reduce((s, o) => s + orderCost(o), 0) / pipeline) * 100);
   const al = attn(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value);
   const fm = financeSummary(windowFor("mtd", "2026-27"), ordersSig.value);
   const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: moneySig.value.filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
-  const todo = db.tasks.filter((t) => !t.done);
+  const todo = tasksSig.value.filter((t) => !t.done);
   const dueSoon = [...open].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
   const attention = [
     ...blocked.map((o) => ({ id: o.id, href: "/work/orders", icon: "bell", dark: true, t: `${o.no} · ${o.customer}`, d: o.blocked! })),
@@ -104,10 +104,10 @@ export default function Dashboard() {
         </div>
       </Section>
 
-      <Section title="Floor" note={`${db.printers.filter((p) => p.status === "printing").length} of ${db.printers.length} printers busy`} action={<a href="/work/production" class="text-sm text-c3 whitespace-nowrap">Production →</a>}>
+      <Section title="Floor" note={`${printersSig.value.filter((p) => p.active !== false).filter((p) => p.status === "printing").length} of ${printersSig.value.filter((p) => p.active !== false).length} printers busy`} action={<a href="/work/production" class="text-sm text-c3 whitespace-nowrap">Production →</a>}>
         <div class="grid gap-3 xl:grid-cols-[1fr_1.4fr]">
           <div class="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 content-start">
-            {db.printers.map((p) => (
+            {printersSig.value.filter((p) => p.active !== false).map((p) => (
               <div key={p.id} class={`rounded-2xl p-3 flex justify-between items-center gap-2 ${p.status === "printing" ? "bg-c4 text-c0" : "bg-c0"}`}>
                 <span class="min-w-0"><span class="font-semibold block">{p.name}</span><span class="text-xs opacity-80">{p.job ? `Printing ${p.job}` : p.model}</span></span>
                 <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
@@ -117,7 +117,7 @@ export default function Dashboard() {
           <Card>
             <CardTitle>Job queue</CardTitle>
             <ul class="grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
-              {db.jobs.map((j) => (
+              {jobsSig.value.map((j) => (
                 <li key={j.id} class="flex justify-between gap-2">
                   <span class="min-w-0"><span class="font-medium block">{j.item}</span><span class="text-c3">{j.orderNo} · {j.printer} · {j.hours}h</span></span>
                   <Status tone={jobTone(j.status)}>{j.status}</Status>

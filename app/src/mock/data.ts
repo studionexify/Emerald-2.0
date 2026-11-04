@@ -38,23 +38,25 @@ export const qc: QcEntry[] = [
 ];
 
 export const printers: Printer[] = [
-  { id: "p1", name: "P1S-01", model: "Bambu P1S Combo", status: "printing", hours: 1240, job: "Desk organiser" },
-  { id: "p2", name: "A1-01", model: "Bambu A1 Combo", status: "idle", hours: 860 },
-  { id: "p3", name: "A1-02", model: "Bambu A1 Combo", status: "down", hours: 410 },
+  { id: "p1", name: "P1S-01", model: "Bambu P1S Combo", status: "printing", hours: 1240, job: "Desk organiser", nozzle: "0.4 mm hardened", volume: "256×256×256", bought: "2025-06-10", cost: 72000, serial: "01P00A3B", location: "Bay 1", lastService: "2026-10-15", serviceEvery: 300, notes: "", active: true },
+  { id: "p2", name: "A1-01", model: "Bambu A1 Combo", status: "idle", hours: 860, nozzle: "0.4 mm stainless", volume: "256×256×256", bought: "2025-11-02", cost: 43000, serial: "03A00C77", location: "Bay 2", lastService: "2026-09-20", serviceEvery: 300, notes: "", active: true },
+  { id: "p3", name: "A1-02", model: "Bambu A1 Combo", status: "down", hours: 410, nozzle: "0.4 mm stainless", volume: "256×256×256", bought: "2026-04-18", cost: 43000, serial: "03A00D12", location: "Bay 2", lastService: "2026-08-01", serviceEvery: 300, notes: "Clogged nozzle — waiting for spare", active: true },
 ];
 
 export const spools: Spool[] = [
-  { id: "s1", material: "PLA", colour: "Black", brand: "Bambu", grams: 2600, size: 1000, spoolNo: "PLA-BK-07" },
-  { id: "s2", material: "PLA", colour: "White", brand: "eSun", grams: 1400, size: 1000, spoolNo: "PLA-WH-04" },
-  { id: "s3", material: "PETG", colour: "White", brand: "Bambu", grams: 900, size: 1000, spoolNo: "PETG-WH-02" },
-  { id: "s4", material: "PETG", colour: "Grey", brand: "Bambu", grams: 0, size: 1000, spoolNo: "PETG-GY-01" },
-  { id: "s5", material: "PLA", colour: "Gold", brand: "Polymaker", grams: 300, size: 1000, spoolNo: "PLA-GD-01" },
+  { id: "s1", material: "PLA", colour: "Black", hex: "#111111", brand: "Bambu", finish: "Basic", diameter: 1.75, grams: 860, size: 1000, tare: 250, gross: 1110, costKg: 1250, spoolNo: "PLA-BK-07", vendor: "Bambu Store India", bought: "2026-10-12", lot: "B2410-17", location: "Dry box A", opened: "2026-10-20", dried: "2026-10-28", nozzle: "220 °C", bed: "60 °C", status: "loaded", printer: "P1S-01", notes: "", active: true, weighed: "2026-11-02" },
+  { id: "s6", material: "PLA", colour: "Black", hex: "#111111", brand: "Bambu", finish: "Basic", diameter: 1.75, grams: 1000, size: 1000, tare: 250, gross: 1250, costKg: 1250, spoolNo: "PLA-BK-08", vendor: "Bambu Store India", bought: "2026-10-12", lot: "B2410-17", location: "Shelf 2", status: "sealed", nozzle: "220 °C", bed: "60 °C", active: true },
+  { id: "s2", material: "PLA", colour: "White", hex: "#f4f4f4", brand: "eSun", finish: "PLA+", diameter: 1.75, grams: 640, size: 1000, tare: 180, gross: 820, costKg: 1100, spoolNo: "PLA-WH-04", vendor: "Robu.in", bought: "2026-09-30", lot: "E0924", location: "Dry box A", opened: "2026-10-05", dried: "2026-10-22", nozzle: "215 °C", bed: "60 °C", status: "open", active: true, weighed: "2026-10-31" },
+  { id: "s3", material: "PETG", colour: "White", hex: "#eeeeee", brand: "Bambu", finish: "HF", diameter: 1.75, grams: 900, size: 1000, tare: 250, gross: 1150, costKg: 1350, spoolNo: "PETG-WH-02", vendor: "Bambu Store India", bought: "2026-10-12", lot: "P2410-03", location: "Dry box B", opened: "2026-10-25", dried: "2026-11-01", nozzle: "250 °C", bed: "70 °C", status: "loaded", printer: "A1-01", active: true, weighed: "2026-11-03" },
+  { id: "s4", material: "PETG", colour: "Grey", hex: "#808080", brand: "Bambu", finish: "HF", diameter: 1.75, grams: 0, size: 1000, tare: 250, gross: 250, costKg: 1350, spoolNo: "PETG-GY-01", vendor: "Bambu Store India", bought: "2026-08-02", lot: "P2408-11", location: "Empty rack", opened: "2026-08-10", nozzle: "250 °C", bed: "70 °C", status: "empty", active: true },
+  { id: "s5", material: "PLA", colour: "Gold", hex: "#c9a227", brand: "Polymaker", finish: "Silk", diameter: 1.75, grams: 300, size: 1000, tare: 140, gross: 440, costKg: 1600, spoolNo: "PLA-GD-01", vendor: "Polymaker India", bought: "2026-09-15", lot: "PM-SK-0915", location: "Shelf 1", opened: "2026-09-20", dried: "2026-10-10", nozzle: "225 °C", bed: "60 °C", status: "open", notes: "Silk — slow outer walls", active: true },
 ];
 
 export const packStock: PackItem[] = [
-  { id: "k1", name: "Box 15×15×10", unit: "pcs", qty: 42, reorderAt: 20, cost: 18 },
-  { id: "k2", name: "Bubble wrap", unit: "m", qty: 8, reorderAt: 15, cost: 6 },
-  { id: "k3", name: "Tape roll", unit: "pcs", qty: 6, reorderAt: 3, cost: 35 },
+  { id: "k1", name: "Box 15×15×10", unit: "pcs", qty: 42, reorderAt: 20, cost: 18, vendor: "Sharma Traders", size: "15×15×10 cm", location: "Packing rack", active: true },
+  { id: "k2", name: "Bubble wrap", unit: "m", qty: 8, reorderAt: 15, cost: 6, vendor: "Sharma Traders", size: "50 cm roll", location: "Packing rack", active: true },
+  { id: "k3", name: "Tape roll", unit: "pcs", qty: 6, reorderAt: 3, cost: 35, vendor: "Local", size: "48 mm × 65 m", location: "Packing table", active: true },
+  { id: "k4", name: "Brand sticker", unit: "pcs", qty: 180, reorderAt: 100, cost: 3, vendor: "PrintHub", size: "50 mm round", location: "Packing table", active: true },
 ];
 
 export const batches: Batch[] = [

@@ -189,7 +189,7 @@ export function DetailHead({ title, onClose }: { title: ComponentChildren; onClo
 export function SubTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: [T, string][] }) {
   return (
     <>
-      <select class="xl:hidden h-8 px-3 rounded-full bg-c0 text-sm font-medium w-full md:w-60" value={value} onChange={(e) => onChange((e.target as HTMLSelectElement).value as T)}>
+      <select class="xl:hidden h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs font-medium w-full md:w-60" value={value} onChange={(e) => onChange((e.target as HTMLSelectElement).value as T)}>
         {items.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
       <div class="hidden xl:flex flex-wrap gap-1.5">

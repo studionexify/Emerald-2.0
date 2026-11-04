@@ -39,7 +39,7 @@ export const shipments = [
 ];
 
 export const packRecords = [
-  { id: "pk1", order: "EM-1038", box: "30×20×15", weight: "4.2 kg", materials: "Box ×4, bubble wrap 6 m, tape ×1", cost: 143, by: "Meet", notes: "Fragile — coasters stacked flat" },
+  { id: "pk1", order: "EM-1038", box: "30×20×15", weight: "4.2 kg", materials: "Box ×4, bubble wrap 6 m, tape ×1", cost: 143, by: "Meet", notes: "Fragile — coasters stacked flat", date: "2026-11-02" },
 ];
 
 export const machineLog = [
@@ -49,18 +49,19 @@ export const machineLog = [
 ];
 
 export const accessories = [
-  { id: "a1", cat: "Accessory", name: "Neodymium magnet 8×3", unit: "pcs", qty: 340, reorderAt: 100, cost: 4 },
-  { id: "a2", cat: "Accessory", name: "NFC tag NTAG215", unit: "pcs", qty: 45, reorderAt: 50, cost: 18 },
-  { id: "a3", cat: "Accessory", name: "Brass insert M3", unit: "pcs", qty: 600, reorderAt: 200, cost: 2 },
-  { id: "a4", cat: "Part", name: "0.4 mm hardened nozzle", unit: "pcs", qty: 3, reorderAt: 2, cost: 850 },
-  { id: "a5", cat: "Part", name: "PEI build plate", unit: "pcs", qty: 1, reorderAt: 1, cost: 2400 },
+  { id: "a1", cat: "Accessory", name: "Neodymium magnet 8×3", unit: "pcs", qty: 340, reorderAt: 100, cost: 4, vendor: "Robu.in", size: "8 × 3 mm N52", location: "Drawer 1", active: true },
+  { id: "a2", cat: "Accessory", name: "NFC tag NTAG215", unit: "pcs", qty: 45, reorderAt: 50, cost: 18, vendor: "Amazon", size: "25 mm sticker", location: "Drawer 1", active: true },
+  { id: "a3", cat: "Accessory", name: "Brass insert M3", unit: "pcs", qty: 600, reorderAt: 200, cost: 2, vendor: "Robu.in", size: "M3 × 4 mm", location: "Drawer 2", active: true },
+  { id: "a4", cat: "Part", name: "0.4 mm hardened nozzle", unit: "pcs", qty: 3, reorderAt: 2, cost: 850, vendor: "Bambu Store India", machine: "P1S-01", location: "Spares box", active: true },
+  { id: "a5", cat: "Part", name: "PEI build plate", unit: "pcs", qty: 1, reorderAt: 1, cost: 2400, vendor: "Bambu Store India", machine: "", location: "Spares box", active: true },
+  { id: "a6", cat: "Part", name: "PTFE tube 1 m", unit: "pcs", qty: 2, reorderAt: 1, cost: 300, vendor: "Robu.in", machine: "", location: "Spares box", active: true },
 ];
 
 export const movements = [
-  { id: "mv1", date: "2026-11-02", item: "PLA Black · Bambu", dir: "in", qty: "3 kg", cost: 3750, vendor: "Bambu Store India", by: "Ankit" },
-  { id: "mv2", date: "2026-11-01", item: "PETG White · Bambu", dir: "out", qty: "820 g", cost: 0, vendor: "EM-1041 job #1", by: "Chintan" },
-  { id: "mv3", date: "2026-10-30", item: "Box 15×15×10", dir: "in", qty: "50 pcs", cost: 900, vendor: "Sharma Traders", by: "Meet" },
-  { id: "mv4", date: "2026-10-29", item: "Bubble wrap", dir: "out", qty: "6 m", cost: 0, vendor: "EM-1038 packing", by: "Meet" },
+  { id: "mv1", date: "2026-11-02", cat: "filament", item: "PLA Black · PLA-BK-08", dir: "in" as const, qty: 1000, unit: "g", unitCost: 1.25, vendor: "Bambu Store India", colour: "Black", brand: "Bambu", notes: "Bill PB-2210", by: "Chintan" },
+  { id: "mv2", date: "2026-11-01", cat: "part", item: "0.4 mm hardened nozzle", dir: "out" as const, qty: 1, unit: "pcs", unitCost: 850, vendor: "", notes: "Fitted to A1-02", by: "Meet" },
+  { id: "mv3", date: "2026-10-30", cat: "packing", item: "Box 15×15×10", dir: "in" as const, qty: 50, unit: "pcs", unitCost: 18, vendor: "Sharma Traders", notes: "", by: "Meet" },
+  { id: "mv4", date: "2026-10-29", cat: "accessory", item: "NFC tag NTAG215", dir: "out" as const, qty: 5, unit: "pcs", unitCost: 18, vendor: "", notes: "Write-off — failed to programme", by: "You" },
 ];
 
 export const bills = [

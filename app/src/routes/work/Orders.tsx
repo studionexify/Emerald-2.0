@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { Button, Card, DetailHead, Field, Icon, inputCls, Status, Table } from "../../ui";
-import { batchesSig, createOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
+import { batchesSig, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 export default function Orders() {
@@ -14,7 +14,7 @@ export default function Orders() {
   const list = ordersSig.value.filter((o) => f === "all" || o.type === f);
   const count = (k: Stage) => list.filter((o) => o.stage === k).length + batchesAt(k).length;
   return (
-    <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy">From template</Button><Button icon="plus" onClick={() => { setOpen(null); setCreating(true); }}>New order</Button></>}
+    <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy" onClick={() => { const no = prompt(`Copy which order? (${ordersSig.value.slice(0, 6).map((o) => o.no).join(", ")})`, ordersSig.value[0]?.no); const src = ordersSig.value.find((o) => o.no === no?.trim()); if (src) { setCreating(false); setOpen(duplicateOrder(src)); } }}>From template</Button><Button icon="plus" onClick={() => { setOpen(null); setCreating(true); }}>New order</Button></>}
       detail={creating ? <NewOrder onDone={(o) => { setCreating(false); if (o) setOpen(o); }} /> : cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}
       toolbar={<div class="flex flex-wrap gap-2 items-center">
         <TypeChips value={f} onChange={setF} />

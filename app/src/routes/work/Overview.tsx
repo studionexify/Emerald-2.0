@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { Card, CardTitle, Section, Stat, Status } from "../../ui";
 import { Ring } from "../../charts";
-import { db, ordersSig, shortDate, STAGES, type Order } from "../../data";
+import { ordersSig, shortDate, STAGES, type Order , printersSig, jobsSig, tasksSig } from "../../data";
 import { OrderCard, OrderDetail, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
@@ -11,8 +11,8 @@ export default function Overview() {
   const [open, setOpen] = useState<Order | null>(null);
   const list = ordersSig.value.filter((o) => f === "all" || o.type === f);
   const live = list.filter((o) => o.stage !== "archived");
-  const busy = db.printers.filter((p) => p.status === "printing").length;
-  const tasks = db.tasks.filter((t) => !t.done);
+  const busy = printersSig.value.filter((p) => p.active !== false).filter((p) => p.status === "printing").length;
+  const tasks = tasksSig.value.filter((t) => !t.done);
   return (
     <WorkShell detail={open && <OrderDetail order={ordersSig.value.find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title="Production" sub="Everything on the floor, in one place" toolbar={<TypeChips value={f} onChange={setF} />}>
       <Section title="Pipeline" note={`${live.length} live`}>
@@ -26,9 +26,9 @@ export default function Overview() {
             </div>
           </Card>
           <Card class="flex items-center gap-4 md:col-span-2 xl:col-span-1">
-            <Ring value={Math.round((busy / db.printers.length) * 100)} label="busy" size={104} />
+            <Ring value={Math.round((busy / printersSig.value.filter((p) => p.active !== false).length) * 100)} label="busy" size={104} />
             <ul class="text-sm flex-1 grid gap-2 md:grid-cols-3 xl:grid-cols-1 min-w-0">
-              {db.printers.map((p) => (
+              {printersSig.value.filter((p) => p.active !== false).map((p) => (
                 <li key={p.id}><Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.name} · {p.status}</Status></li>
               ))}
             </ul>
@@ -48,7 +48,7 @@ export default function Overview() {
             <Card>
               <CardTitle action={<a href="/work/production" class="text-sm text-c3">All →</a>}>Jobs</CardTitle>
               <ul class="flex flex-col gap-2.5 text-sm">
-                {db.jobs.map((j) => (
+                {jobsSig.value.map((j) => (
                   <li key={j.id} class="flex justify-between gap-2">
                     <span class="min-w-0"><span class="font-medium block">{j.item}</span><span class="text-c3">{j.orderNo} · {j.printer}</span></span>
                     <Status tone={jobTone(j.status)}>{j.status}</Status>

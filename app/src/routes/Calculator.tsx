@@ -1,7 +1,8 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
 import { Button, Card, CardTitle, Field, inputCls, Page, SubTabs } from "../ui";
-import { inr, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
+import { navigate } from "../router";
+import { createOrder, inr, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
 
 type Fields = Record<string, number>;
 function useFields(init: Fields) {
@@ -19,7 +20,7 @@ function Result({ rows, price }: { rows: [string, number][]; price: number }) {
       <ul class="flex flex-col gap-2 text-sm">
         {rows.map(([l, n]) => <li key={l} class="flex justify-between border-t border-c3 pt-2"><span class="opacity-80">{l}</span><span class="num">{inr(n)}</span></li>)}
       </ul>
-      <Button variant="outline" class="mt-3 w-full">Use in quotation</Button>
+      <Button variant="outline" class="mt-3 w-full" onClick={() => { const o = createOrder({ type: "client", customer: prompt("Customer name") || "New client", item: prompt("Item name") || "Calculated item", qty: 1, price: Math.round(price), medium: "Instagram", due: "" }); alert(`Created ${o.no} at Quotation for ${inr(price)}`); navigate("/work/orders"); }}>Use in quotation</Button>
     </Card>
   );
 }

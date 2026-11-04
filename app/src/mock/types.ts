@@ -10,17 +10,22 @@ export type Order = {
 };
 export type Job = { id: string; orderNo: string; item: string; printer: string; operator: string; status: "queued" | "printing" | "done" | "failed"; hours: number; grams: number };
 export type QcEntry = { id: string; orderNo: string; item: string; result: "pass" | "rework" | "scrap"; grams: number; defect?: string; by: string; date: string };
-export type Printer = { id: string; name: string; model: string; status: "printing" | "idle" | "down"; hours: number; job?: string };
-export type Spool = { id: string; material: string; colour: string; brand: string; grams: number; size: number; spoolNo: string };
-export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number };
+export type Printer = { id: string; name: string; model: string; status: "printing" | "idle" | "down"; hours: number; job?: string; nozzle?: string; volume?: string; bought?: string; cost?: number; serial?: string; location?: string; lastService?: string; serviceEvery?: number; notes?: string; active?: boolean };
+export type SpoolStatus = "sealed" | "open" | "loaded" | "empty";
+export type Spool = { id: string; material: string; colour: string; brand: string; grams: number; size: number; spoolNo: string;
+  hex?: string; finish?: string; diameter?: number; tare?: number; gross?: number; costKg?: number; vendor?: string; bought?: string; lot?: string;
+  location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string };
+export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number; vendor?: string; size?: string; location?: string; notes?: string; active?: boolean; cat?: string; machine?: string };
 export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";
-export type Task = { id: string; title: string; due: string; done: boolean; who: string; link?: { kind: string; ref: string }; repeat?: string };
+export type Task = { id: string; title: string; due: string; done: boolean; who: string; link?: { kind: string; ref: string }; repeat?: string; notes?: string; priority?: string };
 export type Log = { id: string; at: string; who: string; action: string; target: string; kind?: LogKind };
 export type LogKind = "order" | "stock" | "consumption" | "money";
-export type Binned = { id: string; kind: string; label: string; deletedAt: string; by: string };
+export type Binned = { id: string; kind: string; label: string; deletedAt: string; by: string; data?: unknown };
 export type Money = { id: string; date: string; title: string; account: string; amount: number; kind: string };
 export type Member = { id: string; name: string; role: string; email: string };
 
 export type ConKind = "filament" | "packing" | "accessory" | "part" | "machine" | "power" | "labour" | "freight" | "scrap";
 export type Consumption = { id: string; at: string; who: string; orderNo?: string; batch?: string; printer?: string; kind: ConKind; item: string; qty: number; unit: string; cost: number };
+export type Movement = { id: string; date: string; cat: string; item: string; dir: "in" | "out"; qty: number; unit: string; unitCost: number; vendor: string; colour?: string; brand?: string; notes?: string; by: string };
+export type PackRecord = { id: string; order: string; box: string; weight: string; materials: string; cost: number; by: string; notes: string; date?: string };

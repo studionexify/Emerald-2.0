@@ -152,7 +152,7 @@ export function ConsumeForm({ orderNo, batches = [] }: { orderNo?: string; batch
   return (
     <form class="flex flex-wrap gap-1.5" onSubmit={(e) => { e.preventDefault(); if (!qty) return; consume({ kind: k, item: item || opts[0] || k, qty, orderNo, batch: batch || undefined, printer: k === "machine" || k === "power" ? item || opts[0] : undefined }); setQty(0); }}>
       <select class={sm} value={k} onChange={(e) => { setK((e.target as HTMLSelectElement).value as ConKind); setItem(""); }}>{KINDS.map((x) => <option key={x}>{x}</option>)}</select>
-      {opts.length ? <select class={`${sm} flex-1`} value={item} onChange={(e) => setItem((e.target as HTMLSelectElement).value)}>{opts.map((o) => <option key={o}>{o}</option>)}</select>
+      {opts.length ? <select class={`${sm} flex-1`} value={item || opts[0]} onChange={(e) => setItem((e.target as HTMLSelectElement).value)}>{opts.map((o) => <option key={o}>{o}</option>)}</select>
         : <input class={`${sm} flex-1`} placeholder="What" value={item} onInput={(e) => setItem((e.target as HTMLInputElement).value)} />}
       <input class={`${sm} w-16`} type="number" placeholder={UNIT[k]} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label={`Quantity (${UNIT[k]})`} />
       {batches.length > 0 && <select class={sm} value={batch} onChange={(e) => setBatch((e.target as HTMLSelectElement).value)}><option value="">Whole order</option>{batches.map((b) => <option key={b}>{b}</option>)}</select>}

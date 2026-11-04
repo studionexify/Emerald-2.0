@@ -1,29 +1,41 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
-import { Button, Card, CardTitle, Chip, Empty, Field, inputCls, Page, Section, Status, Table } from "../ui";
-import { attention, batchesSig, can, changePassword, db, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
+import { Button, Card, CardTitle, Chip, Empty, Field, Icon, inputCls, Page, Section, Status, Table } from "../ui";
+import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
+import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
 
+const tFields: FDef<Task>[] = [
+  { k: "title", label: "Task", wide: true }, { k: "due", label: "Due", type: "date" },
+  { k: "who", label: "Assigned to", type: "select", options: () => ["You", ...teamNames()] },
+  { k: "priority", label: "Priority", type: "select", options: ["Normal", "High", "Low"] },
+  { k: "repeat", label: "Repeats", type: "select", options: ["", "Daily", "Weekly", "Monthly"] },
+  { k: "notes", label: "Notes", type: "textarea" },
+];
 export function Todo() {
-  const [tasks, setTasks] = useState(db.tasks);
-  const [f, setF] = useState<"open" | "done" | "repeat">("open");
-  const list = tasks.filter((t) => (f === "repeat" ? !!t.repeat : f === "open" ? !t.done : t.done));
+  const [f, setF] = useState<"open" | "done" | "repeat" | "mine">("open");
+  const tasks = tasksSig.value;
+  const r = useRecord<Task>({ sig: tasksSig, kind: "Task", title: (t) => t.title || "Task", fields: tFields, logKind: "order", noDuplicate: true,
+    blank: () => ({ id: uid(), title: "", due: today(), done: false, who: me.value?.name ?? "You", priority: "Normal", repeat: "", notes: "" }),
+    facts: (t) => [["State", <Status tone={t.done ? "done" : t.due < today() ? "blocked" : "waiting"}>{t.done ? "Done" : t.due < today() ? "Overdue" : "Open"}</Status>], ["Linked to", t.link ? `${t.link.kind} · ${t.link.ref}` : "—"]],
+    actions: (t, put) => <Button variant="outline" icon="check" onClick={() => put({ done: !t.done }, t.done ? "Reopened task" : "Completed task")}>{t.done ? "Reopen" : "Mark done"}</Button> });
+  const list = tasks.filter((t) => (f === "repeat" ? !!t.repeat : f === "mine" ? t.who === (me.value?.name ?? "You") || t.who === "You" : f === "open" ? !t.done : t.done)).sort((x, y) => x.due.localeCompare(y.due));
   return (
-    <Page title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus">New task</Button>}
-      toolbar={<div class="flex flex-wrap gap-1.5"><Chip active={f === "open"} onClick={() => setF("open")}>Open ({tasks.filter((t) => !t.done).length})</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip><Chip active={f === "repeat"} onClick={() => setF("repeat")}>Recurring</Chip></div>}>
+    <Page title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus" onClick={() => r.add()}>New task</Button>} detail={r.detail}
+      toolbar={<div class="flex flex-wrap gap-1.5"><Chip active={f === "open"} onClick={() => setF("open")}>Open ({tasks.filter((t) => !t.done).length})</Chip><Chip active={f === "mine"} onClick={() => setF("mine")}>Mine</Chip><Chip active={f === "done"} onClick={() => setF("done")}>Done</Chip><Chip active={f === "repeat"} onClick={() => setF("repeat")}>Recurring</Chip></div>}>
       <Card>
-        <ul>
+        {list.length ? <ul>
           {list.map((t) => (
-            <li key={t.id} class="flex items-center gap-3 py-2 border-t border-c1 first:border-0">
-              <button aria-label={t.done ? "Mark open" : "Mark done"} onClick={() => setTasks(tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
-                class={`w-6 h-6 rounded-md border-2 border-c4 shrink-0 cursor-pointer ${t.done ? "bg-c4" : ""}`} />
-              <div class="flex-1 min-w-0">
-                <div class={`text-sm font-medium ${t.done ? "line-through text-c3" : ""}`}>{t.title}</div>
+            <li key={t.id} class="flex items-center gap-3 py-2.5 border-t border-c1 first:border-0">
+              <button aria-label={t.done ? "Mark open" : "Mark done"} onClick={() => { tasksSig.value = tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)); log(t.done ? "Reopened task" : "Completed task", t.title); }}
+                class={`w-6 h-6 rounded-md border-2 border-c4 shrink-0 cursor-pointer flex items-center justify-center ${t.done ? "bg-c4 text-c0" : ""}`}>{t.done && <Icon name="check" size={14} />}</button>
+              <button class="flex-1 min-w-0 text-left cursor-pointer" onClick={() => r.open(t)}>
+                <div class={`text-sm font-semibold ${t.done ? "line-through text-c3 font-normal" : ""}`}>{t.title}{t.priority === "High" && <span class="ml-2 text-[10px] uppercase tracking-wider font-extrabold">High</span>}</div>
                 <div class="text-xs text-c3">{t.who} · due {shortDate(t.due)}{t.repeat ? ` · repeats ${t.repeat}` : ""}</div>
-              </div>
-              {t.link && <span class="text-xs bg-c1 rounded-full px-3 py-1 whitespace-nowrap">{t.link.kind} · {t.link.ref}</span>}
+              </button>
+              {t.link && <span class="hidden sm:inline text-xs bg-c1 rounded-full px-3 py-1 whitespace-nowrap">{t.link.kind} · {t.link.ref}</span>}
             </li>
           ))}
-        </ul>
+        </ul> : <Empty title="Nothing here" action={<Button icon="plus" onClick={() => r.add()}>New task</Button>} />}
       </Card>
     </Page>
   );
@@ -32,16 +44,17 @@ export function Todo() {
 export function Logs() {
   const [who, setWho] = useState("all");
   const [kind, setKind] = useState("all");
+  const [open, setOpen] = useState<Log | null>(null);
   const people = ["all", ...new Set(logsSig.value.map((l) => l.who))];
   return (
-    <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account"
-      toolbar={<div class="flex flex-wrap gap-1.5">{["all", "order", "consumption", "stock", "money"].map((x) => <Chip key={x} active={kind === x} onClick={() => setKind(x)}>{x === "all" ? "All kinds" : x}</Chip>)}<span class="w-px bg-c2 mx-1" />{people.map((p) => <Chip key={p} active={who === p} onClick={() => setWho(p)}>{p === "all" ? "Everyone" : p}</Chip>)}</div>}>
+    <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account" detail={open && <Inspect title={open.action} row={{ when: open.at, who: open.who, action: open.action, record: open.target, kind: open.kind ?? "order" }} onClose={() => setOpen(null)} />}
+      toolbar={<div class="flex flex-wrap items-center gap-1.5">{["all", "order", "consumption", "stock", "money"].map((x) => <Chip key={x} active={kind === x} onClick={() => setKind(x)}>{x === "all" ? "All kinds" : x[0].toUpperCase() + x.slice(1)}</Chip>)}<span class="w-px h-5 bg-c2 mx-1" />{people.map((p) => <Chip key={p} active={who === p} onClick={() => setWho(p)}>{p === "all" ? "Everyone" : p}</Chip>)}</div>}>
       <Card>
-        <Table rows={logsSig.value.filter((l) => (who === "all" || l.who === who) && (kind === "all" || (l.kind ?? "order") === kind))} rowKey={(l) => l.id} cols={[
-          { key: "a", label: "When", render: (l) => l.at },
-          { key: "w", label: "Who", render: (l) => <b>{l.who}</b> },
+        <Table rows={logsSig.value.filter((l) => (who === "all" || l.who === who) && (kind === "all" || (l.kind ?? "order") === kind))} rowKey={(l) => l.id} onRow={setOpen} cols={[
           { key: "x", label: "Action", render: (l) => l.action },
           { key: "t", label: "Record", render: (l) => l.target },
+          { key: "w", label: "Who", render: (l) => l.who },
+          { key: "a", label: "When", render: (l) => <span class="text-c3">{l.at}</span> },
         ]} />
       </Card>
     </Page>
@@ -49,18 +62,22 @@ export function Logs() {
 }
 
 export function Bin() {
-  const left = (d: string) => Math.max(0, 7 - Math.round((Date.parse("2026-11-03") - Date.parse(d)) / 864e5));
-  const kinds = [...new Set(db.bin.map((b) => b.kind))];
+  const left = (d: string) => Math.max(0, 7 - Math.round((Date.parse(today()) - Date.parse(d)) / 864e5));
+  const items = binSig.value;
+  const kinds = [...new Set(items.map((b) => b.kind))];
+  const [open, setOpen] = useState<Binned | null>(null);
   return (
-    <Page title="Bin" sub="Recoverable for 7 days · grouped by kind">
+    <Page title="Bin" sub="Recoverable for 7 days · grouped by kind" detail={open && <Inspect title={open.label} row={{ kind: open.kind, deleted: shortDate(open.deletedAt), by: open.by, daysLeft: left(open.deletedAt), ...(open.data && typeof open.data === "object" ? open.data as Record<string, unknown> : {}) }} onClose={() => setOpen(null)}>
+      <Actions>{canRestore(open) && <Button onClick={() => { restoreBin(open); log("Restored from Bin", open.label); setOpen(null); }}>Restore</Button>}<Button variant="ghost" icon="bin" onClick={() => { if (confirm("Delete forever?")) { purgeBin(open); setOpen(null); } }}>Delete forever</Button></Actions></Inspect>}>
+      {!items.length && <Card><Empty title="The Bin is empty" hint="Deleted records stay here for 7 days." /></Card>}
       {kinds.map((k) => (
-        <Section key={k} title={k} note={String(db.bin.filter((b) => b.kind === k).length)}>
+        <Section key={k} title={k} note={String(items.filter((b) => b.kind === k).length)}>
           <Card>
-            <Table rows={db.bin.filter((b) => b.kind === k)} rowKey={(b) => b.id} cols={[
-              { key: "l", label: "Record", render: (b) => <b>{b.label}</b> },
+            <Table rows={items.filter((b) => b.kind === k)} rowKey={(b) => b.id} onRow={setOpen} cols={[
+              { key: "l", label: "Record", render: (b) => b.label },
               { key: "d", label: "Deleted", render: (b) => `${shortDate(b.deletedAt)} by ${b.by}` },
-              { key: "x", label: "Left", render: (b) => <Status tone={left(b.deletedAt) <= 2 ? "blocked" : "waiting"}>{left(b.deletedAt)} days left</Status> },
-              { key: "r", label: "", render: () => <Button variant="outline">Restore</Button> },
+              { key: "x", label: "Left", render: (b) => <Status tone={left(b.deletedAt) <= 2 ? "blocked" : "waiting"}>{left(b.deletedAt)} days</Status> },
+              { key: "r", label: "", align: "right", render: (b) => canRestore(b) ? <Button variant="outline" onClick={(e) => { e.stopPropagation(); restoreBin(b); log("Restored from Bin", b.label); }}>Restore</Button> : <span class="text-xs text-c3">Needs server</span> },
             ]} />
           </Card>
         </Section>
@@ -149,14 +166,14 @@ export function Users() {
           </Card>
         )}
         <Card>
-          <Table rows={usersSig.value} rowKey={(m) => m.id} cols={[
+          <Table rows={usersSig.value} rowKey={(m) => m.id} onRow={owner ? setEdit : undefined} cols={[
             { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
             { key: "j", label: "Job", render: (m) => m.job || "—" },
             { key: "r", label: "Access", render: (m) => ROLE_LABEL[m.role] },
             { key: "l", label: "Login", render: (m) => <Status tone={m.login ? "done" : "idle"}>{m.login ? "Yes" : "No"}</Status> },
             { key: "e", label: "Email", render: (m) => m.email || "—", hideTablet: true },
             { key: "s", label: "Status", render: (m) => <Status tone={m.active ? "done" : "idle"}>{m.active ? "Active" : "Retired"}</Status> },
-            { key: "x", label: "", render: (m) => owner && <span class="flex flex-wrap gap-1"><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
+            { key: "x", label: "", align: "right", render: (m) => owner && <span class="inline-flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
           ]} />
         </Card>
       </Section>
@@ -191,13 +208,14 @@ export function Integrations() {
         <Table rows={rows} rowKey={(r) => r.id} cols={[
           { key: "n", label: "Service", render: (r) => <b>{r.n}</b> }, { key: "d", label: "What it does", render: (r) => r.d },
           { key: "s", label: "Status", render: (r) => <Status tone={r.s ? "done" : "waiting"}>{r.s ? "Connected" : "Not set"}</Status> },
-          { key: "a", label: "", render: (r) => <Button variant="outline">{r.a}</Button> }]} />
+          { key: "a", label: "", align: "right", render: (r) => <Button variant="outline" onClick={() => r.n === "Tally export" ? navigate("/mauny/books") : r.n === "Bill reader" ? navigate("/mauny/purchases") : alert(`${r.n} connects through the server — it is wired when the database goes live.`)}>{r.a}</Button> }]} />
       </Card>
     </SettingsShell>
   );
 }
 
 import { RatesEditor } from "./Calculator";
+import { navigate } from "../router";
 import { bizSig, type Biz } from "../data/biz";
 export function Rates() { return <SettingsShell><RatesEditor /></SettingsShell>; }
 
