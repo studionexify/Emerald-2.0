@@ -72,3 +72,12 @@ export function App() {
   const ok = path.value === "/search" || path.value === "/settings" || can(moduleOf(path.value));
   return <Frame>{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
 }
+
+/* Warm the main sections once the browser is idle, so the first tap on a tab is instant. Skipped on data saver. */
+const conn = (navigator as any).connection;
+if (!conn?.saveData && !/2g/.test(conn?.effectiveType ?? "")) {
+  const idle = (cb: () => void) => ((window as any).requestIdleCallback ? (window as any).requestIdleCallback(cb, { timeout: 4000 }) : setTimeout(cb, 2500));
+  const queue = [() => import("./routes/Dashboard"), work, () => import("./routes/work/Orders"), mauny, calc, ws, g, rec];
+  const next = () => { const f = queue.shift(); if (f) f().finally(() => idle(next)); };
+  addEventListener("load", () => idle(next), { once: true });
+}

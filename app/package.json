@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/size-check.mjs",
     "preview": "vite preview",
     "check:colors": "! grep -rEn \"#[0-9a-fA-F]{3,8}\\b\" src --include=*.ts --include=*.tsx --exclude-dir=mock",
     "build:artifact": "tsc --noEmit && vite build --mode artifact && node scripts/artifact.mjs"
