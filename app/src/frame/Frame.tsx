@@ -28,7 +28,7 @@ function Sidebar() {
   const c = collapsed.value;
   return (
     <aside aria-label="Main navigation"
-      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-canvas border-r border-line ${c ? "w-[84px]" : "w-52 2xl:w-56"}`}>
+      class={`hidden min-[900px]:flex flex-col shrink-0 min-h-0 bg-canvas border-r border-line ${c ? "w-[84px]" : "w-52 2xl:w-56"}`}>
       <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col gap-0.5 p-2">
         {ALL.filter((n) => (isExternal() ? n.href === "/settings" : can(moduleOf(n.href)))).concat(isExternal() ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }] : []).map((n) => {
           const on = isActive(path, n.href);
@@ -62,7 +62,7 @@ function TopBar() {
   return (
     <header class="shrink-0 h-12 flex items-center gap-2 px-2 md:px-3 bg-c0/80 backdrop-blur-md border-b border-line relative z-10">
       <button onClick={toggleNav} aria-label={collapsed.value ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed.value}
-        class="hidden md:flex w-8 h-8 rounded-lg hover:bg-c1 items-center justify-center cursor-pointer shrink-0">
+        class="hidden min-[900px]:flex w-8 h-8 rounded-lg hover:bg-c1 items-center justify-center cursor-pointer shrink-0">
         <Icon name="menu" size={16} />
       </button>
       <a href="/" class="flex items-center gap-2 shrink-0 md:w-[148px]">
@@ -89,20 +89,27 @@ function TopBar() {
   );
 }
 
-/** Phone bottom bar: in the layout flow, so it never covers content. */
+/** Bottom tab bar below 900px (phone + iPad portrait): in the layout flow, so it never covers content. */
 function BottomBar() {
   const { path } = useLocation();
-  const items = isExternal() ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }, { href: "/settings", label: "Settings", icon: "settings" }] : [NAV[0], NAV[1], NAV[4], NAV[6], { href: "/more", label: "More", icon: "grid" }];
-  const moreOn = !items.slice(0, 4).some((n) => isActive(path, n.href));
+  const urgent = Object.values(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
+  type T = { href: string; label: string; icon: string; on: "both" | "pad" | "phone" };
+  const items: T[] = isExternal()
+    ? [{ href: "/mauny/gst", label: "GST desk", icon: "money", on: "both" }, { href: "/settings", label: "Settings", icon: "settings", on: "both" }]
+    : [{ ...NAV[0], on: "both" }, { ...NAV[1], on: "both" }, { ...NAV[2], on: "pad" }, { ...NAV[3], on: "pad" }, { ...NAV[4], on: "both" }, { ...NAV[5], on: "pad" }, { ...NAV[6], on: "phone" }, { href: "/more", label: "More", icon: "grid", on: "both" }];
+  const moreOn = !items.filter((n) => n.href !== "/more").some((n) => isActive(path, n.href));
   return (
-    <nav class={`md:hidden shrink-0 bg-c0 border-t border-line grid ${isExternal() ? "grid-cols-2" : "grid-cols-5"} px-2 pt-1 pb-[max(4px,env(safe-area-inset-bottom))]`} aria-label="Main">
+    <nav class={`min-[900px]:hidden shrink-0 bg-c0/80 backdrop-blur-md border-t border-line grid ${isExternal() ? "grid-cols-2" : "grid-cols-5 md:grid-cols-7"} px-1 md:px-3 pb-[env(safe-area-inset-bottom)]`} aria-label="Main">
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
+        const vis = n.on === "pad" ? "hidden md:flex" : n.on === "phone" ? "flex md:hidden" : "flex";
         return (
           <a key={n.href} href={n.href} aria-current={on ? "page" : undefined}
-            class={`flex flex-col items-center justify-center h-11 rounded-lg text-[10px] gap-0.5 ${on ? "text-c4 font-semibold" : "text-c2"}`}>
-            <Icon name={n.icon} size={19} />
-            {n.label.split(" ")[0]}
+            class={`${vis} relative flex-col md:flex-row items-center justify-center h-[50px] gap-0.5 md:gap-2 text-[10px] md:text-[13px] min-w-0 ${on ? "text-c4 font-semibold" : "text-c2 font-medium"}`}>
+            <span class="relative inline-flex"><Icon name={n.icon} size={20} />
+              {n.href === "/alerts" && urgent > 0 && <span class="absolute -top-1.5 -right-2 md:-right-1 md:-top-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-warn text-black text-[9px] leading-[14px] text-center num">{urgent}</span>}
+            </span>
+            <span class="truncate max-w-full">{n.label.split(" ")[0]}</span>
           </a>
         );
       })}
