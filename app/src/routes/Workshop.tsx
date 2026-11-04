@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Pick, Button, Card, Disclosure, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
@@ -145,7 +145,7 @@ export function Filament() {
       return <>
         <WeighIn s={s} put={put} />
         <PaneSection title={`Usage · ${use.length}`}>
-          {use.length ? use.map((c) => <div key={c.id} class="flex justify-between gap-2 text-sm border-t border-c1 first:border-0 py-1"><span class="min-w-0">{c.orderNo ?? "Store"} · <span class="capitalize">{c.kind}</span><span class="block text-xs text-c3">{c.at} · {c.who}</span></span><b class="num whitespace-nowrap">{c.qty} g</b></div>) : <p class="text-sm text-c3">No consumption logged against this spool.</p>}
+          {use.length ? use.map((c) => <div key={c.id} class="flex justify-between gap-2 text-sm border-t border-line first:border-0 py-1"><span class="min-w-0">{c.orderNo ?? "Store"} · <span class="capitalize">{c.kind}</span><span class="block text-xs text-c3">{c.at} · {c.who}</span></span><b class="num whitespace-nowrap">{c.qty} g</b></div>) : <p class="text-sm text-c3">No consumption logged against this spool.</p>}
           <ConsumeForm />
         </PaneSection>
       </>;
@@ -174,21 +174,19 @@ export function Filament() {
         if (!sp.length) return null;
         const g = tot.filter((s) => s.material === m).reduce((s, x) => s + x.grams, 0);
         return (
-          <Section key={m} title={m} note={`${g.toLocaleString("en-IN")} g · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}
-            action={g <= REORDER_G ? <Status tone={g <= 0 ? "blocked" : "waiting"}>{g <= 0 ? "Out" : "Reorder"}</Status> : <span class="text-xs text-c3">reorder at {REORDER_G.toLocaleString("en-IN")} g</span>}>
-            <Card>
+          <Disclosure key={m} open title={<span class="inline-flex items-center gap-2">{m}<span class="t-meta font-normal">{sp.length} spools</span>{g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}</span>}
+            meta={`${(g / 1000).toFixed(2)} kg · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}>
               <Table rows={sp} rowKey={(s) => s.id} onRow={r.open} cols={[
-                { key: "c", label: "Colour · brand", render: (s) => <span class="inline-flex items-center gap-2"><Swatch hex={s.hex} />{s.colour} · {s.brand}{s.finish && <span class="text-xs text-c3 font-normal">{s.finish}</span>}</span> },
-                { key: "n", label: "Spool no.", render: (s) => s.spoolNo },
-                { key: "g", label: "Net", align: "right", render: (s) => `${s.grams.toLocaleString("en-IN")} g` },
-                { key: "p", label: "Left", render: (s) => <span class="flex items-center gap-2 min-w-[90px]"><span class="flex-1"><Progress value={spoolPct(s)} /></span><span class="num text-xs w-10 text-right whitespace-nowrap">{spoolPct(s)}%</span></span> },
+                { key: "n", label: "Spool", render: (s) => <span class="inline-flex items-center gap-2 font-mono text-[12px] font-bold"><span title={s.status} class={`w-1.5 h-1.5 rounded-full ${s.grams <= 0 ? "bg-c2" : s.grams < 250 ? "bg-warn" : s.status === "loaded" ? "bg-c4" : "border border-c4"}`} />{s.spoolNo}</span> },
+                { key: "c", label: "Colour · brand", render: (s) => <span class="inline-flex items-center gap-2"><Swatch hex={s.hex} />{s.colour}<span class="t-meta">{s.brand}{s.finish ? ` · ${s.finish}` : ""}</span></span> },
+                { key: "p", label: "Weight left", render: (s) => <span class="block min-w-[120px]"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /></span> },
                 { key: "a", label: "After queue", align: "right", render: (s) => { const a = s.grams - committed(s); return committed(s) ? `${a.toLocaleString("en-IN")} g` : "—"; }, hideTablet: true },
                 { key: "l", label: "Where", render: (s) => (s.status === "loaded" ? s.printer : s.location) || "—", hideTablet: true },
                 { key: "v", label: "Value", align: "right", render: (s) => inr(spoolValue(s)), hideTablet: true },
-                { key: "s", label: "State", render: (s) => spTone(s) },
+                { key: "s", label: "State", render: (s) => spTone(s), hideTablet: true },
+                { key: "x", label: "", align: "right", render: (s) => <button class="h-6 px-2 rounded-md border border-line text-[11px] font-semibold hover:bg-c1 cursor-pointer" onClick={(e) => { e.stopPropagation(); r.open(s); }}>Weigh</button> },
               ]} />
-            </Card>
-          </Section>
+          </Disclosure>
         );
       })}
       {!shown.length && <Card><p class="text-sm text-c3 text-center py-6">No spools match these filters.</p></Card>}
@@ -243,7 +241,7 @@ function useItems(sig: Signal<PackItem[]>, kind: string, cat: (p: PackItem) => s
         <PaneSection title={`History · ${mv.length + used.length}`}>
           {[...mv.map((m) => ({ id: m.id, d: m.date, t: `${m.dir === "in" ? "+" : "−"}${m.qty} ${m.unit}`, w: m.notes || m.vendor || (m.dir === "in" ? "Received" : "Used"), by: m.by })),
             ...used.map((c) => ({ id: c.id, d: c.at.slice(0, 10), t: `−${c.qty} ${c.unit}`, w: `Used on ${c.orderNo ?? "store"}`, by: c.who }))].sort((a, b) => b.d.localeCompare(a.d)).map((h) => (
-            <div key={h.id} class="flex justify-between gap-2 text-sm py-1 border-t border-c1 first:border-0"><span class="min-w-0">{h.w}<span class="block text-xs text-c3">{shortDate(h.d)} · {h.by}</span></span><b class="num whitespace-nowrap">{h.t}</b></div>
+            <div key={h.id} class="flex justify-between gap-2 text-sm py-1 border-t border-line first:border-0"><span class="min-w-0">{h.w}<span class="block text-xs text-c3">{shortDate(h.d)} · {h.by}</span></span><b class="num whitespace-nowrap">{h.t}</b></div>
           ))}
           {!mv.length && !used.length && <p class="text-sm text-c3">No movements yet.</p>}
         </PaneSection>

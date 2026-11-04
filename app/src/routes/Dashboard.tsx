@@ -1,14 +1,9 @@
-import { Bars } from "../charts";
-import { Card, CardTitle, Page, Section, Stat, Status } from "../ui";
-import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, STAGES , printersSig, jobsSig, tasksSig } from "../data";
-
-const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
+import { useState } from "preact/hooks";
+import { Card, KV, Page, Section, Stat, Status } from "../ui";
+import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, STAGES , printersSig, tasksSig } from "../data";
 
 export default function Dashboard() {
   const open = ordersSig.value.filter((o) => o.stage !== "archived");
-  const blocked = ordersSig.value.filter((o) => o.blocked);
-  const low = packSig.value.filter((p) => p.qty <= p.reorderAt);
-  const out = spoolsSig.value.filter((s) => s.grams === 0);
   const paid = open.filter((o) => o.type !== "inhouse");
   const pipeline = paid.reduce((s, o) => s + orderTotal(o), 0);
   const margin = Math.round((1 - paid.reduce((s, o) => s + orderCost(o), 0) / pipeline) * 100);
@@ -17,115 +12,71 @@ export default function Dashboard() {
   const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: moneySig.value.filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
   const todo = tasksSig.value.filter((t) => !t.done);
   const dueSoon = [...open].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
-  const attention = [
-    ...blocked.map((o) => ({ id: o.id, href: "/work/orders", icon: "bell", dark: true, t: `${o.no} · ${o.customer}`, d: o.blocked! })),
-    ...out.map((s) => ({ id: s.id, href: "/workshop/filament", icon: "box", dark: false, t: `Out of ${s.material} ${s.colour}`, d: s.spoolNo })),
-    ...low.map((p) => ({ id: p.id, href: "/workshop/packing", icon: "box", dark: false, t: `Low · ${p.name}`, d: `${p.qty} ${p.unit} left` })),
-  ];
+  const all = Object.entries(al).flatMap(([g, list]) => list.map((a) => ({ ...a, g })));
+  const SEV = [["danger", "Critical"], ["warn", "Action required"], ["info", "Upcoming"]] as const;
+  const [sev, setSev] = useState<"danger" | "warn" | "info">(all.some((x) => x.t === "danger") ? "danger" : "warn");
+  const feed = all.filter((x) => x.t === sev);
+  const wk = week.reduce((s, d) => s + d.v, 0);
+  const mx = Math.max(1, ...week.map((d) => Math.abs(d.v)));
+  const spark = week.map((d, i) => `${(i / 6) * 100},${20 - (d.v / mx) * 18}`).join(" ");
   return (
-    <Page title="Hi, Studio Nexify" sub="Tuesday, 3 November">
-      <Section title="Needs attention" note={`${Object.values(al).flat().length} items`} action={<a href="/alerts" class="text-xs text-c3 whitespace-nowrap">All →</a>}>
-        <div class="grid gap-2 grid-cols-1 md:grid-cols-2 2xl:grid-cols-4">
-          {Object.entries(al).map(([g, list]) => (
-            <Card key={g}>
-              <CardTitle action={<span class="num text-xs text-c3">{list.length}</span>}>{g}</CardTitle>
-              <ul class="flex flex-col">
-                {[...list].sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t)).slice(0, 3).map((a, i) => (
-                  <li key={i} class="border-t border-c1 first:border-0"><a href={a.href} class="flex items-start gap-2 py-1.5 text-sm"><Status tone={a.t === "danger" ? "blocked" : a.t === "warn" ? "waiting" : "idle"}>{""}</Status><span class="min-w-0">{a.text}</span></a></li>
-                ))}
-              </ul>
-            </Card>
-          ))}
-        </div>
-      </Section>
-      <Section title="At a glance">
-        <div class="grid gap-3 md:grid-cols-2 2xl:grid-cols-[1.4fr_1fr_1fr]">
-          <Card dark class="md:col-span-2 2xl:col-span-1">
-            <CardTitle action={<a href="/work" class="text-sm opacity-80">Production →</a>}>Work in progress</CardTitle>
-            <div class="flex flex-wrap items-end gap-x-8 gap-y-2 mb-4">
-              <div><div class="num text-3xl md:text-5xl font-semibold leading-none">{open.length}</div><div class="text-sm opacity-80 mt-1">open orders</div></div>
-              <div><div class="num text-xl md:text-3xl font-semibold leading-none">{inr(pipeline)}</div><div class="text-sm opacity-80 mt-1">order value in pipeline</div></div>
+    <Page title="Hi, Studio Nexify" sub={new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}>
+      <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] items-start">
+        <Section title="Action center" note={`${all.length} items`} action={<a href="/alerts" class="t-meta whitespace-nowrap">All →</a>}>
+          <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
+            <div class="flex items-center gap-0.5 p-1 m-2 rounded-lg bg-c1 w-fit" role="tablist">
+              {SEV.map(([k, l]) => { const c = all.filter((x) => x.t === k).length; return (
+                <button key={k} role="tab" aria-selected={sev === k} onClick={() => setSev(k)} class={`h-7 px-3 rounded-md text-xs inline-flex items-center gap-1.5 cursor-pointer ${sev === k ? "bg-c0 text-c4 font-semibold shadow-sm" : "text-c3 font-medium"}`}>
+                  {k === "danger" && <span class="w-1.5 h-1.5 rounded-full bg-warn" />}{l}<span class="num text-c2">{c}</span>
+                </button>); })}
             </div>
-            <div class="grid grid-cols-4 md:grid-cols-8 gap-2">
-              {STAGES.map((s) => <Stat dark key={s.key} value={ordersSig.value.filter((o) => o.stage === s.key).length} label={s.label} />)}
-            </div>
-          </Card>
-          <Card>
-            <CardTitle action={<a href="/mauny" class="text-sm text-c3">Mauny →</a>}>Money in / out this week</CardTitle>
-            <Bars data={week.map((d) => d.v)} labels={week.map((d) => d.l)} height={120} />
-          </Card>
-          <Card>
-            <CardTitle action={<a href="/mauny/finance" class="text-sm text-c3">Finance →</a>}>This month</CardTitle>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-4">
-              <div><div class="text-xs text-c3">Earned</div><div class="num text-2xl font-semibold">{inr(fm.earned)}</div></div>
-              <div><div class="text-xs text-c3">Net profit</div><div class="num text-2xl font-semibold">{inr(fm.earned - fm.spent)}</div></div>
-              <div><div class="text-xs text-c3">Spent</div><div class="num text-2xl font-semibold">{inr(fm.spent)}</div></div>
-              <div><div class="text-xs text-c3">Pipeline margin</div><div class="num text-2xl font-semibold">{margin}%</div></div>
-            </div>
-          </Card>
-        </div>
-      </Section>
-
-      <Section title="Today" note={`${attention.length} alerts · ${todo.length} tasks`}>
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Card>
-            <CardTitle action={<a href="/work/orders" class="text-sm text-c3">All →</a>}>Due soonest</CardTitle>
-            <ul class="flex flex-col gap-3 text-sm">
-              {dueSoon.map((o) => (
-                <li key={o.id} class="flex justify-between gap-2">
-                  <span class="min-w-0"><span class="font-semibold block">{o.customer}</span><span class="text-c3">{o.no} · {STAGES.find((s) => s.key === o.stage)!.label}</span></span>
-                  <span class="num whitespace-nowrap">{shortDate(o.due)}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card>
-            <CardTitle action={<a href="/todo" class="text-sm text-c3">All →</a>}>To-do</CardTitle>
-            <ul class="flex flex-col gap-3 text-sm">
-              {todo.map((t) => (
-                <li key={t.id} class="min-w-0">
-                  <span class="font-medium block">{t.title}</span>
-                  <span class="text-xs text-c3">{t.who} · {shortDate(t.due)}{t.link ? ` · ${t.link.ref}` : ""}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card>
-            <CardTitle action={<a href="/logs" class="text-sm text-c3">All →</a>}>Recent activity</CardTitle>
-            <ul class="flex flex-col gap-3 text-sm">
-              {logsSig.value.slice(0, 5).map((l) => (
-                <li key={l.id} class="min-w-0">
-                  <span class="block"><b>{l.who}</b> {l.action.toLowerCase()}</span>
-                  <span class="text-xs text-c3">{l.target} · {l.at.slice(11)}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-      </Section>
-
-      <Section title="Floor" note={`${printersSig.value.filter((p) => p.active !== false).filter((p) => p.status === "printing").length} of ${printersSig.value.filter((p) => p.active !== false).length} printers busy`} action={<a href="/work/production" class="text-sm text-c3 whitespace-nowrap">Production →</a>}>
-        <div class="grid gap-3 xl:grid-cols-[1fr_1.4fr]">
-          <div class="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 content-start">
-            {printersSig.value.filter((p) => p.active !== false).map((p) => (
-              <div key={p.id} class={`rounded-2xl p-3 flex justify-between items-center gap-2 ${p.status === "printing" ? "bg-c4 text-c0" : "bg-c0"}`}>
-                <span class="min-w-0"><span class="font-semibold block">{p.name}</span><span class="text-xs opacity-80">{p.job ? `Printing ${p.job}` : p.model}</span></span>
-                <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
-              </div>
-            ))}
+            {feed.length ? feed.slice(0, 8).map((x, i) => (
+              <a key={i} href={x.href} class="flex items-center gap-3 h-9 px-3 border-t border-line hover:bg-c1/60 min-w-0">
+                <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${x.t === "danger" ? "bg-warn" : x.t === "warn" ? "bg-c4" : "bg-c2"}`} />
+                <span class="text-[13px] min-w-0 truncate flex-1">{x.text}</span>
+                <span class="t-meta whitespace-nowrap">{x.g}</span>
+              </a>
+            )) : <p class="t-meta px-3 py-3 border-t border-line">Nothing here.</p>}
+            {feed.length > 8 && <a href="/alerts" class="block h-9 leading-9 px-3 border-t border-line t-meta">+{feed.length - 8} more</a>}
           </div>
+        </Section>
+        <Section title="Money flow" action={<a href="/mauny/finance" class="t-meta">Finance →</a>}>
           <Card>
-            <CardTitle>Job queue</CardTitle>
-            <ul class="grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
-              {jobsSig.value.map((j) => (
-                <li key={j.id} class="flex justify-between gap-2">
-                  <span class="min-w-0"><span class="font-medium block">{j.item}</span><span class="text-c3">{j.orderNo} · {j.printer} · {j.hours}h</span></span>
-                  <Status tone={jobTone(j.status)}>{j.status}</Status>
-                </li>
-              ))}
-            </ul>
+            <div class="flex items-end justify-between gap-3">
+              <div><div class="t-meta">Net this week</div><div class="num text-[22px] font-semibold leading-tight">{inr(wk)}</div></div>
+              <svg viewBox="0 0 100 22" class="w-28 h-8 text-c4" preserveAspectRatio="none" aria-hidden="true"><polyline points={spark} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" /></svg>
+            </div>
+            <div class="mt-2">
+              <KV label="Earned · month" value={inr(fm.earned)} />
+              <KV label="Spent · month" value={inr(fm.spent)} />
+              <KV label="Net profit" value={inr(fm.earned - fm.spent)} strong />
+              <KV label="Pipeline" value={inr(pipeline)} />
+              <KV label="Pipeline margin" value={`${margin}%`} />
+            </div>
           </Card>
+        </Section>
+      </div>
+
+      <Section title="Pipeline" note={`${open.length} open`} action={<a href="/work" class="t-meta">Production →</a>}>
+        <div class="grid grid-cols-4 md:grid-cols-8 gap-2">
+          {STAGES.map((s) => <Stat key={s.key} value={ordersSig.value.filter((o) => o.stage === s.key).length} label={s.label} />)}
         </div>
+      </Section>
+
+      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
+        <Section title="Due soonest" action={<a href="/work/orders" class="t-meta">All →</a>}>
+          <Card class="!py-1">{dueSoon.map((o) => <KV key={o.id} label={<span><span class="font-mono text-[12px] font-bold text-c4 mr-1.5">{o.no}</span>{o.customer}</span>} value={shortDate(o.due)} />)}</Card>
+        </Section>
+        <Section title="To-do" note={String(todo.length)} action={<a href="/todo" class="t-meta">All →</a>}>
+          <Card class="!py-1">{todo.slice(0, 5).map((t) => <KV key={t.id} label={t.title} value={<span class="t-meta">{t.who} · {shortDate(t.due)}</span>} />)}</Card>
+        </Section>
+        <Section title="Floor" note={`${printersSig.value.filter((p) => p.active !== false && p.status === "printing").length} busy`} action={<a href="/work/production" class="t-meta">Jobs →</a>}>
+          <Card class="!py-1">{printersSig.value.filter((p) => p.active !== false).map((p) => <KV key={p.id} label={<span><span class="font-mono text-[12px] font-bold text-c4 mr-1.5">{p.name}</span>{p.job ?? ""}</span>} value={<Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>} />)}</Card>
+        </Section>
+      </div>
+
+      <Section title="Recent activity" action={<a href="/logs" class="t-meta">Logs →</a>}>
+        <Card class="!py-1">{logsSig.value.slice(0, 5).map((l) => <KV key={l.id} label={<span><b class="text-c4">{l.who}</b> {l.action.toLowerCase()} · {l.target}</span>} value={<span class="t-meta">{l.at.slice(11)}</span>} />)}</Card>
       </Section>
     </Page>
   );

@@ -1,30 +1,20 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
-/* Five shades, nothing else. Dark theme = exact inversion. */
+/* HIG monochrome: canvas, card, subdued, hairline, ink + one tactical accent (critical only). */
 :root {
-  --c-0: #ffffff;
-  --c-1: #f3f4f6;
-  --c-2: #9ca3af;
-  --c-3: #1f2937;
-  --c-4: #000000;
+  --bg: #f5f5f7; --c-0: #ffffff; --c-1: #e5e5ea; --line: #d1d1d6;
+  --c-2: #8e8e93; --c-3: #3c3c43; --c-4: #000000; --warn: #ff9500;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --c-0: #000000;
-  --c-1: #1f2937;
-  --c-2: #9ca3af;
-  --c-3: #f3f4f6;
-  --c-4: #ffffff;
+  --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
+  --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --c-0: #000000;
-    --c-1: #1f2937;
-    --c-2: #9ca3af;
-    --c-3: #f3f4f6;
-    --c-4: #ffffff;
+    --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
+    --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
     color-scheme: dark;
   }
 }
@@ -35,14 +25,24 @@
   --color-c2: var(--c-2);
   --color-c3: var(--c-3);
   --color-c4: var(--c-4);
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --radius-card: 20px;
+  --color-canvas: var(--bg);
+  --color-line: var(--line);
+  --color-warn: var(--warn);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
+  --radius-card: 12px;
 }
 
-*, *::before, *::after { transition: none !important; animation: none !important; }
+/* Micro-interactions: short, property-scoped, off for reduced motion. */
+button, a, select, input, summary, [role="button"] { transition: background-color .12s ease, color .12s ease, border-color .12s ease, transform .08s ease, opacity .12s ease; }
+button:not(:disabled):active, a[class]:active, summary:active { transform: scale(0.98); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary .chev { transition: transform .15s ease; }
+details[open] > summary .chev { transform: rotate(90deg); }
 html, body, #app { height: 100%; }
 body { overflow: hidden; }
-body { margin: 0; background: var(--c-1); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
@@ -54,13 +54,18 @@ body { margin: 0; background: var(--c-1); color: var(--c-4); font-family: var(--
   .print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000 !important; background: #fff !important; }
 }
 
-/* Type hierarchy — weight, size, case and underline carry meaning; colour stays monochrome. */
-body { font-size: 14px; line-height: 1.45; font-weight: 400; font-feature-settings: "cv11", "ss01"; }
+/* Type ramp (5 tiers): title 24 · section 13 caps · body 13 · meta 11 · figure (tabular). */
+body { font-size: 13px; line-height: 1.4; font-weight: 400; }
 h1, h2, h3 { letter-spacing: -0.01em; }
-b, strong { font-weight: 650; }
+b, strong { font-weight: 600; }
+.t-title { font-size: 24px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+.t-section { font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase; color: var(--c-2); }
+.t-body { font-size: 13px; font-weight: 500; }
+.t-meta { font-size: 11px; line-height: 1.3; font-weight: 400; color: var(--c-2); }
 main a:not([class]), main p a, main .link { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; font-weight: 500; }
 main a:not([class]):hover, main p a:hover { text-decoration-thickness: 2px; }
 .num { font-weight: 600; }
-thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--c-3); }
+table { font-variant-numeric: tabular-nums; }
+thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--c-2); }
 tbody td { font-weight: 400; }
 tbody td:first-child { font-weight: 600; }

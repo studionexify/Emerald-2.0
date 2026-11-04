@@ -69,12 +69,12 @@ export function Invoice() {
               </div>
               <label class="flex items-center gap-2 text-xs"><input type="checkbox" disabled={locked} checked={cur.interstate} onChange={() => updateInvoice(cur, { interstate: !cur.interstate })} /> Out-of-state (IGST)</label>
               <LinesEditor lines={cur.lines} locked={locked} on={(l) => updateInvoice(cur, { lines: l })} />
-              <div class="flex justify-between text-sm font-semibold border-t border-c1 pt-2"><span>Total incl. GST</span><span class="num">{inr(invTax(cur).total)}</span></div>
+              <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(invTax(cur).total)}</span></div>
               {cur.kind === "invoice" && cur.status === "issued" && (cur.paidOn
                 ? <div class="flex items-center justify-between text-sm"><Status tone="done">Paid {shortDate(cur.paidOn)}</Status><Button variant="ghost" onClick={() => markUnpaid(cur)}>Mark unpaid</Button></div>
                 : <div class="flex flex-wrap items-center gap-2">{accountsSig.value.map((a) => <Button key={a.id} variant="outline" onClick={() => markPaid(cur, a.id)}>Paid → {a.name.split(" ")[0]}</Button>)}</div>)}
               {cur.kind === "invoice" && cur.status === "issued" && (
-                <div class="flex flex-wrap items-end gap-2 border-t border-c1 pt-2">
+                <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
                   <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(Number((e.target as HTMLInputElement).value) || 0)} /></Field>
                   <Button variant="outline" onClick={() => { if (cn) { setOpen(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
                   {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => confirm(`Cancel ${cur.no}? The number stays used.`) && cancelInvoice(cur)}>Cancel invoice</Button>}
@@ -147,7 +147,7 @@ export function Quotes() {
                 <Field label="Valid until"><input class={inputCls} type="date" value={cur.valid} onInput={(e) => upd(cur, { valid: (e.target as HTMLInputElement).value })} /></Field>
               </div>
               <LinesEditor lines={cur.lines} on={(l) => upd(cur, { lines: l })} />
-              <div class="flex justify-between text-sm font-semibold border-t border-c1 pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
+              <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
               <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => upd(cur, { outcome: o })}>{o}</Chip>)}</div>
               {cur.orderNo && <p class="text-xs text-c3">Linked to {cur.orderNo}. Approving here doesn't move the order — stages are free.</p>}
             </div>
@@ -236,7 +236,7 @@ export function Shipping() {
             <Field label="Recovered ₹"><input class={inputCls} type="number" value={d.rec} onInput={(e) => setD({ ...d, rec: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
           </div>
           {o && <ul class="text-sm">{o.items.map((i) => { const left = i.qty - sent(i.name); return (
-            <li key={i.name} class="flex items-center justify-between gap-2 py-1 border-t border-c1"><span>{i.name} <span class="text-xs text-c3">{sent(i.name)}/{i.qty} shipped</span></span>
+            <li key={i.name} class="flex items-center justify-between gap-2 py-1 border-t border-line"><span>{i.name} <span class="text-xs text-c3">{sent(i.name)}/{i.qty} shipped</span></span>
               <input class="h-8 w-20 px-2 rounded-lg border border-c3 bg-c0 text-xs" type="number" aria-label={`Qty of ${i.name} in this dispatch`} value={d.qty[i.name] ?? Math.max(0, left)} onInput={(e) => setD({ ...d, qty: { ...d.qty, [i.name]: Number((e.target as HTMLInputElement).value) || 0 } })} /></li>); })}</ul>}
           <div class="flex flex-wrap items-center gap-2">
             <label class="text-xs underline cursor-pointer">{d.photo ? "Photo attached ✓" : "Handover photo"}<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) { const r = new FileReader(); r.onload = () => setD({ ...d, photo: String(r.result) }); r.readAsDataURL(f); } }} /></label>
@@ -276,7 +276,7 @@ export function Clients() {
   const r = useRecord<Client>({ sig: clientsSig, kind: "Client", title: (c) => c.name, fields: cFields, logKind: "order",
     blank: () => ({ id: uid(), name: "", kind: "Individual", phone: "", email: "", city: "", gstin: "", medium: "Instagram", address: "", notes: "", active: true }),
     facts: (c) => { const x = stats(c.name); return [["Orders", x.orders], ["Lifetime value", inr(x.value)], ["Owes", x.owed ? inr(x.owed) : "Nothing"], ["Invoices", x.inv.length]]; },
-    extra: (c) => { const x = stats(c.name); return <PaneSection title="Orders">{x.os.length ? x.os.map((o) => <div key={o.id} class="flex justify-between gap-2 text-sm py-1 border-t border-c1 first:border-0"><span class="min-w-0"><b>{o.no}</b> · {o.items.map((i) => i.name).join(", ")}</span><span class="text-c3 whitespace-nowrap">{o.stage}</span></div>) : <p class="text-sm text-c3">No orders yet.</p>}</PaneSection>; } });
+    extra: (c) => { const x = stats(c.name); return <PaneSection title="Orders">{x.os.length ? x.os.map((o) => <div key={o.id} class="flex justify-between gap-2 text-sm py-1 border-t border-line first:border-0"><span class="min-w-0"><b>{o.no}</b> · {o.items.map((i) => i.name).join(", ")}</span><span class="text-c3 whitespace-nowrap">{o.stage}</span></div>) : <p class="text-sm text-c3">No orders yet.</p>}</PaneSection>; } });
   const rows = [...clientsSig.value.filter((c) => c.active !== false), ...extra].filter((c) => !q || `${c.name} ${c.city} ${c.phone} ${c.gstin}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <WorkShell title="Clients" sub="Every customer — contact, GSTIN, orders, value and what they owe" detail={r.detail} actions={<Button icon="plus" onClick={() => r.add()}>Add client</Button>}

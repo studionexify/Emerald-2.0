@@ -80,7 +80,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       <ConsumeForm orderNo={order.no} batches={mine.map((b) => b.name)} />
       <ul class="flex flex-col mt-2 mb-3 text-xs">
         {cons.map((c) => (
-          <li key={c.id} class="flex justify-between gap-2 py-1 border-t border-c1">
+          <li key={c.id} class="flex justify-between gap-2 py-1 border-t border-line">
             <span class="min-w-0"><b class="capitalize">{c.kind}</b> · {c.item}{c.batch ? ` · ${c.batch}` : ""}<span class="block text-c3">{c.at} · {c.who}</span></span>
             <span class="num whitespace-nowrap text-right">{c.qty} {c.unit}<span class="block text-c3">{inr(c.cost)}</span></span>
           </li>
@@ -132,7 +132,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       <div class="grid grid-cols-4 gap-2 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><img src={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
 
       <h3 class="font-semibold text-sm mb-1.5">Stage history</h3>
-      <ul class="text-xs mb-3">{hist.map((h) => <li key={h.id} class="py-1 border-t border-c1">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>
+      <ul class="text-xs mb-3">{hist.map((h) => <li key={h.id} class="py-1 border-t border-line">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>
       <label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!order.paid} onChange={() => onOpen(patchOrder(order, { paid: !order.paid }))} /> Payment received</label>
     </div>
   );

@@ -29,7 +29,7 @@ export function Facts({ items }: { items: [string, ComponentChildren][] }) {
 
 /** Pane sub-heading. */
 export const PaneSection = ({ title, children }: { title: string; children: ComponentChildren }) => (
-  <section class="flex flex-col gap-2 pt-4 mt-4 border-t border-c1">
+  <section class="flex flex-col gap-2 pt-4 mt-4 border-t border-line">
     <h3 class="text-[11px] font-extrabold uppercase tracking-[0.14em]">{title}</h3>
     {children}
   </section>

@@ -25,7 +25,7 @@ export function Todo() {
       <Card>
         {list.length ? <ul>
           {list.map((t) => (
-            <li key={t.id} class="flex items-center gap-3 py-2.5 border-t border-c1 first:border-0">
+            <li key={t.id} class="flex items-center gap-3 py-2.5 border-t border-line first:border-0">
               <button aria-label={t.done ? "Mark open" : "Mark done"} onClick={() => { tasksSig.value = tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)); log(t.done ? "Reopened task" : "Completed task", t.title); }}
                 class={`w-6 h-6 rounded-md border-2 border-c4 shrink-0 cursor-pointer flex items-center justify-center ${t.done ? "bg-c4 text-c0" : ""}`}>{t.done && <Icon name="check" size={14} />}</button>
               <button class="flex-1 min-w-0 text-left cursor-pointer" onClick={() => r.open(t)}>
@@ -97,7 +97,7 @@ export function Alerts() {
             <CardTitle action={<span class="num text-xs text-c3">{list.length}</span>}>{g}</CardTitle>
             <ul class="flex flex-col">
               {[...list].sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t)).map((a, i) => (
-                <li key={i} class="border-t border-c1 first:border-0"><a href={a.href} class="flex items-start gap-2 py-2 text-sm"><Status tone={tone[a.t]}>{""}</Status><span class="min-w-0">{a.text}</span></a></li>
+                <li key={i} class="border-t border-line first:border-0"><a href={a.href} class="flex items-start gap-2 py-2 text-sm"><Status tone={tone[a.t]}>{""}</Status><span class="min-w-0">{a.text}</span></a></li>
               ))}
               {!list.length && <li class="text-sm text-c3 py-1">Nothing here — all clear.</li>}
             </ul>
@@ -241,7 +241,7 @@ export function Search() {
         <div class="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
           {groups.filter(([, l]) => l.length).map(([g, l]) => (
             <Card key={g}><CardTitle action={<span class="text-xs text-c3">{l.length}</span>}>{g}</CardTitle>
-              <ul>{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-c1 first:border-0"><a href={r.href} class="block py-1.5 text-sm"><b>{r.t}</b> <span class="text-c3 text-xs">{r.d}</span></a></li>)}</ul>
+              <ul>{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-line first:border-0"><a href={r.href} class="block py-1.5 text-sm"><b>{r.t}</b> <span class="text-c3 text-xs">{r.d}</span></a></li>)}</ul>
             </Card>
           ))}
         </div>

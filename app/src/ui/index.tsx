@@ -7,27 +7,27 @@ export { Icon };
 type Btn = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" | "ghost"; icon?: string };
 export function Button({ variant = "primary", icon, children, class: c, ...rest }: Btn) {
   const v = {
-    primary: "bg-c4 text-c0 border-c4",
-    outline: "bg-c0 text-c4 border-c4",
-    ghost: "bg-transparent text-c4 border-transparent hover:border-c2",
+    primary: "bg-c4 text-c0 border-c4 hover:opacity-85",
+    outline: "bg-c0 text-c4 border-line hover:bg-c1",
+    ghost: "bg-transparent text-c4 border-transparent hover:bg-c1",
   }[variant];
   return (
-    <button {...rest} class={`inline-flex items-center justify-center gap-2 h-9 md:h-10 px-4 md:px-5 rounded-full border text-[13px] md:text-sm font-semibold whitespace-nowrap cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-c1 ${v} ${c ?? ""}`}>
-      {icon && <Icon name={icon} size={16} />}
+    <button {...rest} class={`inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-lg border text-[13px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-line ${v} ${c ?? ""}`}>
+      {icon && <Icon name={icon} size={14} />}
       {children}
     </button>
   );
 }
 
 export function Card({ children, class: c, dark, dashed }: { children: ComponentChildren; class?: string; dark?: boolean; dashed?: boolean }) {
-  const base = dark ? "bg-c4 text-c0" : dashed ? "bg-transparent border-2 border-dashed border-c2" : "bg-c0";
-  return <section class={`rounded-[var(--radius-card)] p-3 md:p-4 xl:p-5 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
+  const base = dark ? "bg-c4 text-c0" : dashed ? "bg-transparent border border-dashed border-c2" : "bg-c0 border border-line";
+  return <section class={`rounded-[var(--radius-card)] p-3 md:p-4 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
 }
 
 export function CardTitle({ children, action }: { children: ComponentChildren; action?: ComponentChildren }) {
   return (
-    <div class="flex items-center justify-between gap-2 mb-2 md:mb-3">
-      <h2 class="text-[15px] md:text-base font-bold tracking-tight min-w-0">{children}</h2>
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <h2 class="text-[13px] font-semibold min-w-0">{children}</h2>
       {action}
     </div>
   );
@@ -35,9 +35,9 @@ export function CardTitle({ children, action }: { children: ComponentChildren; a
 
 export function Stat({ value, label, dark }: { value: string | number; label: string; dark?: boolean }) {
   return (
-    <div class={`rounded-2xl px-1 py-2 xl:py-3 text-center min-w-0 ${dark ? "bg-c0 text-c4" : "bg-c1"}`}>
-      <div class="num text-lg md:text-xl xl:text-2xl font-extrabold">{value}</div>
-      <div class="text-[9.5px] xl:text-[11px] uppercase tracking-[0.02em] xl:tracking-[0.08em] font-medium mt-1 text-c3 leading-tight [overflow-wrap:normal] [word-break:keep-all]">{label}</div>
+    <div class={`rounded-[10px] px-3 py-2 min-w-0 flex flex-col justify-center ${dark ? "bg-c0 text-c4" : "bg-c0 border border-line"}`}>
+      <div class="t-meta truncate">{label}</div>
+      <div class="num text-[17px] font-semibold leading-tight mt-0.5">{value}</div>
     </div>
   );
 }
@@ -53,7 +53,7 @@ export function Big({ value, label }: { value: string; label: string }) {
 
 export function Chip({ active, children, onClick }: { active?: boolean; children: ComponentChildren; onClick?: () => void }) {
   return (
-    <button onClick={onClick} class={`h-8 px-3.5 inline-flex items-center rounded-full text-xs cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0 font-semibold border border-c4" : "bg-c0 text-c4 font-normal border border-c2"}`}>
+    <button onClick={onClick} class={`h-7 px-3 inline-flex items-center rounded-md text-xs cursor-pointer whitespace-nowrap ${active ? "bg-c0 text-c4 font-semibold shadow-sm" : "bg-transparent text-c3 font-medium hover:text-c4"}`}>
       {children}
     </button>
   );
@@ -66,10 +66,10 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
     <label class="relative block">
       <span class="sr-only">Section</span>
       <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
-        class="appearance-none cursor-pointer w-full h-9 pl-4 pr-9 rounded-full truncate bg-c4 text-c0 font-semibold text-[13px]">
+        class="appearance-none cursor-pointer w-full h-8 pl-3 pr-8 rounded-lg truncate bg-c0 border border-line text-c4 font-semibold text-[13px]">
         {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
       </select>
-      <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-c0"><Icon name="down" size={14} /></span>
+      <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c2"><Icon name="down" size={12} /></span>
     </label>
   );
 }
@@ -77,12 +77,12 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
 /** Filter control: chips for up to 3 options, a dropdown beyond that. */
 export function Pick<T extends string>({ value, on, items, label, title }: { value: T; on: (v: T) => void; items: readonly T[] | T[]; label?: (v: T) => string; title?: string }) {
   const L = label ?? ((x: T) => x[0].toUpperCase() + x.slice(1));
-  if (items.length <= 3) return <div class="inline-flex flex-wrap items-center gap-2">{items.map((x) => <Chip key={x} active={value === x} onClick={() => on(x)}>{L(x)}</Chip>)}</div>;
+  if (items.length <= 3) return <div class="inline-flex flex-wrap max-w-full items-center gap-0.5 p-0.5 rounded-lg bg-c1">{items.map((x) => <Chip key={x} active={value === x} onClick={() => on(x)}>{L(x)}</Chip>)}</div>;
   return (
     <label class="relative inline-block min-w-0">
       <span class="sr-only">{title ?? "Filter"}</span>
       <select value={value} onChange={(e) => on((e.target as HTMLSelectElement).value as T)} aria-label={title ?? "Filter"}
-        class="appearance-none cursor-pointer h-8 pl-3.5 pr-8 rounded-full bg-c0 border border-c2 text-xs font-semibold max-w-full truncate">
+        class="appearance-none cursor-pointer h-7 pl-3 pr-8 rounded-lg bg-c0 border border-line text-xs font-medium max-w-full truncate">
         {items.map((x) => <option key={x} value={x}>{title ? `${title}: ${L(x)}` : L(x)}</option>)}
       </select>
       <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c3"><Icon name="down" size={12} /></span>
@@ -110,7 +110,7 @@ export function Status({ tone, children }: { tone: Tone; children: ComponentChil
 
 export function Progress({ value }: { value: number }) {
   return (
-    <div class="h-2 rounded-full bg-c1 overflow-hidden" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
+    <div class="h-1.5 rounded-full bg-c1 overflow-hidden" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
       <div class="h-full bg-c4 rounded-full" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );
@@ -118,10 +118,9 @@ export function Progress({ value }: { value: number }) {
 
 export function Empty({ title, hint, action }: { title: string; hint?: string; action?: ComponentChildren }) {
   return (
-    <div class="flex flex-col items-center justify-center text-center py-6 md:py-10 gap-2">
-      <div class="w-12 h-12 rounded-full bg-c4 text-c0 flex items-center justify-center"><Icon name="plus" /></div>
-      <div class="font-semibold">{title}</div>
-      {hint && <div class="text-sm text-c3 max-w-xs">{hint}</div>}
+    <div class="flex flex-col items-center justify-center text-center py-4 gap-1.5">
+      <div class="text-[13px] font-semibold">{title}</div>
+      {hint && <div class="t-meta max-w-xs">{hint}</div>}
       {action}
     </div>
   );
@@ -135,10 +134,10 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
   const hid = (c: Col<T>) => (c.hideTablet ? "hidden xl:table-cell" : "");
   return (
     <>
-      <ul class="md:hidden flex flex-col gap-2">
+      <ul class="md:hidden flex flex-col">
         {rows.map((r) => (
-          <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`bg-c1 rounded-xl p-2.5 text-[13px] ${onRow ? "cursor-pointer" : ""}`}>
-            <div class="text-sm font-bold mb-1.5 break-words">{head.render(r)}</div>
+          <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-b border-line last:border-0 py-2 text-[13px] ${onRow ? "cursor-pointer active:bg-c1" : ""}`}>
+            <div class="text-[13px] font-semibold mb-1 break-words">{head.render(r)}</div>
             <dl class="grid grid-cols-3 gap-x-2 gap-y-1">
               {rest.map((c) => (
                 <div key={c.key} class={`min-w-0 ${c.label ? "" : "col-span-3"}`}>
@@ -150,16 +149,16 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
           </li>
         ))}
       </ul>
-      <table class="hidden md:table w-full text-sm table-auto">
+      <table class="hidden md:table w-full text-[13px] table-auto">
         <thead>
           <tr class="text-left text-c3 text-xs">
-            {cols.map((c) => <th key={c.key} class={`font-medium py-2 pr-4 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
+            {cols.map((c) => <th key={c.key} class={`py-1.5 pr-4 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-t border-c1 align-top ${onRow ? "cursor-pointer hover:bg-c1" : ""}`}>
-              {cols.map((c) => <td key={c.key} class={`py-2.5 pr-4 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
+            <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`h-9 border-t border-line align-middle ${onRow ? "cursor-pointer hover:bg-c1/60" : ""}`}>
+              {cols.map((c) => <td key={c.key} class={`py-1.5 pr-4 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
             </tr>
           ))}
         </tbody>
@@ -172,10 +171,10 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
 export function Split({ detail, children }: { detail: ComponentChildren | null; children: ComponentChildren }) {
   return (
     <div class={`min-h-0 h-full ${detail ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
-      <div class={`min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-7 py-3 md:py-4 ${detail ? "hidden md:block" : ""}`}>
-        <div class="flex flex-col gap-4 2xl:gap-6">{children}</div>
+      <div class={`min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4 ${detail ? "hidden md:block" : ""}`}>
+        <div class="flex flex-col gap-4 max-w-[1600px]">{children}</div>
       </div>
-      {detail && <aside class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 md:border-l border-c2/40 p-3 md:p-4 xl:p-5">{detail}</aside>}
+      {detail && <aside class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 md:border-l border-line p-3 md:p-4">{detail}</aside>}
     </div>
   );
 }
@@ -183,8 +182,8 @@ export function Split({ detail, children }: { detail: ComponentChildren | null; 
 export function DetailHead({ title, onClose }: { title: ComponentChildren; onClose: () => void }) {
   return (
     <div class="flex items-center gap-2 mb-3">
-      <button class="w-8 h-8 shrink-0 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close details"><Icon name="close" size={16} /></button>
-      <h2 class="text-base md:text-xl font-extrabold tracking-tight min-w-0 break-words">{title}</h2>
+      <button class="w-7 h-7 shrink-0 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close details"><Icon name="close" size={16} /></button>
+      <h2 class="text-[17px] font-semibold tracking-tight min-w-0 break-words">{title}</h2>
     </div>
   );
 }
@@ -202,13 +201,13 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
 }) {
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div class="shrink-0 flex flex-col gap-2 md:gap-2 px-3 md:px-5 2xl:px-7 py-2 md:py-2.5 border-b border-c2/40 bg-c1">
+      <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 border-b border-line bg-canvas">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-baseline gap-3">
-            <h1 class="text-lg md:text-2xl 2xl:text-[28px] font-extrabold tracking-tight leading-tight truncate">{title}</h1>
-            {sub && <p class="hidden lg:block text-[13px] text-c3 font-normal truncate">{sub}</p>}
+            <h1 class="t-title truncate">{title}</h1>
+            {sub && <p class="hidden lg:block t-meta truncate">{sub}</p>}
           </div>
-          {tabs && <div class="w-[46%] md:w-56 shrink-0"><Tabs tabs={tabs} /></div>}
+          {tabs && <div class="w-[46%] md:w-48 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
         {toolbar && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}
@@ -217,8 +216,8 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
         {detail !== undefined ? (
           <Split detail={detail}>{actions && <div class="md:hidden flex flex-wrap gap-2">{actions}</div>}{children}</Split>
         ) : (
-          <div class="h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-7 py-3 md:py-4">
-            <div class="flex flex-col gap-4 2xl:gap-6">
+          <div class="h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
+            <div class="flex flex-col gap-4 max-w-[1600px]">
               {actions && <div class="md:hidden flex flex-wrap gap-2">{actions}</div>}
               {children}
             </div>
@@ -232,11 +231,11 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
 /** Section divider: label, count, a rule that runs to the edge, optional action. */
 export function Section({ title, note, action, children }: { title: string; note?: string; action?: ComponentChildren; children: ComponentChildren }) {
   return (
-    <section class="flex flex-col gap-2 md:gap-3 min-w-0">
-      <div class="flex items-center gap-3">
-        <h2 class="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.14em] text-c4 whitespace-nowrap">{title}</h2>
-        {note && <span class="text-xs font-normal text-c3 whitespace-nowrap">{note}</span>}
-        <span class="flex-1 h-px bg-c2 opacity-60" aria-hidden="true" />
+    <section class="flex flex-col gap-2 min-w-0">
+      <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-1">
+        <h2 class="t-section whitespace-nowrap">{title}</h2>
+        {note && <span class="t-meta whitespace-nowrap num">{note}</span>}
+        <span class="flex-1" aria-hidden="true" />
         {action}
       </div>
       {children}
@@ -247,19 +246,54 @@ export function Section({ title, note, action, children }: { title: string; note
 export function Fact({ label, value }: { label: string; value: ComponentChildren }) {
   return (
     <div>
-      <div class="text-[11px] uppercase tracking-[0.08em] font-medium text-c3">{label}</div>
-      <div class="text-[15px] font-bold mt-0.5">{value}</div>
+      <div class="t-meta">{label}</div>
+      <div class="text-[13px] font-semibold mt-0.5 num">{value}</div>
     </div>
   );
 }
 
 export function Field({ label, children }: { label: string; children: ComponentChildren }) {
   return (
-    <label class="flex flex-col gap-1 text-sm">
-      <span class="text-[11px] uppercase tracking-[0.06em] font-semibold text-c3">{label}</span>
+    <label class="flex flex-col gap-1 text-[13px] min-w-0">
+      <span class="text-[11px] font-medium text-c3">{label}</span>
       {children}
     </label>
   );
 }
 
-export const inputCls = "h-10 md:h-11 px-3 md:px-4 rounded-xl border border-c3 bg-c0 text-c4 placeholder:text-c2 w-full";
+export const inputCls = "h-8 px-2.5 rounded-lg border border-line bg-c0 text-c4 text-[13px] placeholder:text-c2 w-full focus:border-c4 outline-none";
+
+/** Split-row key/value: label left, value right on one baseline. */
+export function KV({ label, value, strong }: { label: ComponentChildren; value: ComponentChildren; strong?: boolean }) {
+  return (
+    <div class="flex items-baseline justify-between gap-3 py-1.5 border-t border-line first:border-0 min-w-0">
+      <span class="text-[13px] text-c3 min-w-0 truncate">{label}</span>
+      <span class={`num text-[13px] whitespace-nowrap ${strong ? "font-bold" : "font-medium"}`}>{value}</span>
+    </div>
+  );
+}
+
+/** Disclosure triangle: collapsed detail behind a summary row. */
+export function Disclosure({ title, meta, open, children, class: c }: { title: ComponentChildren; meta?: ComponentChildren; open?: boolean; children: ComponentChildren; class?: string }) {
+  return (
+    <details open={open} class={`rounded-[var(--radius-card)] bg-c0 border border-line min-w-0 ${c ?? ""}`}>
+      <summary class="flex items-center gap-2 h-10 px-3 select-none">
+        <span class="chev text-c2 inline-flex"><Icon name="right" size={12} /></span>
+        <span class="text-[13px] font-semibold min-w-0 truncate">{title}</span>
+        {meta && <span class="ml-auto t-meta num whitespace-nowrap">{meta}</span>}
+      </summary>
+      <div class="px-3 pb-3">{children}</div>
+    </details>
+  );
+}
+
+/** Inline meter: thin bar + figure. */
+export function Meter({ value, label }: { value: number; label?: ComponentChildren }) {
+  const v = Math.max(0, Math.min(100, value));
+  return (
+    <span class="inline-flex items-center gap-2 min-w-0 w-full">
+      <span class="flex-1 h-1 rounded-full bg-c1 overflow-hidden min-w-[40px]"><span class={`block h-full rounded-full ${v < 20 ? "bg-warn" : "bg-c4"}`} style={{ width: `${v}%` }} /></span>
+      {label !== undefined && <span class="num text-[11px] text-c3 whitespace-nowrap">{label}</span>}
+    </span>
+  );
+}

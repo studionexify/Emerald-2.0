@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Field, inputCls, Page, SubTabs } from "../ui";
+import { Button, Card, CardTitle, Disclosure, Field, inputCls, KV, Page, SubTabs } from "../ui";
 import { navigate } from "../router";
 import { createOrder, inr, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
 
@@ -12,15 +12,23 @@ function useFields(init: Fields) {
   return [v, bind, setV] as const;
 }
 
+/** Unit-suffixed compact input: label above, unit inside the field. */
+function U({ label, unit, b }: { label: string; unit?: string; b: ReturnType<ReturnType<typeof useFields>[1]> }) {
+  return (
+    <Field label={label}>
+      <span class="relative block"><input {...b} class={`${inputCls} num ${unit ? "pr-10" : ""}`} />{unit && <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">{unit}</span>}</span>
+    </Field>
+  );
+}
+
 function Result({ rows, price }: { rows: [string, number][]; price: number }) {
   return (
-    <Card dark class="self-start">
-      <div class="text-sm opacity-80">Suggested price (incl. GST)</div>
-      <div class="num text-3xl xl:text-5xl font-semibold mt-1 mb-2">{inr(price)}</div>
-      <ul class="flex flex-col gap-2 text-sm">
-        {rows.map(([l, n]) => <li key={l} class="flex justify-between border-t border-c3 pt-2"><span class="opacity-80">{l}</span><span class="num">{inr(n)}</span></li>)}
-      </ul>
-      <Button variant="outline" class="mt-3 w-full" onClick={() => { const o = createOrder({ type: "client", customer: prompt("Customer name") || "New client", item: prompt("Item name") || "Calculated item", qty: 1, price: Math.round(price), medium: "Instagram", due: "" }); alert(`Created ${o.no} at Quotation for ${inr(price)}`); navigate("/work/orders"); }}>Use in quotation</Button>
+    <Card class="lg:sticky lg:top-0 self-start">
+      <div class="t-section">Quotation</div>
+      <div class="t-meta mt-2">Suggested price incl. GST</div>
+      <div class="num text-[28px] font-semibold leading-tight tracking-tight mb-2">{inr(price)}</div>
+      <div>{rows.map(([l, n], i) => <KV key={l} label={l} value={inr(n)} strong={i === rows.length - 1} />)}</div>
+      <Button class="mt-3 w-full" onClick={() => { const o = createOrder({ type: "client", customer: prompt("Customer name") || "New client", item: prompt("Item name") || "Calculated item", qty: 1, price: Math.round(price), medium: "Instagram", due: "" }); alert(`Created ${o.no} at Quotation for ${inr(price)}`); navigate("/work/orders"); }}>Use in quotation</Button>
     </Card>
   );
 }
@@ -28,7 +36,7 @@ function Result({ rows, price }: { rows: [string, number][]; price: number }) {
 function Shell({ children }: { children: preact.ComponentChildren }) {
   return (
     <Page title="Calculator" sub="Price a job before you quote it"  tabs={CALC_TABS}>
-      <div class="grid gap-3 lg:grid-cols-[1fr_320px]">{children}</div>
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] items-start">{children}</div>
     </Page>
   );
 }
@@ -45,18 +53,23 @@ export function Nexcal() {
         <CardTitle>Nexcal · FDM</CardTitle>
         <div class="mb-3"><SubTabs value={mode} onChange={setMode} items={[["direct", "Direct input"], ["upload", "Upload models"]]} /></div>
         {mode === "upload" && <ModelUpload onTotal={(g, h) => setV({ ...v, grams: Math.round(g), hours: Math.round(h * 10) / 10 })} />}
-        <div class="grid sm:grid-cols-2 gap-4">
-          <Field label="Filament used (g)"><input {...b("grams")} /></Field>
-          <Field label="Filament price (₹/kg)"><input {...b("perKg")} /></Field>
-          <Field label="Print time (h)"><input {...b("hours")} /></Field>
-          <Field label="Machine rate (₹/h)"><input {...b("machine")} /></Field>
-          <Field label="Electricity (₹/h)"><input {...b("power")} /></Field>
-          <Field label="Labour & finishing (₹)"><input {...b("labour")} /></Field>
-          <Field label="Packaging (₹)"><input {...b("packing")} /></Field>
-          <Field label="Margin (%)"><input {...b("margin")} /></Field>
-          <Field label="GST (%)"><input {...b("gst")} /></Field>
-          <Field label="Quantity"><input {...b("qty")} /></Field>
+        <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+          <U label="Filament used" unit="g" b={b("grams")} />
+          <U label="Filament price" unit="₹/kg" b={b("perKg")} />
+          <U label="Print time" unit="h" b={b("hours")} />
+          <U label="Quantity" unit="pcs" b={b("qty")} />
+          <U label="Labour & finishing" unit="₹" b={b("labour")} />
+          <U label="Packaging" unit="₹" b={b("packing")} />
+          <U label="Margin" unit="%" b={b("margin")} />
+          <U label="GST" unit="%" b={b("gst")} />
         </div>
+        <Disclosure class="mt-3 !border-line" title="Advanced parameters" meta={`₹${v.machine + v.power}/h machine`}>
+          <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+            <U label="Machine depreciation" unit="₹/h" b={b("machine")} />
+            <U label="Electricity" unit="₹/h" b={b("power")} />
+          </div>
+          <p class="t-meta mt-2">Defaults come from Calculator → Rates.</p>
+        </Disclosure>
       </Card>
       <Result price={price * v.qty} rows={[["Material", material], ["Machine + power", machine], ["Labour", v.labour], ["Packaging", v.packing], ["Cost per unit", cost], ["Price per unit (ex-GST)", pre], [`Total ×${v.qty}`, price * v.qty]]} />
     </Shell>
@@ -72,17 +85,19 @@ export function NexRes() {
     <Shell>
       <Card>
         <CardTitle>NexRes · Resin price per plate</CardTitle>
-        <div class="grid sm:grid-cols-2 gap-4">
-          <Field label="Resin per plate (ml)"><input {...b("ml")} /></Field>
-          <Field label="Resin price (₹/L)"><input {...b("perL")} /></Field>
-          <Field label="Parts per plate"><input {...b("parts")} /></Field>
-          <Field label="Plate time (h)"><input {...b("hours")} /></Field>
-          <Field label="Machine rate (₹/h)"><input {...b("machine")} /></Field>
-          <Field label="IPA & gloves (₹)"><input {...b("ipa")} /></Field>
-          <Field label="Labour & curing (₹)"><input {...b("labour")} /></Field>
-          <Field label="Margin (%)"><input {...b("margin")} /></Field>
-          <Field label="GST (%)"><input {...b("gst")} /></Field>
+        <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+          <U label="Resin per plate" unit="ml" b={b("ml")} />
+          <U label="Resin price" unit="₹/L" b={b("perL")} />
+          <U label="Parts per plate" unit="pcs" b={b("parts")} />
+          <U label="Plate time" unit="h" b={b("hours")} />
+          <U label="IPA & gloves" unit="₹" b={b("ipa")} />
+          <U label="Labour & curing" unit="₹" b={b("labour")} />
+          <U label="Margin" unit="%" b={b("margin")} />
+          <U label="GST" unit="%" b={b("gst")} />
         </div>
+        <Disclosure class="mt-3" title="Advanced parameters" meta={`₹${v.machine}/h machine`}>
+          <div class="grid grid-cols-2 gap-x-3 gap-y-2.5"><U label="Machine depreciation" unit="₹/h" b={b("machine")} /></div>
+        </Disclosure>
       </Card>
       <Result price={price} rows={[["Plate cost", plate], ["Cost per part", perPart], ["Price per part (ex-GST)", pre]]} />
     </Shell>
@@ -150,7 +165,7 @@ function ModelUpload({ onTotal }: { onTotal: (g: number, h: number) => void }) {
       {err && <p class="text-xs mt-1">{err}</p>}
       <ul class="text-xs mt-2 flex flex-col gap-1">
         {parts.map((p, i) => { const e = est(p); return (
-          <li key={i} class="flex flex-wrap items-center gap-2 border-t border-c1 pt-1">
+          <li key={i} class="flex flex-wrap items-center gap-2 border-t border-line pt-1">
             <input type="checkbox" checked={p.on} onChange={() => set(i, { on: !p.on })} aria-label="Include" /><b class="min-w-0 truncate max-w-[10rem]">{p.name}</b>
             <select class={c} value={p.unit} onChange={(ev) => set(i, { unit: Number((ev.target as HTMLSelectElement).value) })}><option value={1}>mm</option><option value={10}>cm</option><option value={25.4}>in</option></select>
             <select class={c} value={p.mat} onChange={(ev) => set(i, { mat: (ev.target as HTMLSelectElement).value })}>{Object.keys(DENS).map((m) => <option key={m}>{m}</option>)}</select>

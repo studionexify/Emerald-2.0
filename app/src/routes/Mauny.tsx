@@ -3,7 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
-import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
+import { Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
 import {
   accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, books, can, confirmBill, confirmLine, consSig, csv, daySummary, download, expensesSig,
   financeSummary, fyOf, GOAL_HINT, GOAL_LABEL, goalProgress, goalsSig, gstMonths, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
@@ -16,7 +16,7 @@ function Shell({ title, sub, actions, toolbar, detail, children }: { title: stri
   useEffect(() => () => { inspectSig.value = null; }, []);
   return <Page title={title} sub={sub} actions={actions} toolbar={toolbar} detail={detail || (inspectSig.value ? <Peeked /> : null)} tabs={isExternal() ? undefined : MAUNY_TABS}>{children}</Page>;
 }
-const sm = "h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs 2xl:text-sm font-medium";
+const sm = "h-7 px-2.5 rounded-md bg-c0 border border-line text-xs font-medium";
 const FY = ({ v, on }: { v: string; on: (v: string) => void }) => <select aria-label="Financial year" class={sm} value={v} onChange={(e) => on((e.target as HTMLSelectElement).value)}>{FYS.map((f) => <option key={f} value={f}>FY {f}</option>)}</select>;
 /** A figure with its rule always visible (tap ⓘ to expand formula + inputs). */
 function Fig({ label, value, note, dark, rule, inputs }: { label: string; value: string; note?: string; dark?: boolean; rule: string; inputs?: [string, string][] }) {
@@ -47,50 +47,69 @@ export function MaunyHome() {
   const full = can("mauny", "full");
   return (
     <Shell title="Mauny" sub="The money book — every rupee in and out of every account"
-      actions={full && <><Button variant="outline" onClick={() => setForm("transfer")}>Transfer</Button><Button variant="outline" onClick={() => { setForm("out"); setF({ ...f, kind: "expense" }); }}>Money out</Button><Button icon="plus" onClick={() => { setForm("in"); setF({ ...f, kind: "receipt" }); }}>Money in</Button></>}>
-      {form && (
-        <Card class="grid gap-2 grid-cols-2 md:grid-cols-6 items-end">
-          {form !== "transfer" ? <Field label="Kind"><select class={inputCls} value={f.kind} onChange={(e) => setF({ ...f, kind: (e.target as HTMLSelectElement).value as MoneyKind })}>{KINDS.filter((k) => (form === "in" ? k[2] > 0 : k[2] < 0)).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-            : <Field label="To account"><select class={inputCls} value={f.to} onChange={(e) => setF({ ...f, to: (e.target as HTMLSelectElement).value })}>{accs.filter((a) => a.id !== acc).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
-          <Field label={form === "transfer" ? "From" : "Account"}><select class={inputCls} value={acc} onChange={(e) => setAcc((e.target as HTMLSelectElement).value)}>{accs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-          <Field label="Amount ₹"><input class={inputCls} type="number" value={f.amount || ""} onInput={(e) => setF({ ...f, amount: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
-          <div class="col-span-2"><Field label="Note / party / invoice no."><input class={inputCls} value={f.note} onInput={(e) => setF({ ...f, note: (e.target as HTMLInputElement).value })} /></Field></div>
-          <div class="flex gap-2"><Button onClick={() => { if (!f.amount) return; if (form === "transfer") transfer(acc, f.to, f.amount, day); else addMoney({ date: day, account: acc, kind: f.kind, amount: form === "in" ? f.amount : -f.amount, note: f.note }); setForm(null); setF({ ...f, amount: 0, note: "" }); }}>Save</Button><Button variant="ghost" onClick={() => setForm(null)}>Cancel</Button></div>
-        </Card>
-      )}
-      <Section title="Balances" note={inr(total) + " total"}>
-        <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-          {accs.map((a) => (
-            <button key={a.id} onClick={() => setAcc(a.id)} class={`text-left rounded-[var(--radius-card)] p-3 md:p-4 cursor-pointer ${a.id === acc ? "bg-c4 text-c0" : "bg-c0"}`}>
-              <div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-extrabold mt-1">{inr(balanceOf(a.id))}</div>
-              <div class="text-xs opacity-80">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} statement lines to review</div>
-            </button>
+>
+      <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
+        {accs.map((a) => (
+          <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-[10px] px-3 py-2 cursor-pointer border ${a.id === acc ? "bg-c0 border-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
+            <div class="flex items-baseline justify-between gap-2"><span class="t-meta">{a.name}</span><span class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} to review</span></div>
+            <div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div>
+          </button>
+        ))}
+      </div>
+      <Section title="Day book" note={`${inr(total)} across accounts`} action={<span class="flex items-center gap-1"><button class={sm} onClick={() => shift(-1)} aria-label="Previous day">‹</button><input type="date" class={sm} value={day} onInput={(e) => setDay((e.target as HTMLInputElement).value)} /><button class={sm} onClick={() => shift(1)} aria-label="Next day">›</button></span>}>
+        <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
+          <div class="grid grid-cols-4 border-b border-line divide-x divide-line">
+            {([["Opening", d.opening], ["In", d.in], ["Out", -d.out], ["Closing", d.closing]] as const).map(([l, v]) => <div key={l} class="px-3 py-1.5 min-w-0"><div class="t-meta">{l}</div><div class="num text-[13px] font-semibold truncate">{inr(v)}</div></div>)}
+          </div>
+          {full && (form ? (
+            <div class="grid gap-2 grid-cols-2 md:grid-cols-[150px_150px_minmax(0,1fr)_120px_auto] items-end p-2 bg-c1/50 border-b border-line">
+              {form !== "transfer" ? <Field label="Kind"><select class={inputCls} value={f.kind} onChange={(e) => setF({ ...f, kind: (e.target as HTMLSelectElement).value as MoneyKind })}>{KINDS.filter((k) => (form === "in" ? k[2] > 0 : k[2] < 0)).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+                : <Field label="To account"><select class={inputCls} value={f.to} onChange={(e) => setF({ ...f, to: (e.target as HTMLSelectElement).value })}>{accs.filter((a) => a.id !== acc).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
+              <Field label={form === "transfer" ? "From" : "Account"}><select class={inputCls} value={acc} onChange={(e) => setAcc((e.target as HTMLSelectElement).value)}>{accs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+              <div class="col-span-2 md:col-span-1"><Field label="Note / party / invoice no."><input class={inputCls} value={f.note} onInput={(e) => setF({ ...f, note: (e.target as HTMLInputElement).value })} /></Field></div>
+              <Field label={form === "out" ? "Debit ₹" : "Credit ₹"}><input class={`${inputCls} num text-right`} type="number" value={f.amount || ""} onInput={(e) => setF({ ...f, amount: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
+              <div class="flex gap-1.5"><Button onClick={() => { if (!f.amount) return; if (form === "transfer") transfer(acc, f.to, f.amount, day); else addMoney({ date: day, account: acc, kind: f.kind, amount: form === "in" ? f.amount : -f.amount, note: f.note }); setForm(null); setF({ ...f, amount: 0, note: "" }); }}>Save</Button><Button variant="ghost" onClick={() => setForm(null)}>Cancel</Button></div>
+            </div>
+          ) : (
+            <div class="flex items-center gap-1 px-2 h-9 border-b border-line">
+              <button class="h-7 px-2 rounded-md text-[13px] font-medium text-c3 hover:bg-c1 hover:text-c4 cursor-pointer inline-flex items-center gap-1" onClick={() => { setForm("in"); setF({ ...f, kind: "receipt" }); }}><Icon name="plus" size={12} />Money in</button>
+              <button class="h-7 px-2 rounded-md text-[13px] font-medium text-c3 hover:bg-c1 hover:text-c4 cursor-pointer" onClick={() => { setForm("out"); setF({ ...f, kind: "expense" }); }}>Money out</button>
+              <button class="h-7 px-2 rounded-md text-[13px] font-medium text-c3 hover:bg-c1 hover:text-c4 cursor-pointer" onClick={() => setForm("transfer")}>Transfer</button>
+            </div>
           ))}
+          <Ledger acc={acc} upto={day} />
         </div>
       </Section>
-      <Section title="Day book" action={<span class="flex items-center gap-1"><button class={sm} onClick={() => shift(-1)} aria-label="Previous day">‹</button><input type="date" class={sm} value={day} onInput={(e) => setDay((e.target as HTMLInputElement).value)} /><button class={sm} onClick={() => shift(1)} aria-label="Next day">›</button></span>}>
-        <div class="grid grid-cols-4 gap-2"><Stat value={inr(d.opening)} label="Opening" /><Stat value={inr(d.in)} label="In" /><Stat value={inr(-d.out)} label="Out" /><Stat value={inr(d.closing)} label="Closing" /></div>
-        <Card>
-          {d.rows.length ? <Table rows={d.rows} rowKey={(m) => m.id} onRow={peek} cols={[
-            { key: "n", label: "Entry", render: (m) => <b>{m.note}</b> },
-            { key: "k", label: "Kind", render: (m) => m.kind.replace("_", " ") },
-            { key: "r", label: "Ref", render: (m) => m.ref ?? "—" },
-            { key: "s", label: "Source", render: (m) => m.source ?? "manual", hideTablet: true },
-            { key: "a", label: "Amount", align: "right", render: (m) => inr(m.amount) },
-          ]} /> : <Empty title="No entries this day" hint="Use ‹ › to step through days." />}
-        </Card>
-      </Section>
-      <Section title="Recent" note={`${moneySig.value.length} entries`}>
-        <Card>
-          <Table rows={[...moneySig.value].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12)} rowKey={(m) => m.id} onRow={peek} cols={[
-            { key: "n", label: "Entry", render: (m) => <b>{m.note}</b> }, { key: "d", label: "Date", render: (m) => shortDate(m.date) },
-            { key: "a", label: "Account", render: (m) => accs.find((a) => a.id === m.account)?.name ?? m.account },
-            { key: "k", label: "Kind", render: (m) => <Status tone={m.amount > 0 ? "done" : "active"}>{m.kind.replace("_", " ")}</Status> },
-            { key: "v", label: "Amount", align: "right", render: (m) => inr(m.amount) },
-          ]} />
-        </Card>
-      </Section>
     </Shell>
+  );
+}
+
+/** Running ledger for one account up to a day: date dividers, debit/credit split, running balance. Paged. */
+function Ledger({ acc, upto }: { acc: string; upto: string }) {
+  const [n, setN] = useState(30);
+  const rows = moneySig.value.filter((m) => m.account === acc && m.date <= upto).sort((a, b) => b.date.localeCompare(a.date));
+  let bal = balanceOf(acc, upto);
+  const withBal = rows.slice(0, n).map((m) => { const r = { m, bal }; bal -= m.amount; return r; });
+  const cols = "grid grid-cols-[minmax(0,1fr)_88px_88px] md:grid-cols-[minmax(0,1fr)_110px_96px_96px_110px] gap-x-3 items-center px-3";
+  if (!rows.length) return <p class="t-meta px-3 py-3">No entries on or before {shortDate(upto)}. Add one above.</p>;
+  let last = "";
+  return (
+    <div class="text-[13px]">
+      <div class={`${cols} h-7 t-meta uppercase tracking-[0.06em]`}><span>Entry</span><span class="hidden md:block">Kind</span><span class="text-right">Debit</span><span class="text-right">Credit</span><span class="hidden md:block text-right">Balance</span></div>
+      {withBal.map(({ m, bal }) => {
+        const div = m.date !== last ? (last = m.date, <div key={`d${m.date}`} class="px-3 h-6 flex items-center bg-c1/50 border-t border-line t-meta font-semibold">{new Date(m.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</div>) : null;
+        return [div, (
+          <button key={m.id} onClick={() => peek(m)} class={`${cols} w-full text-left h-9 border-t border-line hover:bg-c1/60 cursor-pointer`}>
+            <span class="min-w-0 truncate font-medium">{m.note || "—"}{m.ref && <span class="t-meta ml-1.5">{m.ref}</span>}</span>
+            <span class="hidden md:block t-meta truncate capitalize">{m.kind.replace("_", " ")}</span>
+            <span class="num text-right">{m.amount < 0 ? inr(-m.amount) : ""}</span>
+            <span class="num text-right">{m.amount > 0 ? inr(m.amount) : ""}</span>
+            <span class="hidden md:block num text-right text-c3">{inr(bal)}</span>
+          </button>
+        )];
+      })}
+      {rows.length > n && <button onClick={() => setN(n + 30)} class="w-full h-9 border-t border-line t-meta hover:bg-c1/60 cursor-pointer">Load 30 more · {rows.length - n} older</button>}
+    </div>
   );
 }
 
@@ -193,7 +212,7 @@ export function Finance() {
       </div>
       <SubTabs value={tab} onChange={setTab} items={[["today", `Do today (${doToday.length})`], ["expenses", "Expenses"], ["outstanding", "Outstanding by age"], ["receipts", "Receipts"]]} />
       <Card>
-        {tab === "today" && (doToday.length ? <ul class="text-sm">{doToday.map((t) => <li key={t} class="py-1.5 border-t border-c1 first:border-0">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
+        {tab === "today" && (doToday.length ? <ul class="text-sm">{doToday.map((t) => <li key={t} class="py-1.5 border-t border-line first:border-0">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
         {tab === "expenses" && <Table rows={[...expensesSig.value].filter((x) => x.date >= win[0] && x.date <= win[1]).sort((a, b) => b.date.localeCompare(a.date))} rowKey={(x) => x.id} onRow={peek} cols={[
           { key: "h", label: "Head", render: (x) => <b>{x.head}</b> }, { key: "d", label: "Date", render: (x) => shortDate(x.date) }, { key: "v", label: "Vendor", render: (x) => x.vendor },
           { key: "p", label: "Paid", render: (x) => <Status tone={x.paid ? "done" : "waiting"}>{x.paid ? "Paid" : "Unpaid"}</Status> },
@@ -300,7 +319,7 @@ export function Books() {
     { key: "t", label: "Taxable", align: "right" as const, render: (r: any) => inr(r.taxable) }, { key: "c", label: "CGST", align: "right" as const, render: (r: any) => inr(r.cgst), hideTablet: true },
     { key: "s", label: "SGST", align: "right" as const, render: (r: any) => inr(r.sgst), hideTablet: true }, { key: "i", label: "IGST", align: "right" as const, render: (r: any) => inr(r.igst), hideTablet: true },
     { key: "v", label: "Total", align: "right" as const, render: (r: any) => inr(r.total) }];
-  const Row = ({ l, v, b }: { l: string; v: number; b?: boolean }) => <div class={`flex justify-between py-1.5 border-t border-c1 text-sm ${b ? "font-semibold" : ""}`}><span>{l}</span><span class="num">{inr(v)}</span></div>;
+  const Row = ({ l, v, b }: { l: string; v: number; b?: boolean }) => <div class={`flex justify-between py-1.5 border-t border-line text-sm ${b ? "font-semibold" : ""}`}><span>{l}</span><span class="num">{inr(v)}</span></div>;
   let running = accountsSig.value.find((a) => a.id === acc)?.opening ?? 0;
   const bank = [...moneySig.value].filter((m) => m.account === acc).sort((a, b) => a.date.localeCompare(b.date)).map((m) => ({ ...m, bal: (running += m.amount) }));
   const pack = () => {
@@ -360,7 +379,7 @@ export function Gst() {
           <ul class="text-xs mt-2">
             {(tab === "purch" ? m.purch.map((b) => ({ k: b.id, a: `${b.vendor} · ${b.no}`, b: inr(b.tax), c: inr(b.total) }))
               : m.inv.filter((i) => (tab === "cn" ? i.kind === "credit" : i.kind === "invoice" && (tab === "b2b" ? !!i.gstin : !i.gstin))).map((i) => ({ k: i.id, a: `${i.no} · ${i.customer}${i.gstin ? " · " + i.gstin : ""}${i.status === "cancelled" ? " (cancelled)" : ""}`, b: inr(invTax(i).cgst + invTax(i).sgst + invTax(i).igst), c: inr(invTax(i).total) })))
-              .map((r) => <li key={r.k} class="flex justify-between gap-2 py-1.5 border-t border-c1"><span>{r.a}</span><span class="num whitespace-nowrap">{r.b} · {r.c}</span></li>)}
+              .map((r) => <li key={r.k} class="flex justify-between gap-2 py-1.5 border-t border-line"><span>{r.a}</span><span class="num whitespace-nowrap">{r.b} · {r.c}</span></li>)}
           </ul>
           <div class="flex flex-wrap gap-2 mt-3">
             <Button variant="outline" onClick={() => monthPack(m.k)}>Month pack</Button><Button variant="outline" onClick={() => window.print()}>Print</Button>
@@ -416,7 +435,7 @@ export function Reports() {
         <Card><CardTitle>Failure rate by machine (%)</CardTitle><Bars data={X.machineLog.map((m) => m.fail)} labels={X.machineLog.map((m) => m.printer)} /></Card>
         <Card><CardTitle>Machine utilisation (%)</CardTitle><Bars data={X.machineLog.map((m) => m.util)} labels={X.machineLog.map((m) => m.printer)} /></Card>
         <Card><CardTitle>Estimate vs logged consumption</CardTitle><div class="grid grid-cols-3 gap-2 text-sm"><Fact label="Estimated (all orders)" value={inr(est)} /><Fact label="Logged" value={inr(act)} /><Fact label="Orders with logs" value={String(byOrder.size)} /></div>
-          <ul class="text-xs mt-2">{[...byOrder].map(([no, v]) => { const x = o.find((y) => y.no === no); return <li key={no} class="flex justify-between border-t border-c1 py-1"><span>{no}</span><span class="num">{inr(v)} vs est. {inr(x ? cost(x) : 0)}</span></li>; })}</ul></Card>
+          <ul class="text-xs mt-2">{[...byOrder].map(([no, v]) => { const x = o.find((y) => y.no === no); return <li key={no} class="flex justify-between border-t border-line py-1"><span>{no}</span><span class="num">{inr(v)} vs est. {inr(x ? cost(x) : 0)}</span></li>; })}</ul></Card>
         <Card><CardTitle>Retail vs bulk vs in-house · count</CardTitle><Bars data={(["client", "bulk", "inhouse"] as const).map((t) => o.filter((x) => x.type === t).length)} labels={["Client", "Bulk", "In-house"]} /></Card>
       </div>
     </Shell>
