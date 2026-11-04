@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { cloudEnabled, cloudSignIn, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
+import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
@@ -116,25 +116,45 @@ function SettingsShell({ children }: { children: preact.ComponentChildren }) {
   );
 }
 
-const SYNC_LABEL: Record<SyncState, string> = { off: "Not configured", "signed-out": "Signed out", synced: "Synced", sending: "Sending…", offline: "Offline — changes queued", error: "Sync error" };
+const SYNC_LABEL: Record<SyncState, string> = { off: "Not configured", checking: "Connecting…", "signed-out": "Signed out", synced: "Synced", sending: "Sending…", offline: "Offline — changes queued", error: "Sync error" };
 function CloudCard() {
-  const [email, setEmail] = useState(me.value?.email ?? ""), [pw, setPw] = useState(""), [msg, setMsg] = useState("");
   const st = syncState.value, u = cloudUser.value;
-  if (!cloudEnabled) return null;
+  if (!cloudEnabled || !u) return null;
   const dot = st === "synced" ? "bg-c4" : st === "sending" ? "bg-c2" : "bg-warn";
   return (
     <Section title="Cloud sync" action={<span class="t-meta inline-flex items-center gap-1.5" role="status"><span class={`w-2 h-2 rounded-full ${dot}`} />{SYNC_LABEL[st]}</span>}>
-      <Card>
-        {u ? (
-          <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Signed in as <b>{u.email}</b> · changes appear on every device instantly.</span><Button variant="outline" onClick={() => cloudSignOut()}>Sign out of cloud</Button></div>
-        ) : (
-          <div class="grid sm:grid-cols-3 gap-3 items-end">
-            <Field label="Email"><input class={inputCls} type="email" value={email} onInput={(e) => setEmail((e.target as HTMLInputElement).value)} /></Field>
-            <Field label="Password"><input class={inputCls} type="password" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} /></Field>
-            <Button onClick={async () => { setMsg("Signing in…"); const e = await cloudSignIn(email, pw); setMsg(e ?? ""); if (!e) setPw(""); }}>Sign in to sync</Button>
-          </div>
-        )}
-        {msg && <p class="text-[13px] font-medium mt-2" role="status">{msg}</p>}
+      <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Signed in as <b>{u.username}</b> · changes appear on every device instantly.</span><Button variant="outline" onClick={() => cloudSignOut()}>Sign out</Button></Card>
+    </Section>
+  );
+}
+
+/** Owner-only: create logins, reset passwords, change roles, disable. Runs through the admin-users Edge Function. */
+function Accounts() {
+  const blank = { name: "", username: "", password: "", role: "operator" as Role };
+  const [f, setF] = useState(blank), [msg, setMsg] = useState(""), [busy, setBusy] = useState(false);
+  const run = async (body: Record<string, unknown>, ok: string) => { setBusy(true); const e = await adminUsers(body); setBusy(false); setMsg(e ?? ok); return !e; };
+  const set = (k: keyof typeof blank) => (e: Event) => setF({ ...f, [k]: (e.target as HTMLInputElement).value });
+  const logins = usersSig.value.filter((x) => x.login && /^[0-9a-f-]{36}$/.test(x.id));
+  return (
+    <Section title="Logins" note={`${logins.filter((x) => x.active).length} active`}>
+      <Card class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5 items-end">
+        <Field label="Name"><input class={inputCls} value={f.name} onInput={set("name")} /></Field>
+        <Field label="Username"><input class={inputCls} autocapitalize="none" value={f.username} onInput={set("username")} /></Field>
+        <Field label="Password (8+)"><input class={inputCls} type="password" autocomplete="new-password" value={f.password} onInput={set("password")} /></Field>
+        <Field label="Access role"><select class={inputCls} value={f.role} onChange={set("role")}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select></Field>
+        <Button disabled={busy} onClick={async () => { if (await run({ action: "create", ...f }, `Created ${f.username}`)) setF(blank); }}>Create login</Button>
+      </Card>
+      {msg && <p class="text-[13px] font-medium px-1" role="status">{msg}</p>}
+      <Card class="!py-1">
+        <Table rows={logins} rowKey={(m) => m.id} cols={[
+          { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
+          { key: "u", label: "Username", render: (m) => m.email },
+          { key: "r", label: "Access", render: (m) => <select class={inputCls} value={m.role} disabled={busy || m.id === me.value?.id} onChange={(e) => run({ action: "update", user_id: m.id, role: (e.target as HTMLSelectElement).value }, `Role updated for ${m.email}`)}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select> },
+          { key: "a", label: "", render: (m) => <div class="flex gap-2 justify-end">
+            <Button variant="ghost" disabled={busy} onClick={() => { const p = prompt(`New password for ${m.email} (8+ characters)`); if (p) run({ action: "reset_password", user_id: m.id, password: p }, `Password reset for ${m.email}`); }}>Reset password</Button>
+            {m.id !== me.value?.id && <Button variant="ghost" disabled={busy} onClick={() => run({ action: "update", user_id: m.id, active: !m.active }, `${m.email} ${m.active ? "disabled" : "enabled"}`)}>{m.active ? "Disable" : "Enable"}</Button>}
+          </div> },
+        ]} />
       </Card>
     </Section>
   );
@@ -181,6 +201,7 @@ export function Users() {
           ]} />
         </div>
       </Disclosure>
+      {cloudEnabled && owner && <Accounts />}
       <Section title="Team & users" note={`${usersSig.value.filter((u) => u.active).length} active`} action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true, login: false, job: "" })}>Add person</Button>}>
         <p class="t-meta px-1">One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</p>
         {edit && (

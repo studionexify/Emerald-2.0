@@ -7,14 +7,18 @@
  */
 import { signal } from "@preact/signals";
 import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
+import { sessionSig, usersSig, type Role } from "./auth";
 import { allRecords, applyRemote, localGet, localSet, setSyncSink, type Change } from "./store";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 export const cloudEnabled = !!(URL_ && KEY);
-export type SyncState = "off" | "signed-out" | "synced" | "sending" | "offline" | "error";
-export const syncState = signal<SyncState>(cloudEnabled ? "signed-out" : "off");
-export const cloudUser = signal<{ email: string; org: string; role: string } | null>(null);
+export type SyncState = "off" | "checking" | "signed-out" | "synced" | "sending" | "offline" | "error";
+export const syncState = signal<SyncState>(cloudEnabled ? "checking" : "off");
+export const cloudUser = signal<{ id: string; username: string; org: string; role: Role } | null>(null);
+export const DOMAIN = "emerald.app";
+export const toEmail = (username: string) => (username.includes("@") ? username : `${username.trim().toLowerCase()}@${DOMAIN}`);
+type Member = { user_id: string; org: string; role: Role; username: string; name: string; active: boolean };
 
 let sb: SupabaseClient | null = null;
 let channel: RealtimeChannel | null = null;
@@ -88,18 +92,36 @@ async function heartbeat() {
   if (!error) localSet("sync:beat", day);
 }
 
-async function start(email: string) {
-  const { data, error } = await (await client()).from("members").select("org,role").maybeSingle();
-  if (error || !data) { syncState.value = "error"; return; }
-  org = data.org; cloudUser.value = { email, org, role: data.role };
+/** Members are the source of truth for who can sign in and with which role; mirror them into the app's roster. */
+function mirrorMembers(ms: Member[]) {
+  const byId = new Map(usersSig.value.map((u) => [u.id, u]));
+  for (const m of ms) {
+    const prev = byId.get(m.user_id);
+    byId.set(m.user_id, { ...(prev ?? { job: "", pass: "" }), id: m.user_id, name: m.name || m.username, email: m.username, role: m.role, active: m.active, login: true } as any);
+  }
+  usersSig.value = [...byId.values()];
+}
+let memberChannel: RealtimeChannel | null = null;
+export async function loadMembers() {
+  const { data } = await (await client()).from("members").select("user_id,org,role,username,name,active").eq("org", org);
+  mirrorMembers((data ?? []) as Member[]);
+}
+
+async function start(userId: string) {
+  const c = await client();
+  const { data, error } = await c.from("members").select("user_id,org,role,username,name,active").eq("user_id", userId).maybeSingle();
+  if (error || !data || !data.active) { syncState.value = "error"; await c.auth.signOut(); return; }
+  org = data.org; cloudUser.value = { id: userId, username: data.username, org, role: data.role };
   const firstSync = await catchUp().catch(() => false);
   if (firstSync && localGet("sync:seeded:" + org, false) === false) {
-    // A business with no cloud data yet takes this device's data as the starting point.
-    const { count } = await sb!.from("records").select("id", { count: "exact", head: true }).eq("org", org);
+    const { count } = await c.from("records").select("id", { count: "exact", head: true }).eq("org", org);
     if (!count) enqueue(allRecords());
     localSet("sync:seeded:" + org, true);
   }
   setSyncSink(enqueue);
+  await loadMembers();
+  sessionSig.value = { userId, at: Date.now() };
+  memberChannel = c.channel("members:" + org).on("postgres_changes", { event: "*", schema: "public", table: "members", filter: `org=eq.${org}` }, () => loadMembers()).subscribe();
   listen(); push(); heartbeat();
 }
 
@@ -110,12 +132,26 @@ export async function initSync() {
   addEventListener("offline", () => (syncState.value = "offline"));
   document.addEventListener("visibilitychange", () => { if (document.hidden) push(); });
   c.auth.onAuthStateChange((ev, s) => {
-    if (ev === "SIGNED_OUT") { channel?.unsubscribe(); setSyncSink(null); org = ""; cloudUser.value = null; syncState.value = "signed-out"; }
-    else if (s?.user && !org && (ev === "SIGNED_IN" || ev === "INITIAL_SESSION")) start(s.user.email ?? "");
+    if (ev === "SIGNED_OUT") { channel?.unsubscribe(); memberChannel?.unsubscribe(); setSyncSink(null); org = ""; cloudUser.value = null; sessionSig.value = null; syncState.value = "signed-out"; }
+    else if (s?.user && !org && (ev === "SIGNED_IN" || ev === "INITIAL_SESSION")) setTimeout(() => start(s.user.id));
+    else if (ev === "INITIAL_SESSION" && !s) syncState.value = "signed-out";
   });
 }
-export async function cloudSignIn(email: string, password: string) {
-  const { error } = await (await client()).auth.signInWithPassword({ email, password });
-  return error?.message ?? null;
+export async function cloudSignIn(username: string, password: string) {
+  const { error } = await (await client()).auth.signInWithPassword({ email: toEmail(username), password });
+  return error ? (error.message.includes("Invalid") ? "Username or password is wrong" : error.message) : null;
 }
-export async function cloudSignOut() { await (await client()).auth.signOut(); }
+/** Signing out also clears this device's copy, so a shared iPad never shows the previous person's data. */
+export async function cloudSignOut() {
+  await push().catch(() => {});
+  await (await client()).auth.signOut();
+  try { Object.keys(localStorage).filter((k) => k.startsWith("emerald:")).forEach((k) => localStorage.removeItem(k)); } catch {}
+  location.reload();
+}
+/** Owner-only account actions, executed by the admin-users Edge Function. */
+export async function adminUsers(body: Record<string, unknown>): Promise<string | null> {
+  const { data, error } = await (await client()).functions.invoke("admin-users", { body });
+  if (error) { try { return (await (error as any).context.json()).error; } catch { return error.message; } }
+  await loadMembers();
+  return (data as any)?.error ?? null;
+}

@@ -2,6 +2,8 @@ import { lazy, navigate, path } from "./router";
 import { can, isExternal, me, moduleOf, sessionSig, usersSig } from "./data";
 import { Frame } from "./frame/Frame";
 import { Empty, Page } from "./ui";
+import { cloudEnabled, syncState } from "./data/sync";
+import { SignIn } from "./frame/SignIn";
 
 const L = <T extends Record<string, any>>(load: () => Promise<T>, name: keyof T) => lazy(() => load().then((m) => m[name]));
 const D = (load: () => Promise<{ default: any }>) => lazy(() => load().then((m) => m.default));
@@ -66,6 +68,11 @@ function NoAccess() {
   return <Page title="No access"><Empty title="Your role can't open this page" hint="Ask the owner to change your role in Settings → Users & roles." /></Page>;
 }
 export function App() {
+  if (cloudEnabled) {
+    const st = syncState.value;
+    if (st === "checking") return null;
+    if (!me.value) return st === "signed-out" || st === "error" ? <SignIn /> : null;
+  }
   if (!me.value) { sessionSig.value = { userId: usersSig.value.find((u) => u.role === "owner")!.id, at: Date.now() }; return null; }
   if (isExternal() && !path.value.startsWith("/mauny/gst") && path.value !== "/settings") { navigate("/mauny/gst"); return null; }
   const C = path.value === "/search" ? SearchPage : table.get(path.value) ?? NotFound;
