@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { cloudEnabled, cloudSignIn, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
@@ -115,6 +116,30 @@ function SettingsShell({ children }: { children: preact.ComponentChildren }) {
   );
 }
 
+const SYNC_LABEL: Record<SyncState, string> = { off: "Not configured", "signed-out": "Signed out", synced: "Synced", sending: "Sending…", offline: "Offline — changes queued", error: "Sync error" };
+function CloudCard() {
+  const [email, setEmail] = useState(me.value?.email ?? ""), [pw, setPw] = useState(""), [msg, setMsg] = useState("");
+  const st = syncState.value, u = cloudUser.value;
+  if (!cloudEnabled) return null;
+  const dot = st === "synced" ? "bg-c4" : st === "sending" ? "bg-c2" : "bg-warn";
+  return (
+    <Section title="Cloud sync" action={<span class="t-meta inline-flex items-center gap-1.5" role="status"><span class={`w-2 h-2 rounded-full ${dot}`} />{SYNC_LABEL[st]}</span>}>
+      <Card>
+        {u ? (
+          <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Signed in as <b>{u.email}</b> · changes appear on every device instantly.</span><Button variant="outline" onClick={() => cloudSignOut()}>Sign out of cloud</Button></div>
+        ) : (
+          <div class="grid sm:grid-cols-3 gap-3 items-end">
+            <Field label="Email"><input class={inputCls} type="email" value={email} onInput={(e) => setEmail((e.target as HTMLInputElement).value)} /></Field>
+            <Field label="Password"><input class={inputCls} type="password" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} /></Field>
+            <Button onClick={async () => { setMsg("Signing in…"); const e = await cloudSignIn(email, pw); setMsg(e ?? ""); if (!e) setPw(""); }}>Sign in to sync</Button>
+          </div>
+        )}
+        {msg && <p class="text-[13px] font-medium mt-2" role="status">{msg}</p>}
+      </Card>
+    </Section>
+  );
+}
+
 export function Profile() {
   const [cur, setCur] = useState(""), [nx, setNx] = useState(""), [msg, setMsg] = useState("");
   const u = me.value!;
@@ -136,6 +161,7 @@ export function Profile() {
         <div class="h-3" />
         {msg && <p class="text-[13px] font-medium mt-2" role="status">{msg}</p>}
       </Disclosure>
+      <CloudCard />
       {can("settings", "full") && <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Prototype data is saved on this device.</span><Button variant="outline" onClick={() => confirm("Erase all local data and reload the sample data?") && resetAll()}>Reset sample data</Button></Card>}
     </SettingsShell>
   );
