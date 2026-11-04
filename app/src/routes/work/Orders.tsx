@@ -5,7 +5,7 @@ import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilt
 
 export default function Orders() {
   const [f, setF] = useState<TypeFilter>("all");
-  const [view, setView] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "list">("list");
   const [open, setOpen] = useState<Order | null>(null);
   const [creating, setCreating] = useState(false);
   const cur = open && (ordersSig.value.find((o) => o.id === open.id) ?? open);

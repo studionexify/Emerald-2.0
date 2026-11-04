@@ -237,7 +237,7 @@ export function Goals() {
   return (
     <Shell title="Goals" sub="A number and a window — measured off the ledger, never stored"
       actions={<Button icon="plus" onClick={() => setEdit({ id: uid(), title: "", metric: "revenue", start: today().slice(0, 8) + "01", end: today(), period: "This month", target: 100000, note: "", archived: false })}>New goal</Button>}
-      toolbar={<div class="flex gap-2"><Chip active={!arch} onClick={() => setArch(false)}>Active</Chip><Chip active={arch} onClick={() => setArch(true)}>Archived</Chip></div>}
+      toolbar={<div class="inline-flex gap-0.5 p-0.5 rounded-lg bg-c1"><Chip active={!arch} onClick={() => setArch(false)}>Active</Chip><Chip active={arch} onClick={() => setArch(true)}>Archived</Chip></div>}
       detail={edit && (
         <div>
           <DetailHead title={edit.title || "New goal"} onClose={() => setEdit(null)} />
@@ -255,21 +255,21 @@ export function Goals() {
         </div>
       )}>
       {!list.length ? <Empty title={arch ? "No archived goals" : "No active goals"} /> : (
-        <div class="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+        <div class="listbox">
           {list.map((g) => {
             const p = goalProgress(g, ordersSig.value);
             const fmt = (n: number) => (money(g.metric) ? inr(n) : g.metric === "margin_pct" ? `${n}%` : String(n));
             return (
-              <Card key={g.id}>
-                <div class="flex justify-between gap-2 text-xs text-c3"><span>{GOAL_LABEL[g.metric]}</span><span>{g.period}</span></div>
-                <div class="font-semibold mt-0.5">{g.title}</div>
-                <div class="flex justify-between items-baseline mt-2"><span class="num text-xl md:text-2xl font-extrabold">{fmt(p.value)}</span><span class="num text-sm">{p.pct}%</span></div>
-                <div class="relative mt-1"><Progress value={p.pct} /><span class="absolute -top-1 h-4 w-0.5 bg-c3" style={{ left: `${Math.min(100, p.pace)}%` }} title="Where today sits in the window" /></div>
-                <div class="flex justify-between text-xs mt-1.5"><span class="text-c3">of {fmt(g.target)}</span>{p.behind ? <Status tone="blocked">{g.metric === "expense_cap" ? "over pace" : "behind pace"}</Status> : <Status tone="done">on pace</Status>}</div>
-                {g.metric === "custom" && <p class="text-[11px] text-c3 mt-1">Moved by hand — not measured.</p>}
-                {g.note && <p class="text-xs text-c3 mt-1">“{g.note}”</p>}
-                <div class="flex gap-1 mt-2"><Button variant="ghost" onClick={() => setEdit(g)}>Edit</Button><Button variant="ghost" onClick={() => save({ ...g, archived: !g.archived })}>{g.archived ? "Restore" : "Archive"}</Button></div>
-              </Card>
+              <div key={g.id} class="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_minmax(0,170px)_110px_auto] gap-x-4 gap-y-1 items-center px-3 py-2 text-[13px]">
+                <span class="min-w-0"><span class="block font-medium truncate">{g.title}</span><span class="block t-meta truncate">{GOAL_LABEL[g.metric]} · {g.period}{g.metric === "custom" ? " · by hand" : ""}{g.note ? ` · “${g.note}”` : ""}</span></span>
+                <span class="relative block col-span-2 md:col-span-1 order-last md:order-none">
+                  <span class="block h-1 rounded-full bg-c1 overflow-hidden"><span class={`block h-full rounded-full ${p.behind ? "bg-warn" : "bg-c4"}`} style={{ width: `${Math.min(100, p.pct)}%` }} /></span>
+                  <span class="absolute -top-1 h-3 w-px bg-c3" style={{ left: `${Math.min(100, p.pace)}%` }} title="Where today sits in the window" />
+                </span>
+                <span class="hidden md:block num text-right whitespace-nowrap truncate">{fmt(p.value)} <span class="t-meta">of {fmt(g.target)} · {p.pct}%</span></span>
+                <span class="text-[11px] font-semibold whitespace-nowrap">{p.behind ? <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-warn" />{g.metric === "expense_cap" ? "Over pace" : "Behind pace"}</span> : <span class="text-c3">On track</span>}</span>
+                <span class="hidden md:flex gap-1 justify-end"><Button variant="ghost" class="!h-7 !px-2" onClick={() => setEdit(g)}>Edit</Button><Button variant="ghost" class="!h-7 !px-2" onClick={() => save({ ...g, archived: !g.archived })}>{g.archived ? "Restore" : "Archive"}</Button></span>
+              </div>
             );
           })}
         </div>

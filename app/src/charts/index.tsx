@@ -1,5 +1,5 @@
 /** Tiny SVG charts: primary series black, secondary mid-grey. */
-export function Bars({ data, labels, height = 140 }: { data: number[]; labels: string[]; height?: number }) {
+export function Bars({ data, labels, height = 110 }: { data: number[]; labels: string[]; height?: number }) {
   const max = Math.max(1, ...data.map(Math.abs));
   const hasNeg = data.some((d) => d < 0);
   const zero = hasNeg ? height / 2 : height;
@@ -17,7 +17,7 @@ export function Bars({ data, labels, height = 140 }: { data: number[]; labels: s
   );
 }
 
-export function Line({ a, b, labels, height = 140 }: { a: number[]; b?: number[]; labels: string[]; height?: number }) {
+export function Line({ a, b, labels, height = 110 }: { a: number[]; b?: number[]; labels: string[]; height?: number }) {
   const all = [...a, ...(b ?? [])];
   const max = Math.max(...all), min = Math.min(...all);
   const pts = (s: number[]) => s.map((v, i) => `${(i / (s.length - 1)) * 100},${height - 6 - ((v - min) / (max - min || 1)) * (height - 12)}`).join(" ");

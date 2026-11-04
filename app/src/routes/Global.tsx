@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
-import { Pick, Button, Card, CardTitle, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
+import { KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
 
@@ -120,9 +120,11 @@ export function Profile() {
   const u = me.value!;
   return (
     <SettingsShell>
-      <Card class="flex flex-col gap-3">
-        <div class="text-sm"><b>{u.name}</b> · {u.email} · {ROLE_LABEL[u.role]}</div>
-        <p class="text-xs text-c3">Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</p>
+      <Section title="Account">
+        <Card class="!py-1"><KV label="Name" value={u.name} /><KV label="Email" value={u.email} /><KV label="Access role" value={ROLE_LABEL[u.role]} /></Card>
+        <p class="t-meta px-1">Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</p>
+      </Section>
+      <Disclosure title="Password & passkey">
         <div class="grid sm:grid-cols-2 gap-3">
           <Field label="Current password"><input class={inputCls} type="password" value={cur} onInput={(e) => setCur((e.target as HTMLInputElement).value)} /></Field>
           <Field label="New password (8+ characters)"><input class={inputCls} type="password" value={nx} onInput={(e) => setNx((e.target as HTMLInputElement).value)} /></Field>
@@ -131,8 +133,9 @@ export function Profile() {
           <Button onClick={() => { const e = changePassword(cur, nx); setMsg(e ?? "Password changed"); if (!e) { setCur(""); setNx(""); } }}>Change password</Button>
           <Button variant="outline" onClick={() => setMsg("Passkey quick-unlock needs the server (WebAuthn) — arrives with the backend.")}>Set up passkey</Button>
         </div>
-        {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
-      </Card>
+        <div class="h-3" />
+        {msg && <p class="text-[13px] font-medium mt-2" role="status">{msg}</p>}
+      </Disclosure>
       {can("settings", "full") && <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Prototype data is saved on this device.</span><Button variant="outline" onClick={() => confirm("Erase all local data and reload the sample data?") && resetAll()}>Reset sample data</Button></Card>}
     </SettingsShell>
   );
@@ -144,22 +147,22 @@ export function Users() {
   const owner = can("settings", "full");
   return (
     <SettingsShell>
-      <Section title="Role matrix">
-        <Card class="!py-1">
+      <Disclosure title="Role matrix" meta={`${Object.keys(MATRIX).length} roles`}>
+        <div>
           <Table rows={Object.keys(MATRIX).map((r) => ({ r: r as Role }))} rowKey={(x) => x.r} cols={[
             { key: "r", label: "Role", render: (x) => <b>{ROLE_LABEL[x.r]}</b> },
             ...mods.map((m) => ({ key: m, label: m, render: (x: { r: Role }) => MATRIX[x.r][m] ?? "none" })),
           ]} />
-        </Card>
-      </Section>
+        </div>
+      </Disclosure>
       <Section title="Team & users" note={`${usersSig.value.filter((u) => u.active).length} active`} action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true, login: false, job: "" })}>Add person</Button>}>
-        <p class="text-xs text-c3">One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</p>
+        <p class="t-meta px-1">One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</p>
         {edit && (
           <Card class="grid gap-3 sm:grid-cols-3 xl:grid-cols-6 items-end">
             <Field label="Name"><input class={inputCls} value={edit.name} onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Email"><input class={inputCls} value={edit.email} onInput={(e) => setEdit({ ...edit, email: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Job title"><input class={inputCls} value={edit.job} onInput={(e) => setEdit({ ...edit, job: (e.target as HTMLInputElement).value })} /></Field>
-            <label class="flex items-center gap-2 text-sm h-10"><input type="checkbox" checked={edit.login} onChange={() => setEdit({ ...edit, login: !edit.login })} /> Can log in</label>
+            <label class="flex items-center gap-2 text-[13px] h-8"><input type="checkbox" checked={edit.login} onChange={() => setEdit({ ...edit, login: !edit.login })} /> Can log in</label>
             <Field label="Access role"><select class={inputCls} value={edit.role} onChange={(e) => setEdit({ ...edit, role: (e.target as HTMLSelectElement).value as Role })}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select></Field>
             <div class="flex gap-2"><Button onClick={() => { saveUser(edit); setEdit(null); }}>Save</Button><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button></div>
           </Card>
@@ -188,7 +191,7 @@ export function Business() {
       <Card class="grid sm:grid-cols-2 gap-3">
         {f("name", "Business name")}{f("gstin", "GSTIN")}{f("pan", "PAN")}{f("udyam", "Udyam (MSME) no.")}{f("phone", "Phone")}{f("email", "Email")}
         {f("address", "Address", true)}{f("bank", "Bank (shown on invoices)", true)}{f("series", "Invoice series")}{f("terms", "Terms printed on documents", true)}
-        <p class="sm:col-span-2 text-xs text-c3">Saved as you type · printed on every quotation, invoice and credit note.</p>
+        <p class="sm:col-span-2 t-meta">Saved as you type · printed on every quotation, invoice and credit note.</p>
       </Card>
     </SettingsShell>
   );
@@ -237,11 +240,11 @@ export function Search() {
   return (
     <Page title="Search" sub="Orders, customers, invoice and quote numbers, bills, every page">
       {!q ? <Empty title="Type in the search bar" hint="Ctrl / ⌘ K focuses it from anywhere." /> : !any ? <Empty title={`Nothing matches “${searchQ.value}”`} /> : (
-        <div class="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+        <div class="flex flex-col gap-2">
           {groups.filter(([, l]) => l.length).map(([g, l]) => (
-            <Card key={g}><CardTitle action={<span class="text-xs text-c3">{l.length}</span>}>{g}</CardTitle>
-              <ul>{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-line first:border-0"><a href={r.href} class="block py-1.5 text-sm"><b>{r.t}</b> <span class="text-c3 text-xs">{r.d}</span></a></li>)}</ul>
-            </Card>
+            <Disclosure key={g} open title={g} meta={String(l.length)}>
+              <ul class="-mx-3 border-t border-line">{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-line first:border-0"><a href={r.href} class="flex items-center gap-3 h-9 px-3 hover:bg-c1/60 min-w-0"><span class="text-[13px] font-medium truncate">{r.t}</span><span class="t-meta ml-auto whitespace-nowrap capitalize">{r.d}</span></a></li>)}</ul>
+            </Disclosure>
           ))}
         </div>
       )}
