@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SETTINGS_TABS } from "../nav";
-import { Pick, Button, Card, CardTitle, Empty, Field, Icon, inputCls, Page, Section, Status, Table } from "../ui";
+import { Pick, Button, Card, CardTitle, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
 
@@ -22,17 +22,17 @@ export function Todo() {
   return (
     <Page title="To-do" sub="Master list — every task can link to an order, job, printer, bill…" actions={<Button icon="plus" onClick={() => r.add()}>New task</Button>} detail={r.detail}
       toolbar={<Pick title="Show" value={f} on={setF} items={["open", "mine", "done", "repeat"] as const} label={(k) => ({ open: `Open (${tasks.filter((t) => !t.done).length})`, mine: "Mine", done: "Done", repeat: "Recurring" })[k]} />}>
-      <Card>
+      <Card class="!py-1">
         {list.length ? <ul>
           {list.map((t) => (
-            <li key={t.id} class="flex items-center gap-3 py-2.5 border-t border-line first:border-0">
+            <li key={t.id} class="flex items-center gap-3 min-h-10 py-1.5 border-t border-line first:border-0">
               <button aria-label={t.done ? "Mark open" : "Mark done"} onClick={() => { tasksSig.value = tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)); log(t.done ? "Reopened task" : "Completed task", t.title); }}
-                class={`w-6 h-6 rounded-md border-2 border-c4 shrink-0 cursor-pointer flex items-center justify-center ${t.done ? "bg-c4 text-c0" : ""}`}>{t.done && <Icon name="check" size={14} />}</button>
+                class={`w-4 h-4 rounded-full border-[1.5px] border-c3 shrink-0 cursor-pointer flex items-center justify-center ${t.done ? "bg-c4 text-c0" : ""}`}>{t.done && <Icon name="check" size={10} />}</button>
               <button class="flex-1 min-w-0 text-left cursor-pointer" onClick={() => r.open(t)}>
-                <div class={`text-sm font-semibold ${t.done ? "line-through text-c3 font-normal" : ""}`}>{t.title}{t.priority === "High" && <span class="ml-2 text-[10px] uppercase tracking-wider font-extrabold">High</span>}</div>
-                <div class="text-xs text-c3">{t.who} · due {shortDate(t.due)}{t.repeat ? ` · repeats ${t.repeat}` : ""}</div>
+                <div class={`text-[13px] font-medium truncate ${t.done ? "line-through text-c3 font-normal" : ""}`}>{t.title}{t.priority === "High" && <span class="ml-2 text-[10px] uppercase tracking-wider font-extrabold">High</span>}</div>
+                <div class="t-meta">{t.who} · due {shortDate(t.due)}{t.repeat ? ` · repeats ${t.repeat}` : ""}</div>
               </button>
-              {t.link && <span class="hidden sm:inline text-xs bg-c1 rounded-full px-3 py-1 whitespace-nowrap">{t.link.kind} · {t.link.ref}</span>}
+              {t.link && <span class="hidden sm:inline text-[11px] bg-c1 rounded px-1.5 h-5 leading-5 whitespace-nowrap">{t.link.kind} · {t.link.ref}</span>}
             </li>
           ))}
         </ul> : <Empty title="Nothing here" action={<Button icon="plus" onClick={() => r.add()}>New task</Button>} />}
@@ -49,7 +49,7 @@ export function Logs() {
   return (
     <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account" detail={open && <Inspect title={open.action} row={{ when: open.at, who: open.who, action: open.action, record: open.target, kind: open.kind ?? "order" }} onClose={() => setOpen(null)} />}
       toolbar={<div class="flex flex-wrap items-center gap-2"><Pick title="Kind" value={kind} on={setKind} items={["all", "order", "consumption", "stock", "money"]} label={(x) => x === "all" ? "All kinds" : x[0].toUpperCase() + x.slice(1)} /><Pick title="Who" value={who} on={setWho} items={people} label={(p) => (p === "all" ? "Everyone" : p)} /></div>}>
-      <Card>
+      <Card class="!py-1">
         <Table rows={logsSig.value.filter((l) => (who === "all" || l.who === who) && (kind === "all" || (l.kind ?? "order") === kind))} rowKey={(l) => l.id} onRow={setOpen} cols={[
           { key: "x", label: "Action", render: (l) => l.action },
           { key: "t", label: "Record", render: (l) => l.target },
@@ -72,7 +72,7 @@ export function Bin() {
       {!items.length && <Card><Empty title="The Bin is empty" hint="Deleted records stay here for 7 days." /></Card>}
       {kinds.map((k) => (
         <Section key={k} title={k} note={String(items.filter((b) => b.kind === k).length)}>
-          <Card>
+          <Card class="!py-1">
             <Table rows={items.filter((b) => b.kind === k)} rowKey={(b) => b.id} onRow={setOpen} cols={[
               { key: "l", label: "Record", render: (b) => b.label },
               { key: "d", label: "Deleted", render: (b) => `${shortDate(b.deletedAt)} by ${b.by}` },
@@ -91,17 +91,16 @@ export function Alerts() {
   const groups = Object.entries(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value));
   return (
     <Page title="Attention" sub="What needs action — escalates on age, every row links to its record">
-      <div class="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
+      <div class="flex flex-col gap-2">
         {groups.map(([g, list]) => (
-          <Card key={g}>
-            <CardTitle action={<span class="num text-xs text-c3">{list.length}</span>}>{g}</CardTitle>
-            <ul class="flex flex-col">
+          <Disclosure key={g} open={list.length > 0} title={<span class="inline-flex items-center gap-2">{g}{list.some((a) => a.t === "danger") && <span class="w-1.5 h-1.5 rounded-full bg-warn" />}</span>} meta={`${list.length} · ${list.filter((a) => a.t === "danger").length} critical`}>
+            <ul class="-mx-3 border-t border-line">
               {[...list].sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t)).map((a, i) => (
-                <li key={i} class="border-t border-line first:border-0"><a href={a.href} class="flex items-start gap-2 py-2 text-sm"><Status tone={tone[a.t]}>{""}</Status><span class="min-w-0">{a.text}</span></a></li>
+                <li key={i} class="border-t border-line first:border-0"><a href={a.href} class="flex items-center gap-3 h-9 px-3 hover:bg-c1/60 min-w-0"><span class={`w-1.5 h-1.5 rounded-full shrink-0 ${a.t === "danger" ? "bg-warn" : a.t === "warn" ? "bg-c4" : "bg-c2"}`} /><span class="text-[13px] min-w-0 truncate flex-1">{a.text}</span><span class="t-meta whitespace-nowrap">{tone[a.t] === "blocked" ? "Critical" : tone[a.t] === "waiting" ? "Action" : "Upcoming"}</span></a></li>
               ))}
-              {!list.length && <li class="text-sm text-c3 py-1">Nothing here — all clear.</li>}
+              {!list.length && <li class="t-meta px-3 py-2">All clear.</li>}
             </ul>
-          </Card>
+          </Disclosure>
         ))}
       </div>
     </Page>
@@ -146,7 +145,7 @@ export function Users() {
   return (
     <SettingsShell>
       <Section title="Role matrix">
-        <Card>
+        <Card class="!py-1">
           <Table rows={Object.keys(MATRIX).map((r) => ({ r: r as Role }))} rowKey={(x) => x.r} cols={[
             { key: "r", label: "Role", render: (x) => <b>{ROLE_LABEL[x.r]}</b> },
             ...mods.map((m) => ({ key: m, label: m, render: (x: { r: Role }) => MATRIX[x.r][m] ?? "none" })),
@@ -165,7 +164,7 @@ export function Users() {
             <div class="flex gap-2"><Button onClick={() => { saveUser(edit); setEdit(null); }}>Save</Button><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button></div>
           </Card>
         )}
-        <Card>
+        <Card class="!py-1">
           <Table rows={usersSig.value} rowKey={(m) => m.id} onRow={owner ? setEdit : undefined} cols={[
             { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
             { key: "j", label: "Job", render: (m) => m.job || "—" },
@@ -204,7 +203,7 @@ export function Integrations() {
   ];
   return (
     <SettingsShell>
-      <Card>
+      <Card class="!py-1">
         <Table rows={rows} rowKey={(r) => r.id} cols={[
           { key: "n", label: "Service", render: (r) => <b>{r.n}</b> }, { key: "d", label: "What it does", render: (r) => r.d },
           { key: "s", label: "Status", render: (r) => <Status tone={r.s ? "done" : "waiting"}>{r.s ? "Connected" : "Not set"}</Status> },

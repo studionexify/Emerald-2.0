@@ -20,7 +20,7 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
 }
 
 export function Card({ children, class: c, dark, dashed }: { children: ComponentChildren; class?: string; dark?: boolean; dashed?: boolean }) {
-  const base = dark ? "bg-c4 text-c0" : dashed ? "bg-transparent border border-dashed border-c2" : "bg-c0 border border-line";
+  const base = dark ? "bg-c0 border border-c4" : dashed ? "bg-transparent border border-dashed border-c2" : "bg-c0 border border-line";
   return <section class={`rounded-[var(--radius-card)] p-3 md:p-4 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
 }
 
@@ -33,9 +33,9 @@ export function CardTitle({ children, action }: { children: ComponentChildren; a
   );
 }
 
-export function Stat({ value, label, dark }: { value: string | number; label: string; dark?: boolean }) {
+export function Stat({ value, label }: { value: string | number; label: string; dark?: boolean }) {
   return (
-    <div class={`rounded-[10px] px-3 py-2 min-w-0 flex flex-col justify-center ${dark ? "bg-c0 text-c4" : "bg-c0 border border-line"}`}>
+    <div class={`rounded-[10px] px-3 py-2 min-w-0 flex flex-col justify-center bg-c0 border border-line`}>
       <div class="t-meta truncate">{label}</div>
       <div class="num text-[17px] font-semibold leading-tight mt-0.5">{value}</div>
     </div>

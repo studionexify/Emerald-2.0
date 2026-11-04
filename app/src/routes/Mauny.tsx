@@ -3,7 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
-import { Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
+import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
 import {
   accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, books, can, confirmBill, confirmLine, consSig, csv, daySummary, download, expensesSig,
   financeSummary, fyOf, GOAL_HINT, GOAL_LABEL, goalProgress, goalsSig, gstMonths, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
@@ -22,13 +22,13 @@ const FY = ({ v, on }: { v: string; on: (v: string) => void }) => <select aria-l
 function Fig({ label, value, note, dark, rule, inputs }: { label: string; value: string; note?: string; dark?: boolean; rule: string; inputs?: [string, string][] }) {
   const [o, setO] = useState(false);
   return (
-    <Card dark={dark}>
-      <button class="text-[11px] uppercase tracking-[0.08em] font-semibold opacity-80 flex items-center gap-1 cursor-pointer" onClick={() => setO(!o)} aria-expanded={o}>{label} <span aria-hidden="true">ⓘ</span></button>
-      <div class="num text-xl md:text-2xl xl:text-3xl font-extrabold mt-1">{value}</div>
-      {note && <div class="text-xs opacity-80 mt-0.5">{note}</div>}
-      <div class="text-[11px] opacity-60 mt-1 leading-snug">{rule}</div>
-      {o && inputs && <ul class="text-[11px] mt-1.5 border-t border-current/20 pt-1">{inputs.map(([a, b]) => <li key={a} class="flex justify-between"><span>{a}</span><span class="num">{b}</span></li>)}</ul>}
-    </Card>
+    <div class="bg-c0 px-3 py-2 min-w-0">
+      <button class="t-meta flex items-center gap-1 cursor-pointer" onClick={() => setO(!o)} aria-expanded={o} title={rule}>{label} <span aria-hidden="true" class="text-c2">ⓘ</span></button>
+      <div class={`num text-[17px] font-semibold leading-tight mt-0.5 ${dark ? "" : ""}`}>{value}</div>
+      {note && <div class="t-meta">{note}</div>}
+      {o && <div class="t-meta mt-1 leading-snug">{rule}</div>}
+      {o && inputs && <ul class="text-[11px] mt-1 border-t border-line pt-1">{inputs.map(([a, b]) => <li key={a} class="flex justify-between gap-2"><span class="text-c3">{a}</span><span class="num">{b}</span></li>)}</ul>}
+    </div>
   );
 }
 
@@ -148,17 +148,17 @@ export function Purchases() {
           {open.status === "logged" && <p class="text-xs mt-3">Logged. Deleting this document would bin the file but leave its expense alone.</p>}
         </div>
       )}>
-      <label class="rounded-[var(--radius-card)] border-2 border-dashed border-c2 p-4 text-center text-sm text-c3 cursor-pointer block">
+      <label class="rounded-[var(--radius-card)] border border-dashed border-c2 px-3 py-2.5 text-center t-meta cursor-pointer block hover:bg-c0">
         Drop or choose bills — PDF or photo · <b>AI reader (Claude / Gemini) connects with the backend</b>; until then figures are typed in review
         <input type="file" accept="application/pdf,image/*" multiple class="sr-only" onChange={(e) => onFiles((e.target as HTMLInputElement).files)} />
       </label>
-      <div class="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+      <div class="listbox">
         {rows.map((b) => (
-          <button key={b.id} onClick={() => setOpen(b)} class="text-left bg-c0 rounded-xl p-3 cursor-pointer">
-            <div class="flex justify-between gap-2"><b class="text-sm">{b.vendor || "Unnamed bill"}</b><Status tone={tone(b.status)}>{b.status.replace("_", " ")}</Status></div>
-            <div class="text-xs text-c3 mt-1">{b.no || "—"} · {shortDate(b.date)} · {b.cat}</div>
-            <div class="num font-semibold mt-1">{b.total ? inr(b.total) : "—"}</div>
-            {b.note && <div class="text-xs mt-1">{b.note}</div>}
+          <button key={b.id} onClick={() => setOpen(b)} class="w-full text-left grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_120px_100px] gap-x-3 items-center px-3 py-2 md:py-0 md:h-9 hover:bg-c1/60 cursor-pointer text-[13px]">
+            <span class="min-w-0 truncate font-medium">{b.vendor || "Unnamed bill"}{b.note && <span class="t-meta ml-1.5">{b.note}</span>}</span>
+            <span class="hidden md:block t-meta truncate">{b.no || "—"} · {shortDate(b.date)} · {b.cat}</span>
+            <Status tone={tone(b.status)}>{b.status.replace("_", " ")}</Status>
+            <span class="hidden md:block num text-right">{b.total ? inr(b.total) : "—"}</span>
           </button>
         ))}
       </div>
@@ -199,7 +199,7 @@ export function Finance() {
           <Button onClick={() => { if (!e.amount) return; addExpense({ date: today(), head: e.head, vendor: e.vendor || e.head, amount: e.amount, tax: e.tax, paid: !!e.account, account: e.account || undefined }); setAdd(false); }}>Save</Button>
         </Card>
       )}
-      <div class="grid gap-2 grid-cols-2 xl:grid-cols-5">
+      <div class="strip grid grid-cols-2 xl:grid-cols-5">
         <Fig dark label="Earned" value={inr(f.earned)} note={delta(f.earned, ly.earned)} rule="Paid invoices + closed orders never invoiced" inputs={[["Paid invoices", inr(f.collected)], ["Closed, never invoiced", inr(f.closedNoInv)]]} />
         <Fig label="Collected" value={inr(f.collected)} rule="Paid invoices only" />
         <Fig label="Outstanding" value={inr(f.outstanding)} note={`${inr(f.outstandingAll)} all-time`} rule="Issued and unsettled" />
@@ -207,12 +207,12 @@ export function Finance() {
         <Fig label="Pipeline" value={inr(f.pipeline)} rule="Open order value — never revenue" />
       </div>
       <div class="grid gap-2 lg:grid-cols-2">
-        <Card><CardTitle>Earned vs spent · April-first</CardTitle><Line a={mo.map((m) => Math.round(m.earned / 1000))} b={mo.map((m) => Math.round(m.spent / 1000))} labels={mo.map((m) => m.label)} /></Card>
-        <Card><CardTitle>Expenses by category (₹k)</CardTitle>{heads.size ? <Bars data={[...heads.values()].map((v) => Math.round(v / 1000))} labels={[...heads.keys()]} /> : <Empty title="No expenses in this window" />}</Card>
+        <Card><CardTitle>Earned vs spent · April-first</CardTitle><Line height={110} a={mo.map((m) => Math.round(m.earned / 1000))} b={mo.map((m) => Math.round(m.spent / 1000))} labels={mo.map((m) => m.label)} /></Card>
+        <Card><CardTitle>Expenses by category (₹k)</CardTitle>{heads.size ? <Bars height={110} data={[...heads.values()].map((v) => Math.round(v / 1000))} labels={[...heads.keys()]} /> : <Empty title="No expenses in this window" />}</Card>
       </div>
       <SubTabs value={tab} onChange={setTab} items={[["today", `Do today (${doToday.length})`], ["expenses", "Expenses"], ["outstanding", "Outstanding by age"], ["receipts", "Receipts"]]} />
       <Card>
-        {tab === "today" && (doToday.length ? <ul class="text-sm">{doToday.map((t) => <li key={t} class="py-1.5 border-t border-line first:border-0">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
+        {tab === "today" && (doToday.length ? <ul class="text-[13px] -my-1">{doToday.map((t) => <li key={t} class="h-9 flex items-center border-t border-line first:border-0 truncate">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
         {tab === "expenses" && <Table rows={[...expensesSig.value].filter((x) => x.date >= win[0] && x.date <= win[1]).sort((a, b) => b.date.localeCompare(a.date))} rowKey={(x) => x.id} onRow={peek} cols={[
           { key: "h", label: "Head", render: (x) => <b>{x.head}</b> }, { key: "d", label: "Date", render: (x) => shortDate(x.date) }, { key: "v", label: "Vendor", render: (x) => x.vendor },
           { key: "p", label: "Paid", render: (x) => <Status tone={x.paid ? "done" : "waiting"}>{x.paid ? "Paid" : "Unpaid"}</Status> },
@@ -293,10 +293,10 @@ export function Accounts() {
       toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-        {accountsSig.value.map((a) => <Card key={a.id} dark={a.id === acc}><div class="text-xs opacity-80">{a.name}</div><div class="num text-xl md:text-2xl font-extrabold mt-1">{inr(balanceOf(a.id))}</div><div class="text-xs opacity-80">Opening {inr(a.opening)}</div></Card>)}
+        {accountsSig.value.map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-[10px] px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div><div class="t-meta num">Opening {inr(a.opening)}</div></button>)}
       </div>
-      <p class="text-xs text-c3">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p>
-      <Card>
+      <Disclosure title="CSV format & matching rules"><p class="t-meta">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p></Disclosure>
+      <Card class="!py-1">
         {lines.length ? <Table rows={lines} rowKey={(l) => l.id} onRow={peek} cols={[
           { key: "t", label: "Narration", render: (l) => <b>{l.text}</b> }, { key: "d", label: "Date", render: (l) => shortDate(l.date) },
           { key: "a", label: "Amount", align: "right", render: (l) => inr(l.amount) }, { key: "g", label: "Suggested", render: (l) => l.match ?? suggest(l) },
@@ -389,12 +389,12 @@ export function Gst() {
           {m.filed.locked && <p class="text-xs text-c3 mt-2">Locked — invoices in this month can't be edited or cancelled; corrections go through a credit note.</p>}
         </div>
       )}>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="strip grid grid-cols-3">
         <Stat value={inr(months.reduce((s, x) => s + x.cgst + x.sgst + x.igst, 0))} label="Output GST" />
         <Stat value={inr(months.reduce((s, x) => s + x.itc, 0))} label="Input credit" />
         <Stat value={inr(months.reduce((s, x) => s + x.cgst + x.sgst + x.igst - x.itc, 0))} label="Net payable" />
       </div>
-      <Card>
+      <Card class="!py-1">
         <Table rows={months} rowKey={(r) => r.k} onRow={(r) => setOpen(r.k)} cols={[
           { key: "m", label: "Month", render: (r) => <b>{r.label}</b> },
           { key: "s", label: "Taxable", align: "right", render: (r) => inr(r.taxable) },

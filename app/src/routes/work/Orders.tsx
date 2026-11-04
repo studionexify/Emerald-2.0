@@ -20,14 +20,14 @@ export default function Orders() {
         <TypeChips value={f} onChange={setF} />
         {view === "board" && (
           <select aria-label="Stage" value={stage} onChange={(e) => setStage((e.target as HTMLSelectElement).value as Stage)}
-            class="md:hidden order-last basis-full h-8 px-3 rounded-full bg-c0 text-sm font-semibold min-w-0">
+            class="md:hidden order-last basis-full h-8 px-3 rounded-lg border border-line bg-c0 text-[13px] font-semibold min-w-0">
             {STAGES.map((s) => <option key={s.key} value={s.key}>{s.n}. {s.label} ({count(s.key)})</option>)}
           </select>
         )}
-        <div class="flex bg-c0 rounded-full p-0.5 ml-auto">
+        <div class="flex bg-c1 rounded-lg p-0.5 ml-auto">
           {(["board", "list"] as const).map((v) => (
             <button key={v} onClick={() => setView(v)} aria-label={v} aria-pressed={view === v}
-              class={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center cursor-pointer ${view === v ? "bg-c4 text-c0" : "text-c3"}`}>
+              class={`w-7 h-7 rounded-md flex items-center justify-center cursor-pointer ${view === v ? "bg-c0 text-c4 shadow-sm" : "text-c3"}`}>
               <Icon name={v === "board" ? "grid" : "rows"} size={14} />
             </button>
           ))}
@@ -38,7 +38,7 @@ export default function Orders() {
           <div class="md:hidden flex flex-col gap-2">
             {list.filter((o) => o.stage === stage).map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
             {batchesAt(stage).map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
-            {!count(stage) && <div class="rounded-xl border-2 border-dashed border-c2 p-5 text-center text-sm text-c3">No orders at this stage</div>}
+            {!count(stage) && <div class="rounded-[10px] border border-dashed border-line p-3 text-center t-meta">No orders at this stage</div>}
           </div>
           <div class={`hidden md:grid gap-2.5 ${open || creating ? "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "grid-cols-4 2xl:grid-cols-8"}`}>
             {STAGES.map((s) => {
@@ -46,13 +46,13 @@ export default function Orders() {
               return (
                 <div key={s.key} class="min-w-0">
                   <div class="flex items-center justify-between px-1 mb-1.5">
-                    <span class="font-semibold text-xs xl:text-sm">{s.n}. {s.label}</span>
-                    <span class="num text-xs text-c3 bg-c0 rounded-full px-2 py-0.5">{col.length + bcol.length}</span>
+                    <span class="t-section !text-[11px] truncate">{s.label}</span>
+                    <span class="num t-meta">{col.length + bcol.length}</span>
                   </div>
-                  <div class="flex flex-col gap-2">
+                  <div class="flex flex-col gap-1.5">
                     {col.map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
                     {bcol.map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
-                    {!col.length && !bcol.length && <div class="rounded-xl border-2 border-dashed border-c2 h-12 flex items-center justify-center text-xs text-c3">No orders</div>}
+                    {!col.length && !bcol.length && <div class="rounded-[10px] border border-dashed border-line h-10 flex items-center justify-center t-meta">Empty</div>}
                   </div>
                 </div>
               );
@@ -60,7 +60,7 @@ export default function Orders() {
           </div>
         </>
       ) : (
-        <Card>
+        <Card class="!py-1">
           <Table rows={list} rowKey={(o) => o.id} onRow={setOpen} cols={[
             { key: "no", label: "Order", render: (o) => <b>{o.no}</b> },
             { key: "c", label: "Customer", render: (o) => o.customer },
@@ -78,10 +78,10 @@ export default function Orders() {
 
 function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} class="w-full text-left rounded-xl p-2.5 cursor-pointer bg-c4 text-c0 text-[13px] border-2 border-dashed border-c2">
-      <div class="flex justify-between text-xs opacity-80"><span>{b.orderNo}</span><span>Bulk batch</span></div>
-      <div class="font-semibold text-sm">{b.name}</div>
-      <div class="text-xs opacity-80">{b.customer} · {b.done}/{b.units}</div>
+    <button onClick={onOpen} class="w-full text-left rounded-[10px] px-2.5 py-2 cursor-pointer bg-c0 text-[13px] border border-dashed border-c2">
+      <div class="flex justify-between gap-2"><span class="font-mono text-[11px] font-bold">{b.orderNo}</span><span class="t-meta">Batch</span></div>
+      <div class="font-medium truncate mt-0.5">{b.name}</div>
+      <div class="t-meta num">{b.customer} · {b.done}/{b.units}</div>
     </button>
   );
 }

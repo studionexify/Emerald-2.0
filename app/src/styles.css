@@ -69,3 +69,10 @@ table { font-variant-numeric: tabular-nums; }
 thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--c-2); }
 tbody td { font-weight: 400; }
 tbody td:first-child { font-weight: 600; }
+
+/* Summary strip: a grid of figures joined into one hairline panel. */
+.strip { gap: 0 !important; background: var(--c-0); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.strip > * { border: 0 !important; border-radius: 0 !important; box-shadow: -1px -1px 0 var(--line); }
+/* Dense list box. */
+.listbox { background: var(--c-0); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.listbox > * + * { border-top: 1px solid var(--line); }

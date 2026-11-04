@@ -18,17 +18,16 @@ export function TypeChips({ value, onChange }: { value: TypeFilter; onChange: (v
 
 export const stageLabel = (o: Order) => STAGE_LABEL[o.stage];
 
-export function OrderCard({ o, onOpen, inset }: { o: Order; onOpen: (o: Order) => void; inset?: boolean }) {
+export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void; inset?: boolean }) {
   return (
-    <button onClick={() => onOpen(o)} class={`w-full min-w-0 text-left rounded-xl p-2.5 xl:p-3 cursor-pointer text-[13px] md:text-sm ${o.type === "bulk" ? "bg-c4 text-c0" : inset ? "bg-c1" : "bg-c0"}`}>
-      <div class="flex flex-wrap justify-between gap-x-2 text-xs opacity-80 mb-1"><span>{o.no}</span><span>{TYPE_LABEL[o.type]}</span></div>
-      <div class="font-semibold break-words leading-snug text-sm">{o.customer}</div>
-      <div class="text-xs opacity-80 break-words leading-snug">{o.items.map((i) => i.name).join(", ")}</div>
-      <div class="flex flex-wrap justify-between items-center gap-x-2 mt-1.5 text-xs">
-        <span class="num font-semibold">{o.type === "inhouse" ? "Internal" : inr(orderTotal(o))}</span>
-        <span class="opacity-80">Due {shortDate(o.due)}</span>
+    <button onClick={() => onOpen(o)} class="w-full min-w-0 text-left rounded-[10px] bg-c0 border border-line hover:border-c2 px-2.5 py-2 cursor-pointer text-[13px]">
+      <div class="flex items-center justify-between gap-2"><span class="font-mono text-[11px] font-bold">{o.no}</span><span class="t-meta">{o.type === "bulk" ? "Bulk" : shortDate(o.due)}</span></div>
+      <div class="font-medium truncate mt-0.5">{o.customer}</div>
+      <div class="t-meta truncate">{o.items.map((i) => i.name).join(", ")}</div>
+      <div class="flex items-center justify-between gap-2 mt-1">
+        <span class="num text-[12px]">{o.type === "inhouse" ? "Internal" : inr(orderTotal(o))}</span>
+        {o.blocked && <span class="inline-flex items-center gap-1 text-[11px] font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-warn" />Blocked</span>}
       </div>
-      {o.blocked && <div class="mt-2 text-xs font-semibold flex items-start gap-2"><span class="w-2 h-2 mt-1 shrink-0 rotate-45 bg-current" />{o.blocked}</div>}
     </button>
   );
 }

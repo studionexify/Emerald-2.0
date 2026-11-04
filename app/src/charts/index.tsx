@@ -9,10 +9,10 @@ export function Bars({ data, labels, height = 140 }: { data: number[]; labels: s
       <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" class="w-full" style={{ height }}>
         {data.map((d, i) => {
           const h = (Math.abs(d) / max) * (hasNeg ? height / 2 - 4 : height - 4);
-          return <rect key={i} x={i * w + w * 0.2} width={w * 0.6} y={d >= 0 ? zero - h : zero} height={Math.max(h, 1.5)} rx={3} class="fill-c4" />;
+          return <rect key={i} x={i * w + w * 0.2} width={w * 0.6} y={d >= 0 ? zero - h : zero} height={Math.max(h, 1.5)} class="fill-c4" />;
         })}
       </svg>
-      <div class="flex text-xs text-c3 mt-2">{labels.map((l) => <span key={l} class="flex-1 text-center">{l}</span>)}</div>
+      <div class="flex text-[11px] text-c2 mt-1.5">{labels.map((l) => <span key={l} class="flex-1 text-center">{l}</span>)}</div>
     </div>
   );
 }
@@ -27,7 +27,7 @@ export function Line({ a, b, labels, height = 140 }: { a: number[]; b?: number[]
         {b && <polyline points={pts(b)} fill="none" class="stroke-c2" stroke-width="1.5" vector-effect="non-scaling-stroke" />}
         <polyline points={pts(a)} fill="none" class="stroke-c4" stroke-width="2" vector-effect="non-scaling-stroke" />
       </svg>
-      <div class="flex text-xs text-c3 mt-2">{labels.map((l, i) => <span key={i} class="flex-1 text-center">{l}</span>)}</div>
+      <div class="flex text-[11px] text-c2 mt-1.5">{labels.map((l, i) => <span key={i} class="flex-1 text-center">{l}</span>)}</div>
     </div>
   );
 }

@@ -64,7 +64,7 @@ export function Printers() {
   const rows = byActive(printersSig.value, f);
   return (
     <Shell sub="Machines · status, utilisation, service, spools loaded" actions={<Button icon="plus" onClick={() => r.add()}>Add printer</Button>} toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail}>
-      <Card>
+      <Card class="!py-1">
         <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} cols={[
           { key: "n", label: "Printer", render: (p) => <span>{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}</span> },
           { key: "m", label: "Model", render: (p) => p.model },
@@ -163,7 +163,7 @@ export function Filament() {
         <Pick title="Material" value={mat} on={setMat} items={["all", ...mats]} label={(m) => m === "all" ? "All materials" : m} />
         <Pick title="Status" value={st} on={setSt} items={["in stock", "sealed", "open", "loaded", "empty", "retired", "all"]} label={(x) => x[0].toUpperCase() + x.slice(1)} />
       </div>} detail={r.detail}>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div class="strip grid grid-cols-2 md:grid-cols-4">
         <Stat value={`${(tot.reduce((s, x) => s + x.grams, 0) / 1000).toFixed(2)} kg`} label="on shelf" />
         <Stat value={inr(tot.reduce((s, x) => s + spoolValue(x), 0))} label="value" />
         <Stat value={tot.filter((s) => s.grams > 0).length} label="spools in stock" />
@@ -257,8 +257,8 @@ export function Parts() {
   return (
     <Shell sub="Magnets, NFC tags, inserts and machine spares · tap a row to adjust stock" toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail}
       actions={<><Button variant="outline" icon="plus" onClick={() => r.add({ cat: "Part" })}>Add part</Button><Button icon="plus" onClick={() => r.add({ cat: "Accessory" })}>Add accessory</Button></>}>
-      <Section title="Accessories" note={String(rows.filter((a) => a.cat !== "Part").length)}><Card><Table rows={rows.filter((a) => a.cat !== "Part")} rowKey={(a) => a.id} onRow={r.open} cols={iCols()} /></Card></Section>
-      <Section title="Parts & spares" note={String(rows.filter((a) => a.cat === "Part").length)}><Card><Table rows={rows.filter((a) => a.cat === "Part")} rowKey={(a) => a.id} onRow={r.open} cols={[...iCols().slice(0, 1), { key: "m", label: "Machine", render: (p) => p.machine || "Any" }, ...iCols().slice(1)]} /></Card></Section>
+      <Section title="Accessories" note={String(rows.filter((a) => a.cat !== "Part").length)}><Card class="!py-1"><Table rows={rows.filter((a) => a.cat !== "Part")} rowKey={(a) => a.id} onRow={r.open} cols={iCols()} /></Card></Section>
+      <Section title="Parts & spares" note={String(rows.filter((a) => a.cat === "Part").length)}><Card class="!py-1"><Table rows={rows.filter((a) => a.cat === "Part")} rowKey={(a) => a.id} onRow={r.open} cols={[...iCols().slice(0, 1), { key: "m", label: "Machine", render: (p) => p.machine || "Any" }, ...iCols().slice(1)]} /></Card></Section>
     </Shell>
   );
 }
@@ -269,12 +269,12 @@ export function PackStock() {
   const rows = byActive(packSig.value, f);
   return (
     <Shell sub="Boxes, wrap, tape, stickers — consumed at packing" toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail} actions={<Button icon="plus" onClick={() => r.add()}>Add packing item</Button>}>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="strip grid grid-cols-3">
         <Stat value={rows.length} label="items" />
         <Stat value={inr(rows.reduce((s, p) => s + p.qty * p.cost, 0))} label="value" />
         <Stat value={rows.filter((p) => p.qty <= p.reorderAt).length} label="to reorder" />
       </div>
-      <Card><Table rows={rows} rowKey={(p) => p.id} onRow={r.open} cols={iCols()} /></Card>
+      <Card class="!py-1"><Table rows={rows} rowKey={(p) => p.id} onRow={r.open} cols={iCols()} /></Card>
     </Shell>
   );
 }
@@ -312,12 +312,12 @@ export function Movements() {
     <Shell sub="Purchases and manual adjustments — every movement in and out" detail={detail}
       toolbar={<div class="flex flex-wrap gap-2"><Pick title="Category" value={cat} on={setCat} items={["all", ...CATS]} label={(c) => c === "all" ? "All" : c[0].toUpperCase() + c.slice(1)} /></div>}
       actions={<Button icon="plus" onClick={() => { setOpen(null); setForm(true); }}>Log movement</Button>}>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="strip grid grid-cols-3">
         <Stat value={rows.filter((m) => m.dir === "in").length} label="in" />
         <Stat value={rows.filter((m) => m.dir === "out").length} label="out" />
         <Stat value={inr(rows.filter((m) => m.dir === "in").reduce((s, m) => s + m.qty * m.unitCost, 0))} label="bought" />
       </div>
-      <Card>
+      <Card class="!py-1">
         <Table rows={rows} rowKey={(m) => m.id} onRow={(m) => { setForm(false); setOpen(m); }} cols={[
           { key: "i", label: "Item", render: (m) => m.item },
           { key: "d", label: "Date", render: (m) => shortDate(m.date) },
@@ -344,12 +344,12 @@ export function ConsumptionLog() {
     <Shell sub="Everything used — filament, machine hours, power, labour, packing, parts, freight, scrap"
       toolbar={<Pick title="Kind" value={k} on={setK} items={kinds} label={(x) => (x === "all" ? "All" : x[0].toUpperCase() + x.slice(1))} />}
       detail={open && <Inspect title={`${open.item}`} row={{ kind: open.kind, quantity: `${open.qty} ${open.unit}`, cost: inr(open.cost), order: open.orderNo ?? "Store use", batch: open.batch ?? "", printer: open.printer ?? "", when: open.at, who: open.who }} onClose={() => setOpen(null)} />}>
-      <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+      <div class="strip grid grid-cols-3 md:grid-cols-6">
         <Stat value={inr(consSig.value.reduce((s, c) => s + c.cost, 0))} label="Total" />
         {["filament", "machine", "packing", "labour", "scrap"].map((x) => <Stat key={x} value={inr(by(x))} label={x} />)}
       </div>
       <Card><div class="text-sm font-bold mb-2">Log consumption <span class="font-normal text-c3">— no order = store use</span></div><ConsumeForm /></Card>
-      <Card>
+      <Card class="!py-1">
         <Table rows={rows} rowKey={(c) => c.id} onRow={setOpen} cols={[
           { key: "i", label: "Item", render: (c) => c.item },
           { key: "k", label: "Kind", render: (c) => <span class="capitalize">{c.kind}</span> },

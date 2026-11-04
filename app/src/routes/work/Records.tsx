@@ -86,25 +86,27 @@ export function Invoice() {
       )}>
       <Section title="Awaiting invoice" note={`${waiting.length + bw.length} · orders + batch dispatches`}>
         {waiting.length + bw.length === 0 ? <p class="text-sm text-c3">Nothing waiting.</p> : (
-          <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <div class="listbox">
             {waiting.map((o) => (
-              <Card key={o.id}>
-                <CardTitle action={<span class="num text-sm font-semibold">{inr(o.items.reduce((s, i) => s + i.qty * i.price, 0))}</span>}>{o.no} · {o.customer}</CardTitle>
-                <p class="text-xs text-c3 mb-2">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</p>
-                <Button onClick={() => raise(o)}>Raise invoice</Button>
-              </Card>
+              <div key={o.id} class="w-full grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_100px_auto] gap-x-3 items-center px-3 py-2 md:py-0 md:h-10 text-[13px]">
+                <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{o.no}</span><span class="font-medium">{o.customer}</span></span>
+                <span class="hidden md:block t-meta truncate">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</span>
+                <span class="hidden md:block num text-right">{inr(o.items.reduce((s, i) => s + i.qty * i.price, 0))}</span>
+                <Button variant="outline" class="!h-7" onClick={() => raise(o)}>Raise invoice</Button>
+              </div>
             ))}
             {bw.map((b) => { const o = ordersSig.value.find((x) => x.no === b.orderNo); return o && (
-              <Card key={b.id}>
-                <CardTitle action={<span class="text-xs text-c3">Batch dispatch</span>}>{b.orderNo} · {b.name}</CardTitle>
-                <p class="text-xs text-c3 mb-2">{b.customer} · {b.units} units</p>
-                <Button onClick={() => raise(o, b)}>Raise dispatch invoice</Button>
-              </Card>); })}
+              <div key={b.id} class="w-full grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_100px_auto] gap-x-3 items-center px-3 py-2 md:py-0 md:h-10 text-[13px]">
+                <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{b.orderNo}</span><span class="font-medium">{b.name}</span></span>
+                <span class="hidden md:block t-meta truncate">Batch dispatch · {b.customer} · {b.units} units</span>
+                <span class="hidden md:block" />
+                <Button variant="outline" class="!h-7" onClick={() => raise(o, b)}>Raise dispatch invoice</Button>
+              </div>); })}
           </div>
         )}
       </Section>
       <Section title="Register" note={`${reg.length}`}>
-        <Card>
+        <Card class="!py-1">
           <Table rows={reg} rowKey={(i) => i.id} onRow={(i) => { setOpen(i); setView("edit"); }} cols={[
             { key: "n", label: "No.", render: (i) => <b>{i.no}</b> },
             { key: "d", label: "Date", render: (i) => shortDate(i.date) },
@@ -154,11 +156,11 @@ export function Quotes() {
           )}
         </div>
       )}>
-      <div class="grid grid-cols-4 gap-2">
+      <div class="strip grid grid-cols-4">
         <Stat value={cnt("open").length} label="Open" /><Stat value={cnt("approved").length} label="Approved" /><Stat value={cnt("lost").length} label="Lost" /><Stat value={cnt("unrecorded").length} label="Unrecorded" />
       </div>
       {pending.length > 0 && <Card><CardTitle>Orders at Quotation without a quote</CardTitle><div class="flex flex-wrap gap-2">{pending.map((o) => <Button key={o.id} variant="outline" onClick={() => make(o)}>Quote {o.no} · {o.customer}</Button>)}</div></Card>}
-      <Card>
+      <Card class="!py-1">
         <Table rows={rows} rowKey={(q) => q.id} onRow={(q) => { setOpen(q); setView("edit"); }} cols={[
           { key: "n", label: "Quote", render: (q) => <b>{q.no}</b> },
           { key: "d", label: "Date", render: (q) => shortDate(q.date) },
@@ -186,7 +188,7 @@ export function Documents() {
     <WorkShell title="Documents" sub="The generator — every quotation, invoice, credit note and challan, printable"
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={kind} on={setKind} items={["all", "Quotation", "Tax invoice", "Credit note", "Delivery challan"]} label={(k) => k === "all" ? "All" : k} /></div>}
       detail={sel && <div><DetailHead title={`${sel.title} · ${sel.no}`} onClose={() => setSel(null)} /><DocSheet d={sel} /><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></div>}>
-      <Card>
+      <Card class="!py-1">
         {docs.length ? <Table rows={docs} rowKey={(d) => d.id} onRow={(d) => setSel(d.d())} cols={[
           { key: "n", label: "Number", render: (d) => <b>{d.no}</b> }, { key: "k", label: "Kind", render: (d) => d.kind },
           { key: "p", label: "Party", render: (d) => d.party }, { key: "d", label: "Date", render: (d) => shortDate(d.date) },
@@ -220,7 +222,7 @@ export function Shipping() {
       detail={sel && <Inspect title={`${sel.orderNo} · ${sel.courier}`} row={{ order: sel.orderNo, sent: shortDate(sel.date), eta: shortDate(sel.eta), courier: sel.courier, service: sel.service, tracking: sel.tracking || "Missing", contents: sel.lines.map((l) => `${l.qty}× ${l.name}`).join(", "), freightPaid: inr(sel.freightPaid), recovered: inr(sel.freightRecovered), net: inr(sel.freightPaid - sel.freightRecovered) }} onClose={() => setSel(null)}>
         <div class="flex flex-wrap items-end gap-2"><input class={`${inputCls} flex-1 min-w-0`} placeholder="Tracking no." defaultValue={sel.tracking} id="trk" /><Button onClick={() => { const v = (document.getElementById("trk") as HTMLInputElement).value; shipmentsSig.value = shipmentsSig.value.map((x) => (x.id === sel.id ? { ...x, tracking: v } : x)); setSel({ ...sel, tracking: v }); log("Updated tracking", sel.orderNo); }}>Save tracking</Button></div>
         {sel.photo && <img src={sel.photo} alt="Handover" class="mt-3 rounded-xl max-h-48" />}</Inspect>}>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="strip grid grid-cols-3">
         <Stat value={shipmentsSig.value.length} label="dispatches" />
         <Stat value={inr(shipmentsSig.value.reduce((s, x) => s + x.freightPaid, 0))} label="freight paid" />
         <Stat value={inr(shipmentsSig.value.reduce((s, x) => s + x.freightRecovered, 0))} label="recovered" />
@@ -245,7 +247,7 @@ export function Shipping() {
         </Card>
       </Section>
       <Section title="Dispatches" note={String(shipmentsSig.value.length)}>
-        <Card>
+        <Card class="!py-1">
           <Table rows={shipmentsSig.value} rowKey={(s) => s.id} onRow={setSel} cols={[
             { key: "o", label: "Order", render: (s) => <b>{s.orderNo}</b> },
             { key: "l", label: "Contents", render: (s) => s.lines.map((l) => `${l.qty}× ${l.name}`).join(", ") },
@@ -281,7 +283,7 @@ export function Clients() {
   return (
     <WorkShell title="Clients" sub="Every customer — contact, GSTIN, orders, value and what they owe" detail={r.detail} actions={<Button icon="plus" onClick={() => r.add()}>Add client</Button>}
       toolbar={<input class="h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs w-full sm:w-56" placeholder="Search name, city, phone, GSTIN" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} aria-label="Search clients" />}>
-      <Card>
+      <Card class="!py-1">
         <Table rows={rows} rowKey={(c) => c.id} onRow={(c) => { if (c.id.startsWith("o:")) { const n = { ...c, id: uid() }; clientsSig.value = [n, ...clientsSig.value]; r.open(n); } else r.open(c); }} cols={[
           { key: "n", label: "Client", render: (c) => c.name },
           { key: "k", label: "Kind", render: (c) => c.kind },

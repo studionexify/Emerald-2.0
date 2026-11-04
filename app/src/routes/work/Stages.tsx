@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table } from "../../ui";
+import { Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
 import { ConsumeForm, OrderDetail, WorkShell } from "./shared";
@@ -56,31 +56,8 @@ export function Production() {
     <WorkShell title="Production" sub="Build sheet at approval · one job per line item · tap a job to run it" detail={r.detail}
       actions={<><Button variant="outline" onClick={() => { const p = prompt("Which printer is blocked, and why? (e.g. A1-02 — nozzle clog)"); if (p) log("Logged block", p, "order"); }}>Log block</Button><Button icon="plus" onClick={() => r.add()}>New job</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "queued", "printing", "done", "failed"]} label={(s) => s === "all" ? "All jobs" : s} /></div>}>
-      <Card><div class="text-sm font-semibold mb-2">Log consumption</div><ConsumeForm /></Card>
-      <Section title="Machines" note={`${printersSig.value.filter((p) => p.active !== false).length} printers`}>
-        <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-          {printersSig.value.filter((p) => p.active !== false).map((p) => {
-            const m = X.machineLog.find((x) => x.printer === p.name) ?? { util: 0, uptime: 100, lost: 0, fail: 0 };
-            return (
-              <a key={p.id} href="#workshop" class="block"><Card dark={p.status === "printing"}>
-                <div class="flex justify-between items-start gap-2">
-                  <div class="min-w-0"><div class="font-semibold">{p.name}</div><div class="text-xs opacity-80">{p.model}</div></div>
-                  <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
-                </div>
-                <div class="grid grid-cols-4 gap-2 mt-3 text-xs">
-                  <div><div class="num text-base font-semibold">{m.util}%</div>util</div>
-                  <div><div class="num text-base font-semibold">{m.uptime}%</div>uptime</div>
-                  <div><div class="num text-base font-semibold">{m.lost}h</div>blocked</div>
-                  <div><div class="num text-base font-semibold">{m.fail}%</div>fail</div>
-                </div>
-                <div class="text-xs opacity-80 mt-2">{p.job ? `Printing: ${p.job}` : `${p.hours} lifetime hours`}</div>
-              </Card></a>
-            );
-          })}
-        </div>
-      </Section>
       <Section title="Job queue" note={`${jobs.length} jobs`}>
-        <Card>
+        <Card class="!py-1">
           <Table rows={jobs} rowKey={(j) => j.id} onRow={r.open} cols={[
             { key: "o", label: "Order", render: (j) => j.orderNo },
             { key: "i", label: "Item · run", render: (j) => j.item },
@@ -92,8 +69,25 @@ export function Production() {
           ]} />
         </Card>
       </Section>
-      <Section title="Build sheet" note="filled at approval" action={<Button variant="outline" onClick={() => log("Saved build sheet", ordersSig.value.find((o) => o.stage === "production")?.no ?? "—")}>Save build sheet</Button>}>
-        <Card class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Section title="Machines" note={`${printersSig.value.filter((p) => p.active !== false).length} printers`}>
+        <div class="listbox">
+          <div class="hidden md:grid grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 px-3 h-7 items-center t-meta uppercase tracking-[0.06em]"><span>Printer</span><span>Status</span><span class="text-right">Util</span><span class="text-right">Uptime</span><span class="text-right">Blocked</span><span class="text-right">Fail</span><span>Now</span></div>
+          {printersSig.value.filter((p) => p.active !== false).map((p) => {
+            const m = X.machineLog.find((x) => x.printer === p.name) ?? { util: 0, uptime: 100, lost: 0, fail: 0 };
+            return (
+              <a key={p.id} href="#workshop" class="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 items-center px-3 py-2 md:py-0 md:h-9 hover:bg-c1/60 text-[13px]">
+                <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{p.name}</span><span class="text-c3">{p.model}</span></span>
+                <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
+                <span class="hidden md:block num text-right">{m.util}%</span><span class="hidden md:block num text-right">{m.uptime}%</span><span class="hidden md:block num text-right">{m.lost}h</span><span class="hidden md:block num text-right">{m.fail}%</span>
+                <span class="hidden md:block t-meta truncate">{p.job ? `Printing ${p.job}` : `${p.hours} lifetime h`}</span>
+              </a>
+            );
+          })}
+        </div>
+      </Section>
+      <Disclosure title="Log consumption" meta="filament, packing, parts"><ConsumeForm /></Disclosure>
+      <Disclosure title="Build sheet" meta="filled at approval">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Field label="Raw material">{sel(["PLA", "PETG", "TPU", "ABS", "Resin"])}</Field>
           <Field label="Colour">{sel(["Black", "White", "Grey", "Gold"])}</Field>
           <Field label="Accessories">{sel(["None", "Magnets", "NFC tag", "Brass inserts"])}</Field>
@@ -102,8 +96,9 @@ export function Production() {
           <Field label="Layer / infill"><input class={inputCls} defaultValue="0.2 mm · 15%" /></Field>
           <Field label="Estimate (g · h)"><input class={inputCls} defaultValue="410 g · 4 h" /></Field>
           <Field label="Finishing notes"><input class={inputCls} placeholder="Sand seams, prime" /></Field>
-        </Card>
-      </Section>
+        </div>
+        <div class="mt-3"><Button variant="outline" onClick={() => log("Saved build sheet", ordersSig.value.find((o) => o.stage === "production")?.no ?? "—")}>Save build sheet</Button></div>
+      </Disclosure>
     </WorkShell>
   );
 }
@@ -134,7 +129,7 @@ export function QC() {
   const qc = qcSig.value;
   return (
     <WorkShell title="QC & Logging" sub="A work queue, not a form — pass, rework or scrap, reason kept" detail={r.detail}>
-      <div class="grid grid-cols-4 gap-2">
+      <div class="strip grid grid-cols-4">
         <Stat value={qc.filter((q) => q.result === "pass").length} label="passed" />
         <Stat value={qc.filter((q) => q.result === "rework").length} label="rework" />
         <Stat value={qc.filter((q) => q.result === "scrap").length} label="scrap" />
@@ -158,10 +153,10 @@ export function QC() {
               <div class="mt-3"><Actions><Button icon="check" onClick={save}>Log check</Button></Actions></div>
             </> : <p class="text-sm text-c3 py-4 text-center">Nothing waiting — finished jobs appear here.</p>}
           </Card>
-          <Card><div class="text-sm font-bold mb-2">Log consumption</div><ConsumeForm /></Card>
+          <Disclosure title="Log consumption" meta="filament, packing, parts"><ConsumeForm /></Disclosure>
         </Section>
         <Section title="Log" note="newest first">
-          <Card>
+          <Card class="!py-1">
             <Table rows={qc} rowKey={(q) => q.id} onRow={r.open} cols={[
               { key: "o", label: "Order", render: (q) => q.orderNo },
               { key: "d", label: "Date", render: (q) => shortDate(q.date) },
@@ -195,8 +190,7 @@ function PackCard({ o }: { o: Order }) {
     setD({ ...d, box: "", weight: "", notes: "", lines: [{ item: packSig.value[0]?.name ?? "", qty: 1 }] });
   };
   return (
-    <Card>
-      <CardTitle action={<span class="text-xs text-c3">{TYPE_LABEL[o.type]} · {orderUnits(o)} units</span>}>{o.no} · {o.customer}</CardTitle>
+    <Disclosure open title={<span><span class="font-mono text-[12px] font-bold mr-2">{o.no}</span>{o.customer}</span>} meta={`${TYPE_LABEL[o.type]} · ${orderUnits(o)} units`}>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Field label="Box size"><input class={inputCls} placeholder="30×20×15" value={d.box} onInput={inp("box")} /></Field>
         <Field label="Gross weight"><input class={inputCls} placeholder="kg" value={d.weight} onInput={inp("weight")} /></Field>
@@ -210,7 +204,7 @@ function PackCard({ o }: { o: Order }) {
         <div class="col-span-2 sm:col-span-3"><Field label="Special handling"><input class={inputCls} placeholder="Fragile, keep flat" value={d.notes} onInput={inp("notes")} /></Field></div>
       </div>
       <div class="mt-3"><Actions><Button icon="check" onClick={save}>Record packing</Button><Button variant="outline" icon="plus" onClick={() => setD({ ...d, lines: [...d.lines, { item: packSig.value[0]?.name ?? "", qty: 1 }] })}>Material line</Button></Actions></div>
-    </Card>
+    </Disclosure>
   );
 }
 
@@ -224,10 +218,10 @@ export function Packing() {
         <Section title="To pack" note={String(list.length)}>
           {list.map((o) => <PackCard key={o.id} o={o} />)}
           {!list.length && <Card><p class="text-sm text-c3 text-center py-4">Nothing at Packing.</p></Card>}
-          <Card><div class="text-sm font-bold mb-2">Log consumption</div><ConsumeForm /></Card>
+          <Disclosure title="Log consumption" meta="filament, packing, parts"><ConsumeForm /></Disclosure>
         </Section>
         <Section title="Recorded" note={String(packRecSig.value.length)}>
-          <Card>
+          <Card class="!py-1">
             <Table rows={packRecSig.value} rowKey={(r) => r.id} onRow={r.open} cols={[
               { key: "o", label: "Order", render: (r) => r.order },
               { key: "b", label: "Box", render: (r) => r.box || "—" },
@@ -256,7 +250,7 @@ export function Archive() {
   const cur = open && (ordersSig.value.find((o) => o.id === open.id) ?? open);
   return (
     <WorkShell title="Archive" sub="Final cost rollup · tap an order to see its cost lines or reopen it" detail={cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}>
-      <Card>
+      <Card class="!py-1">
         <Table rows={list} rowKey={(o) => o.id} onRow={setOpen} cols={[
           { key: "o", label: "Order", render: (o) => `${o.no} · ${o.customer}` },
           { key: "t", label: "Type", render: (o) => TYPE_LABEL[o.type] },
