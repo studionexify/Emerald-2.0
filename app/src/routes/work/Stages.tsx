@@ -1,4 +1,6 @@
 import { useState } from "preact/hooks";
+import { signal } from "@preact/signals";
+import { navigate } from "../../router";
 import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { Menu, MetaRow } from "../../ui/disclose";
 import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order } from "../../data";
@@ -16,6 +18,8 @@ const jFields: FDef<Job>[] = [
   { k: "status", label: "Status", type: "select", options: ["queued", "printing", "done", "failed"] },
   { k: "hours", label: "Print time", type: "number", suffix: "h" }, { k: "grams", label: "Filament", type: "number", suffix: "g" },
 ];
+/** Job handed over from Production: QC opens with it preselected. */
+const qcFocus = signal<string | null>(null);
 /* ── Job state machine: one primary action per state, everything else in the … menu. ── */
 const setJob = (j: Job, p: Partial<Job>, why: string) => { jobsSig.value = jobsSig.value.map((x) => (x.id === j.id ? { ...x, ...p } : x)); log(why, `${j.orderNo} · ${j.item}`); };
 const startJob = (j: Job) => setJob(j, { status: "printing", startedAt: new Date().toISOString() }, "Job started");
@@ -53,7 +57,9 @@ function JobAct({ j, open }: { j: Job; open: (j: Job) => void }) {
     queued: <Button onClick={() => startJob(j)}>Start</Button>,
     printing: <Button onClick={() => finishJob(j)}>Mark done</Button>,
     failed: <Button variant="outline" onClick={() => requeue(j)}>Reprint</Button>,
-    done: <a href="/work/qc" class="inline-flex items-center justify-center h-8 px-3.5 rounded-lg border border-line text-[13px] font-semibold hover:bg-c1">Send to QC</a>,
+    done: qcSig.value.some((q) => q.orderNo === j.orderNo && q.item === j.item)
+      ? <span class="t-meta px-2">QC logged</span>
+      : <Button variant="outline" onClick={() => { qcFocus.value = j.id; navigate("/work/qc"); }}>Send to QC</Button>,
   }[j.status];
   return <>{primary}<Menu label={`Actions for ${j.item}`} items={[
     { label: "Open full inspector", on: () => open(j) },
@@ -156,7 +162,7 @@ const qFields: FDef<QcEntry>[] = [
 ];
 export function QC() {
   const done = jobsSig.value.filter((j) => j.status === "done" && !qcSig.value.some((q) => q.orderNo === j.orderNo && q.item === j.item));
-  const [pick, setPick] = useState(0);
+  const [pick, setPick] = useState(() => { const i = done.findIndex((j) => j.id === qcFocus.value); qcFocus.value = null; return Math.max(0, i); });
   const cur = done[Math.min(pick, done.length - 1)];
   const [d, setD] = useState({ res: "pass" as QcEntry["result"], units: 0, grams: 0, defect: "—", cause: "—", lesson: "", by: teamNames()[0] ?? "You" });
   const r = useRecord<QcEntry>({ sig: qcSig, kind: "QC entry", title: (q) => `${q.orderNo} · ${q.item}`, fields: qFields, logKind: "order",
