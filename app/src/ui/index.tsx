@@ -134,7 +134,7 @@ export function Collapse({ open, children, id }: { open: boolean; children: Comp
   const [mounted, setMounted] = useState(open);
   useEffect(() => { if (open) setMounted(true); }, [open]);
   return (
-    <div id={id} class="collapse grid min-w-0" data-open={open ? "" : undefined} aria-hidden={!open} {...{ inert: !open || undefined }}
+    <div id={id} class="disc-x grid min-w-0" data-open={open ? "" : undefined} aria-hidden={!open} {...{ inert: !open || undefined }}
       onTransitionEnd={(e) => e.target === e.currentTarget && !open && setMounted(false)}>
       <div class="min-h-0 overflow-hidden">{(open || mounted) && children}</div>
     </div>

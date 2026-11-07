@@ -128,20 +128,32 @@ const Swatch = ({ hex }: { hex?: string }) => <span class="inline-block w-3.5 h-
 const MATS = ["PLA", "PETG", "TPU", "ABS", "ASA", "PA-CF", "Resin"];
 const SP_STATUS = ["sealed", "open", "loaded", "empty"];
 const sFields: FDef<Spool>[] = [
-  { k: "material", label: "Material", type: "select", options: MATS }, { k: "colour", label: "Colour" },
-  { k: "hex", label: "Colour swatch", type: "color" }, { k: "brand", label: "Brand" },
-  { k: "finish", label: "Finish / line", }, { k: "diameter", label: "Diameter", type: "number", suffix: "mm" },
-  { k: "spoolNo", label: "Spool no." }, { k: "lot", label: "Batch / lot" },
-  { k: "size", label: "Nominal net", type: "number", suffix: "g" }, { k: "tare", label: "Empty spool (tare)", type: "number", suffix: "g" },
-  { k: "gross", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", label: "Net remaining", type: "number", suffix: "g" },
-  { k: "costKg", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", label: "Vendor" },
-  { k: "bought", label: "Bought on", type: "date" }, { k: "opened", label: "Opened on", type: "date" },
-  { k: "dried", label: "Last dried", type: "date" }, { k: "location", label: "Storage / dry box" },
-  { k: "nozzle", label: "Nozzle temp" }, { k: "bed", label: "Bed temp" },
-  { k: "status", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
-  { k: "notes", label: "Notes", type: "textarea" },
+  { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS }, { k: "colour", group: "Essentials", label: "Colour" },
+  { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" }, { k: "brand", group: "Essentials", label: "Brand" },
+  { k: "finish", group: "Spec", label: "Finish / line", }, { k: "diameter", group: "Spec", label: "Diameter", type: "number", suffix: "mm" },
+  { k: "spoolNo", group: "Essentials", label: "Spool no." }, { k: "lot", group: "Purchase", label: "Batch / lot" },
+  { k: "size", group: "Weight", label: "Nominal net", type: "number", suffix: "g" }, { k: "tare", group: "Weight", label: "Empty spool (tare)", type: "number", suffix: "g" },
+  { k: "gross", group: "Weight", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", group: "Essentials", label: "Net remaining", type: "number", suffix: "g" },
+  { k: "costKg", group: "Purchase", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", group: "Purchase", label: "Vendor" },
+  { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "opened", group: "Care", label: "Opened on", type: "date" },
+  { k: "dried", group: "Care", label: "Last dried", type: "date" }, { k: "location", group: "Essentials", label: "Storage / dry box" },
+  { k: "nozzle", group: "Print settings", label: "Nozzle temp" }, { k: "bed", group: "Print settings", label: "Bed temp" },
+  { k: "status", group: "Essentials", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", group: "Essentials", when: (r) => r.status === "loaded", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
+  { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
 ];
 const spTone = (s: Spool) => (s.grams <= 0 ? <Status tone="blocked">Out</Status> : s.grams < 250 ? <Status tone="waiting">Low</Status> : s.status === "loaded" ? <Status tone="active">Loaded</Status> : <Status tone="idle">{s.status ?? "open"}</Status>);
+
+/** 1-tap deduction: logged as a stock-out movement, same as any other draw. */
+function SpoolAct({ s, open }: { s: Spool; open: (s: Spool) => void }) {
+  const use = (g: number) => { const q = Math.min(g, s.grams); if (!q) return; applyMove({ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "out", qty: q, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", notes: "Quick deduction", by: me.value?.name ?? "You" }); log(`Used ${q} g`, s.spoolNo, "stock"); };
+  return <>
+    <Button variant="outline" disabled={s.grams <= 0} onClick={() => use(50)} aria-label={`Deduct 50 g from ${s.spoolNo}`}>−50 g</Button>
+    <Menu label={`Actions for ${s.spoolNo}`} items={[
+      { label: "Weigh in (exact)", on: () => open(s) },
+      { label: "Deduct 10 g", on: () => use(10) }, { label: "Deduct 100 g", on: () => use(100) }, { label: "Deduct 250 g", on: () => use(250) },
+    ]} />
+  </>;
+}
 
 function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) => void }) {
   const [g, setG] = useState(0);
@@ -220,15 +232,16 @@ export function Filament() {
         return (
           <Disclosure key={m} open title={<span class="inline-flex items-center gap-2">{m}<span class="t-meta font-normal">{sp.length} spools</span>{g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}</span>}
             meta={`${(g / 1000).toFixed(2)} kg · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}>
-              <Table rows={sp} rowKey={(s) => s.id} onRow={r.open} cols={[
-                { key: "n", label: "Spool", render: (s) => <span class="inline-flex items-center gap-2 font-mono text-[12px] font-bold"><span title={s.status} class={`w-1.5 h-1.5 rounded-full ${s.grams <= 0 ? "bg-c2" : s.grams < 250 ? "bg-warn" : s.status === "loaded" ? "bg-c4" : "border border-c4"}`} />{s.spoolNo}</span> },
-                { key: "c", label: "Colour · brand", render: (s) => <span class="inline-flex items-center gap-2"><Swatch hex={s.hex} />{s.colour}<span class="t-meta">{s.brand}{s.finish ? ` · ${s.finish}` : ""}</span></span> },
+              <Table rows={sp} rowKey={(s) => s.id} onRow={r.open} act={(s) => <SpoolAct s={s} open={r.open} />} cols={[
+                { key: "c", label: "Spool", render: (s) => <span class="flex items-center gap-2 min-w-0"><Swatch hex={s.hex} /><span class="flex flex-col min-w-0"><span class="font-semibold">{s.material} {s.colour}</span><MetaRow items={[s.spoolNo, s.brand, (s.status === "loaded" ? s.printer : s.location)]} /></span></span> },
+                { key: "s", label: "State", card: "status", render: (s) => spTone(s) },
                 { key: "p", label: "Weight left", render: (s) => <span class="block min-w-[120px]"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /></span> },
-                { key: "a", label: "After queue", align: "right", render: (s) => { const a = s.grams - committed(s); return committed(s) ? `${a.toLocaleString("en-IN")} g` : "—"; }, hideTablet: true },
-                { key: "l", label: "Where", render: (s) => (s.status === "loaded" ? s.printer : s.location) || "—", hideTablet: true },
-                { key: "v", label: "Value", align: "right", render: (s) => inr(spoolValue(s)), hideTablet: true },
-                { key: "s", label: "State", card: "status", render: (s) => spTone(s), hideTablet: true },
-                { key: "x", label: "", align: "right", render: (s) => <button class="h-6 px-2 rounded-md border border-line text-[11px] font-semibold hover:bg-c1 cursor-pointer" onClick={(e) => { e.stopPropagation(); r.open(s); }}>Weigh</button> },
+                { key: "a", label: "After queue", level: 2, render: (s) => committed(s) ? `${(s.grams - committed(s)).toLocaleString("en-IN")} g` : "No jobs queued" },
+                { key: "lot", label: "Batch / lot", level: 2, render: (s) => s.lot || "—" },
+                { key: "b", label: "Bought", level: 2, render: (s) => s.bought ? shortDate(s.bought) : "—" },
+                { key: "k", label: "Cost / kg", level: 2, render: (s) => s.costKg ? inr(s.costKg) : "—" },
+                { key: "vd", label: "Supplier", level: 2, render: (s) => s.vendor || "—" },
+                { key: "v", label: "Value", level: 2, render: (s) => inr(spoolValue(s)) },
               ]} />
           </Disclosure>
         );

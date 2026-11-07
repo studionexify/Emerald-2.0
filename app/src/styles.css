@@ -95,8 +95,8 @@ tbody td:first-child { font-weight: 600; }
 }
 
 /* Progressive disclosure: height animation without layout jump (content below shifts smoothly, nothing above moves). */
-.collapse { grid-template-rows: 0fr; transition: grid-template-rows .2s cubic-bezier(.32,.72,0,1); }
-.collapse[data-open] { grid-template-rows: 1fr; }
+.disc-x { grid-template-rows: 0fr; transition: grid-template-rows .2s cubic-bezier(.32,.72,0,1); }
+.disc-x[data-open] { grid-template-rows: 1fr; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px); } }
 .pop-in { animation: pop-in .12s ease-out; }
-@media (prefers-reduced-motion: reduce) { .collapse, .pop-in, .sheet-up { transition: none; animation: none; } }
+@media (prefers-reduced-motion: reduce) { .disc-x, .pop-in, .sheet-up { transition: none; animation: none; } }

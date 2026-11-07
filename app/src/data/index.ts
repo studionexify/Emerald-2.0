@@ -100,12 +100,13 @@ export function addBatch(o: Order) {
   batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: `Batch ${n}`, units: 50, done: 0, stage: "production" }];
 }
 
-export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string }): Order {
+export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string; delivery?: Order["delivery"]; supports?: boolean; material?: string; colour?: string }): Order {
   const max = Math.max(...ordersSig.value.map((x) => Number(x.no.split("-")[1])));
   const today = new Date().toISOString().slice(0, 10);
   const o: Order = { id: crypto.randomUUID(), no: `EM-${max + 1}`, type: d.type, customer: d.type === "inhouse" ? "Studio Nexify" : d.customer || "New client",
     medium: d.type === "inhouse" ? "Internal" : d.medium, stage: d.type === "inhouse" ? "production" : "quotation", created: today, due: d.due || today,
-    items: [{ name: d.item || "Item", material: "PLA", colour: "Black", qty: d.qty || 1, price: d.type === "inhouse" ? 0 : d.price, cost: Math.round((d.price || 100) * 0.3) }] };
+    delivery: d.delivery, supports: d.supports,
+    items: [{ name: d.item || "Item", material: d.material || "PLA", colour: d.colour || "Black", qty: d.qty || 1, price: d.type === "inhouse" ? 0 : d.price, cost: Math.round((d.price || 100) * 0.3) }] };
   ordersSig.value = [o, ...ordersSig.value]; log("Created order", `${o.no} · ${o.customer}`); return o;
 }
 

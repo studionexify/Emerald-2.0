@@ -7,7 +7,9 @@ export type Order = {
   stage: Stage; created: string; due: string; items: LineItem[]; blocked?: string; invoiced?: boolean;
   approved?: boolean; buildSheet?: boolean; jobsDone?: boolean; qcLogged?: boolean; packed?: boolean; tracking?: string;
   po?: string; paid?: boolean; skipPacking?: boolean;
+  /** How the order leaves the studio; address/pincode only for courier. */ delivery?: Delivery; supports?: boolean;
 };
+export type Delivery = { method: "pickup" | "hand" | "courier"; address?: string; pincode?: string; freight?: number };
 export type Job = { id: string; orderNo: string; item: string; printer: string; operator: string; status: "queued" | "printing" | "done" | "failed"; hours: number; grams: number; spool?: string;
   /** ISO time the job moved to printing — elapsed vs. estimated hours gives the ETA. */ startedAt?: string; finishedAt?: string };
 export type QcEntry = { id: string; orderNo: string; item: string; result: "pass" | "rework" | "scrap"; grams: number; defect?: string; by: string; date: string };
