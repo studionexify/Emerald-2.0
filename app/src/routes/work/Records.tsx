@@ -114,7 +114,7 @@ export function Invoice() {
             { key: "o", label: "Order", render: (i) => (i.orderNo ? `${i.orderNo}${i.batch ? " · " + i.batch : ""}` : "—"), hideTablet: true },
             { key: "t", label: "Taxable", align: "right", render: (i) => inr(invTax(i).taxable), hideTablet: true },
             { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) },
-            { key: "p", label: "Status", render: (i) => <Status tone={i.status === "cancelled" ? "idle" : i.kind === "credit" ? "active" : i.paidOn ? "done" : "waiting"}>{i.status === "cancelled" ? "Cancelled" : i.kind === "credit" ? "Credit note" : i.paidOn ? "Paid" : "Unpaid"}</Status> },
+            { key: "p", label: "Status", card: "status", render: (i) => <Status tone={i.status === "cancelled" ? "idle" : i.kind === "credit" ? "active" : i.paidOn ? "done" : "waiting"}>{i.status === "cancelled" ? "Cancelled" : i.kind === "credit" ? "Credit note" : i.paidOn ? "Paid" : "Unpaid"}</Status> },
           ]} />
         </Card>
       </Section>
@@ -166,7 +166,7 @@ export function Quotes() {
           { key: "d", label: "Date", render: (q) => shortDate(q.date) },
           { key: "c", label: "Customer", render: (q) => q.customer },
           { key: "v", label: "Valid till", render: (q) => shortDate(q.valid) },
-          { key: "o", label: "Outcome", render: (q) => <Status tone={q.outcome === "approved" ? "done" : q.outcome === "lost" ? "blocked" : q.outcome === "open" ? "waiting" : "idle"}>{q.outcome}</Status> },
+          { key: "o", label: "Outcome", card: "status", render: (q) => <Status tone={q.outcome === "approved" ? "done" : q.outcome === "lost" ? "blocked" : q.outcome === "open" ? "waiting" : "idle"}>{q.outcome}</Status> },
           { key: "a", label: "Value", align: "right", render: (q) => inr(q.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + q.gstRate / 100)) },
         ]} />
       </Card>

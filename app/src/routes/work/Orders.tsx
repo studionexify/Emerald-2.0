@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { Button, Card, DetailHead, Field, Icon, inputCls, Status, Table } from "../../ui";
+import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
 import { batchesSig, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
@@ -13,26 +13,34 @@ export default function Orders() {
   const [stage, setStage] = useState<Stage>("quotation");
   const list = ordersSig.value.filter((o) => f === "all" || o.type === f);
   const count = (k: Stage) => list.filter((o) => o.stage === k).length + batchesAt(k).length;
+  const viewToggle = (
+    <div class="flex bg-c1 rounded-lg p-0.5" role="group" aria-label="View">
+      {(["board", "list"] as const).map((v) => (
+        <button key={v} onClick={() => setView(v)} aria-label={v} aria-pressed={view === v}
+          class={`w-10 h-10 md:w-7 md:h-7 rounded-md flex items-center justify-center cursor-pointer ${view === v ? "bg-c0 text-c4 shadow-sm" : "text-c3"}`}>
+          <Icon name={v === "board" ? "grid" : "rows"} size={14} />
+        </button>
+      ))}
+    </div>
+  );
   return (
     <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy" onClick={() => { const no = prompt(`Copy which order? (${ordersSig.value.slice(0, 6).map((o) => o.no).join(", ")})`, ordersSig.value[0]?.no); const src = ordersSig.value.find((o) => o.no === no?.trim()); if (src) { setCreating(false); setOpen(duplicateOrder(src)); } }}>From template</Button><Button icon="plus" onClick={() => { setOpen(null); setCreating(true); }}>New order</Button></>}
       detail={creating ? <NewOrder onDone={(o) => { setCreating(false); if (o) setOpen(o); }} /> : cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}
-      toolbar={<div class="flex flex-wrap gap-2 items-center">
+      toolbar={<div class="flex flex-wrap gap-2 items-center w-full">
         <TypeChips value={f} onChange={setF} />
-        {view === "board" && (
-          <select aria-label="Stage" value={stage} onChange={(e) => setStage((e.target as HTMLSelectElement).value as Stage)}
-            class="md:hidden order-last basis-full h-8 px-3 rounded-lg border border-line bg-c0 text-[13px] font-semibold min-w-0">
-            {STAGES.map((s) => <option key={s.key} value={s.key}>{s.n}. {s.label} ({count(s.key)})</option>)}
-          </select>
-        )}
-        <div class="flex bg-c1 rounded-lg p-0.5 ml-auto">
-          {(["board", "list"] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)} aria-label={v} aria-pressed={view === v}
-              class={`w-7 h-7 rounded-md flex items-center justify-center cursor-pointer ${view === v ? "bg-c0 text-c4 shadow-sm" : "text-c3"}`}>
-              <Icon name={v === "board" ? "grid" : "rows"} size={14} />
-            </button>
-          ))}
-        </div>
+        {!isPhone.value && <div class="ml-auto">{viewToggle}</div>}
       </div>}>
+      {isPhone.value && (
+        <div class="flex gap-2 items-center">
+          {view === "board" ? (
+            <select aria-label="Stage" value={stage} onChange={(e) => setStage((e.target as HTMLSelectElement).value as Stage)}
+              class="flex-1 h-11 px-3 rounded-lg border border-line bg-c0 text-[15px] font-semibold min-w-0">
+              {STAGES.map((s) => <option key={s.key} value={s.key}>{s.n}. {s.label} ({count(s.key)})</option>)}
+            </select>
+          ) : <span class="flex-1 t-meta">{list.length} orders</span>}
+          {viewToggle}
+        </div>
+      )}
       {view === "board" ? (
         <>
           <div class="md:hidden flex flex-col gap-2">
@@ -65,7 +73,7 @@ export default function Orders() {
             { key: "no", label: "Order", render: (o) => <b>{o.no}</b> },
             { key: "c", label: "Customer", render: (o) => o.customer },
             { key: "t", label: "Type", render: (o) => TYPE_LABEL[o.type] },
-            { key: "s", label: "Stage", render: (o) => <Status tone={o.blocked ? "blocked" : o.stage === "archived" ? "done" : "active"}>{stageLabel(o)}</Status> },
+            { key: "s", label: "Stage", card: "status", render: (o) => <Status tone={o.blocked ? "blocked" : o.stage === "archived" ? "done" : "active"}>{stageLabel(o)}</Status> },
             { key: "m", label: "Medium", render: (o) => o.medium, hideTablet: true },
             { key: "d", label: "Due", render: (o) => shortDate(o.due) },
             { key: "v", label: "Value", align: "right", render: (o) => (o.type === "inhouse" ? "—" : inr(orderTotal(o))) },

@@ -63,7 +63,7 @@ export function Production() {
             { key: "i", label: "Item · run", render: (j) => j.item },
             { key: "p", label: "Printer", render: (j) => j.printer },
             { key: "op", label: "Operator", render: (j) => j.operator },
-            { key: "s", label: "Status", render: (j) => <Status tone={jobTone(j.status)}>{j.status}</Status> },
+            { key: "s", label: "Status", card: "status", render: (j) => <Status tone={jobTone(j.status)}>{j.status}</Status> },
             { key: "h", label: "Est. h", align: "right", render: (j) => j.hours },
             { key: "g", label: "Grams", align: "right", render: (j) => j.grams },
           ]} />
@@ -161,7 +161,7 @@ export function QC() {
               { key: "o", label: "Order", render: (q) => q.orderNo },
               { key: "d", label: "Date", render: (q) => shortDate(q.date) },
               { key: "i", label: "Item", render: (q) => q.item },
-              { key: "r", label: "Result", render: (q) => <Status tone={q.result === "pass" ? "done" : q.result === "scrap" ? "blocked" : "waiting"}>{q.result}</Status> },
+              { key: "r", label: "Result", card: "status", render: (q) => <Status tone={q.result === "pass" ? "done" : q.result === "scrap" ? "blocked" : "waiting"}>{q.result}</Status> },
               { key: "x", label: "Defect", render: (q) => q.defect ?? "—", hideTablet: true },
               { key: "b", label: "By", render: (q) => q.by },
               { key: "g", label: "Lost g", align: "right", render: (q) => q.grams },
