@@ -41,7 +41,11 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary .chev { transition: transform .15s ease; }
 details[open] > summary .chev { transform: rotate(90deg); }
 html, body, #app { height: 100%; }
-body { overflow: hidden; }
+body { overflow: hidden; overscroll-behavior: none; }
+#app { overflow-x: clip; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+/* iOS zooms into inputs under 16px: lift form text on touch phones only. */
+@media (pointer: coarse) and (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }
 body { margin: 0; background: var(--bg); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }

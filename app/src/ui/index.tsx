@@ -214,16 +214,25 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
       </div>
       <div class="flex-1 min-h-0">
         {detail !== undefined ? (
-          <Split detail={detail}>{actions && <div class="md:hidden flex flex-wrap gap-2">{actions}</div>}{children}</Split>
+          <Split detail={detail}>{children}</Split>
         ) : (
           <div class="h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
             <div class="flex flex-col gap-4 max-w-[1600px]">
-              {actions && <div class="md:hidden flex flex-wrap gap-2">{actions}</div>}
               {children}
             </div>
           </div>
         )}
       </div>
+      {actions && <ActionDock>{actions}</ActionDock>}
+    </div>
+  );
+}
+
+/** Phone-only sticky action bar at the foot of a page, directly above the dock: primary CTAs in thumb reach. */
+export function ActionDock({ children }: { children: ComponentChildren }) {
+  return (
+    <div class="md:hidden shrink-0 border-t border-line bg-c0/90 backdrop-blur-md px-3 py-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&_button]:h-12 [&_a]:min-h-12 [&>*:last-child]:flex-1">
+      {children}
     </div>
   );
 }
