@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
+import { MetaRow } from "../../ui/disclose";
 import { batchesSig, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
@@ -70,13 +71,15 @@ export default function Orders() {
       ) : (
         <Card class="!py-1">
           <Table rows={list} rowKey={(o) => o.id} onRow={setOpen} cols={[
-            { key: "no", label: "Order", render: (o) => <b>{o.no}</b> },
-            { key: "c", label: "Customer", render: (o) => o.customer },
-            { key: "t", label: "Type", render: (o) => TYPE_LABEL[o.type] },
+            { key: "no", label: "Order", render: (o) => <span class="flex flex-col min-w-0"><span><b>{o.no}</b> <span class="font-medium">{o.customer}</span></span><MetaRow items={[o.items[0]?.name, o.items.length > 1 && `+${o.items.length - 1} more`]} /></span> },
             { key: "s", label: "Stage", card: "status", render: (o) => <Status tone={o.blocked ? "blocked" : o.stage === "archived" ? "done" : "active"}>{stageLabel(o)}</Status> },
-            { key: "m", label: "Medium", render: (o) => o.medium, hideTablet: true },
-            { key: "d", label: "Due", render: (o) => shortDate(o.due) },
+            { key: "d", label: "Due", card: "foot", render: (o) => shortDate(o.due) },
             { key: "v", label: "Value", align: "right", render: (o) => (o.type === "inhouse" ? "—" : inr(orderTotal(o))) },
+            { key: "t", label: "Type", level: 2, render: (o) => TYPE_LABEL[o.type] },
+            { key: "m", label: "Medium", level: 2, render: (o) => o.medium },
+            { key: "it", label: "Items", level: 2, render: (o) => o.items.map((i) => `${i.qty}× ${i.name} (${i.material} ${i.colour})`).join(", ") },
+            { key: "dl", label: "Delivery", level: 2, render: (o) => !o.delivery ? "—" : o.delivery.method === "courier" ? `Courier${o.delivery.pincode ? ` · ${o.delivery.pincode}` : ""}` : o.delivery.method === "hand" ? "Hand delivery" : "Pickup" },
+            { key: "bl", label: "Blocked", level: 2, render: (o) => o.blocked || "—" },
           ]} />
         </Card>
       )}

@@ -2,7 +2,8 @@ import { useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Disclosure, Icon, isPhone, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Stepper, Table, type Col } from "../ui";
+import { Pick, Button, Card, Disclosure, Icon, isPhone, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
@@ -37,16 +38,30 @@ const matchQ = (q: string, ...xs: (string | undefined)[]) => !q || xs.join(" ").
 /* ================================================================ Printers */
 const STATUS = ["idle", "printing", "down"];
 const pFields: FDef<Printer>[] = [
-  { k: "name", label: "Name (what the floor calls it)" }, { k: "model", label: "Model" },
-  { k: "status", label: "Status", type: "select", options: STATUS }, { k: "nozzle", label: "Nozzle" },
-  { k: "volume", label: "Build volume", suffix: "mm" }, { k: "serial", label: "Serial no." },
-  { k: "location", label: "Location" }, { k: "hours", label: "Lifetime hours", type: "number", suffix: "h" },
-  { k: "bought", label: "Bought on", type: "date" }, { k: "cost", label: "Purchase cost", type: "number", suffix: "₹" },
-  { k: "lastService", label: "Last service", type: "date" }, { k: "serviceEvery", label: "Service every", type: "number", suffix: "h" },
-  { k: "notes", label: "Notes", type: "textarea" },
+  { k: "name", group: "Essentials", label: "Name (what the floor calls it)" }, { k: "model", group: "Essentials", label: "Model" },
+  { k: "status", group: "Essentials", label: "Status", type: "select", options: STATUS }, { k: "nozzle", group: "Essentials", label: "Nozzle" },
+  { k: "volume", group: "Service & specs", label: "Build volume", suffix: "mm" }, { k: "serial", group: "Service & specs", label: "Serial no." },
+  { k: "location", group: "Essentials", label: "Location" }, { k: "hours", group: "Service & specs", label: "Lifetime hours", type: "number", suffix: "h" },
+  { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "cost", group: "Purchase", label: "Purchase cost", type: "number", suffix: "₹" },
+  { k: "lastService", group: "Service & specs", label: "Last service", type: "date" }, { k: "serviceEvery", group: "Service & specs", label: "Service every", type: "number", suffix: "h" },
+  { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
 ];
 const mlog = (p: Printer) => X.machineLog.find((m) => m.printer === p.name) ?? { util: 0, uptime: 100, fail: 0, lost: 0, blocks: 0 };
 const pTone = (s: string) => (s === "printing" ? "active" : s === "down" ? "blocked" : "idle") as "active";
+
+const serviceDue = (p: Printer) => !!p.serviceEvery && p.serviceEvery - (p.hours % p.serviceEvery) <= 20;
+const loadedOn = (p: Printer) => { const s = spoolsSig.value.find((x) => x.printer === p.name && x.status === "loaded"); return s ? `${s.material} ${s.colour}` : ""; };
+function PrinterAct({ p, open }: { p: Printer; open: (p: Printer) => void }) {
+  const set = (st: Printer["status"], why: string) => { printersSig.value = printersSig.value.map((x) => (x.id === p.id ? { ...x, status: st } : x)); log(why, p.name); };
+  const primary = p.status === "down" ? <Button variant="outline" onClick={() => set("idle", "Back in service")}>Back in service</Button>
+    : p.status === "idle" ? <a href="/work/production" class="inline-flex items-center justify-center h-8 px-3.5 rounded-lg border border-line text-[13px] font-semibold hover:bg-c1">Assign job</a>
+    : <Button variant="outline" onClick={() => open(p)}>View job</Button>;
+  return <>{primary}<Menu label={`Actions for ${p.name}`} items={[
+    { label: "Open full inspector", on: () => open(p) },
+    { label: "Log service", on: () => { printersSig.value = printersSig.value.map((x) => (x.id === p.id ? { ...x, lastService: today() } : x)); log("Serviced", p.name); } },
+    { label: "Mark down", on: () => set("down", "Status → down"), hidden: p.status === "down" },
+  ]} /></>;
+}
 
 export function Printers() {
   const [f, setF] = useState("active");
@@ -91,14 +106,16 @@ export function Printers() {
         <a href="/work/production" class="shrink-0 h-11 md:h-8 px-3.5 rounded-full inline-flex items-center gap-1.5 text-[14px] md:text-[13px] font-semibold bg-c0 text-c4"><span class="num">{queued}</span> Queued <Icon name="right" size={12} /></a>
       </div>
       <Card class="!py-1">
-        <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} cols={[
-          { key: "n", label: "Printer", render: (p) => <span>{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}</span> },
-          { key: "m", label: "Model", render: (p) => p.model },
+        <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} act={(p) => <PrinterAct p={p} open={r.open} />} cols={[
+          { key: "n", label: "Printer", render: (p) => <span class="flex flex-col min-w-0"><span class="font-semibold">{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}{serviceDue(p) && <span class="ml-2 inline-flex items-center gap-1 text-[11px] font-bold"><span class="w-1.5 h-1.5 rounded-full bg-warn" />Service due</span>}</span><MetaRow items={[p.model, loadedOn(p)]} /></span> },
           { key: "s", label: "Status", card: "status", render: (p) => <Status tone={pTone(p.status)}>{p.status}</Status> },
-          { key: "j", label: "Job", render: (p) => p.job ?? "—", hideTablet: true },
-          { key: "u", label: "Util.", align: "right", render: (p) => `${mlog(p).util}%` },
-          { key: "f", label: "Fail", align: "right", render: (p) => `${mlog(p).fail}%` },
-          { key: "h", label: "Hours", align: "right", render: (p) => p.hours.toLocaleString("en-IN") },
+          { key: "j", label: "Now", card: "foot", render: (p) => p.job ? `Printing ${p.job}` : p.status === "down" ? "Needs attention" : "Free" },
+          { key: "u", label: "Utilisation", level: 2, render: (p) => `${mlog(p).util}%` },
+          { key: "f", label: "Fail rate", level: 2, render: (p) => `${mlog(p).fail}%` },
+          { key: "up", label: "Uptime", level: 2, render: (p) => `${mlog(p).uptime}%` },
+          { key: "h", label: "Lifetime", level: 2, render: (p) => `${p.hours.toLocaleString("en-IN")} h` },
+          { key: "sv", label: "Next service", level: 2, render: (p) => p.serviceEvery ? `in ${Math.max(0, p.serviceEvery - (p.hours % p.serviceEvery))} h` : "—" },
+          { key: "nz", label: "Nozzle", level: 2, render: (p) => p.nozzle ?? "—" },
         ]} />
       </Card>
       <p class="text-xs text-c3">Tap a printer for details. Retire takes it off every picker; old jobs keep its name. Delete is only for a row typed by mistake — it goes to the Bin.</p>
@@ -111,20 +128,32 @@ const Swatch = ({ hex }: { hex?: string }) => <span class="inline-block w-3.5 h-
 const MATS = ["PLA", "PETG", "TPU", "ABS", "ASA", "PA-CF", "Resin"];
 const SP_STATUS = ["sealed", "open", "loaded", "empty"];
 const sFields: FDef<Spool>[] = [
-  { k: "material", label: "Material", type: "select", options: MATS }, { k: "colour", label: "Colour" },
-  { k: "hex", label: "Colour swatch", type: "color" }, { k: "brand", label: "Brand" },
-  { k: "finish", label: "Finish / line", }, { k: "diameter", label: "Diameter", type: "number", suffix: "mm" },
-  { k: "spoolNo", label: "Spool no." }, { k: "lot", label: "Batch / lot" },
-  { k: "size", label: "Nominal net", type: "number", suffix: "g" }, { k: "tare", label: "Empty spool (tare)", type: "number", suffix: "g" },
-  { k: "gross", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", label: "Net remaining", type: "number", suffix: "g" },
-  { k: "costKg", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", label: "Vendor" },
-  { k: "bought", label: "Bought on", type: "date" }, { k: "opened", label: "Opened on", type: "date" },
-  { k: "dried", label: "Last dried", type: "date" }, { k: "location", label: "Storage / dry box" },
-  { k: "nozzle", label: "Nozzle temp" }, { k: "bed", label: "Bed temp" },
-  { k: "status", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
-  { k: "notes", label: "Notes", type: "textarea" },
+  { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS }, { k: "colour", group: "Essentials", label: "Colour" },
+  { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" }, { k: "brand", group: "Essentials", label: "Brand" },
+  { k: "finish", group: "Spec", label: "Finish / line", }, { k: "diameter", group: "Spec", label: "Diameter", type: "number", suffix: "mm" },
+  { k: "spoolNo", group: "Essentials", label: "Spool no." }, { k: "lot", group: "Purchase", label: "Batch / lot" },
+  { k: "size", group: "Weight", label: "Nominal net", type: "number", suffix: "g" }, { k: "tare", group: "Weight", label: "Empty spool (tare)", type: "number", suffix: "g" },
+  { k: "gross", group: "Weight", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", group: "Essentials", label: "Net remaining", type: "number", suffix: "g" },
+  { k: "costKg", group: "Purchase", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", group: "Purchase", label: "Vendor" },
+  { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "opened", group: "Care", label: "Opened on", type: "date" },
+  { k: "dried", group: "Care", label: "Last dried", type: "date" }, { k: "location", group: "Essentials", label: "Storage / dry box" },
+  { k: "nozzle", group: "Print settings", label: "Nozzle temp" }, { k: "bed", group: "Print settings", label: "Bed temp" },
+  { k: "status", group: "Essentials", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", group: "Essentials", when: (r) => r.status === "loaded", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
+  { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
 ];
 const spTone = (s: Spool) => (s.grams <= 0 ? <Status tone="blocked">Out</Status> : s.grams < 250 ? <Status tone="waiting">Low</Status> : s.status === "loaded" ? <Status tone="active">Loaded</Status> : <Status tone="idle">{s.status ?? "open"}</Status>);
+
+/** 1-tap deduction: logged as a stock-out movement, same as any other draw. */
+function SpoolAct({ s, open }: { s: Spool; open: (s: Spool) => void }) {
+  const use = (g: number) => { const q = Math.min(g, s.grams); if (!q) return; applyMove({ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "out", qty: q, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", notes: "Quick deduction", by: me.value?.name ?? "You" }); log(`Used ${q} g`, s.spoolNo, "stock"); };
+  return <>
+    <Button variant="outline" disabled={s.grams <= 0} onClick={() => use(50)} aria-label={`Deduct 50 g from ${s.spoolNo}`}>−50 g</Button>
+    <Menu label={`Actions for ${s.spoolNo}`} items={[
+      { label: "Weigh in (exact)", on: () => open(s) },
+      { label: "Deduct 10 g", on: () => use(10) }, { label: "Deduct 100 g", on: () => use(100) }, { label: "Deduct 250 g", on: () => use(250) },
+    ]} />
+  </>;
+}
 
 function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) => void }) {
   const [g, setG] = useState(0);
@@ -203,15 +232,16 @@ export function Filament() {
         return (
           <Disclosure key={m} open title={<span class="inline-flex items-center gap-2">{m}<span class="t-meta font-normal">{sp.length} spools</span>{g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}</span>}
             meta={`${(g / 1000).toFixed(2)} kg · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}>
-              <Table rows={sp} rowKey={(s) => s.id} onRow={r.open} cols={[
-                { key: "n", label: "Spool", render: (s) => <span class="inline-flex items-center gap-2 font-mono text-[12px] font-bold"><span title={s.status} class={`w-1.5 h-1.5 rounded-full ${s.grams <= 0 ? "bg-c2" : s.grams < 250 ? "bg-warn" : s.status === "loaded" ? "bg-c4" : "border border-c4"}`} />{s.spoolNo}</span> },
-                { key: "c", label: "Colour · brand", render: (s) => <span class="inline-flex items-center gap-2"><Swatch hex={s.hex} />{s.colour}<span class="t-meta">{s.brand}{s.finish ? ` · ${s.finish}` : ""}</span></span> },
+              <Table rows={sp} rowKey={(s) => s.id} onRow={r.open} act={(s) => <SpoolAct s={s} open={r.open} />} cols={[
+                { key: "c", label: "Spool", render: (s) => <span class="flex items-center gap-2 min-w-0"><Swatch hex={s.hex} /><span class="flex flex-col min-w-0"><span class="font-semibold">{s.material} {s.colour}</span><MetaRow items={[s.spoolNo, s.brand, (s.status === "loaded" ? s.printer : s.location)]} /></span></span> },
+                { key: "s", label: "State", card: "status", render: (s) => spTone(s) },
                 { key: "p", label: "Weight left", render: (s) => <span class="block min-w-[120px]"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /></span> },
-                { key: "a", label: "After queue", align: "right", render: (s) => { const a = s.grams - committed(s); return committed(s) ? `${a.toLocaleString("en-IN")} g` : "—"; }, hideTablet: true },
-                { key: "l", label: "Where", render: (s) => (s.status === "loaded" ? s.printer : s.location) || "—", hideTablet: true },
-                { key: "v", label: "Value", align: "right", render: (s) => inr(spoolValue(s)), hideTablet: true },
-                { key: "s", label: "State", card: "status", render: (s) => spTone(s), hideTablet: true },
-                { key: "x", label: "", align: "right", render: (s) => <button class="h-6 px-2 rounded-md border border-line text-[11px] font-semibold hover:bg-c1 cursor-pointer" onClick={(e) => { e.stopPropagation(); r.open(s); }}>Weigh</button> },
+                { key: "a", label: "After queue", level: 2, render: (s) => committed(s) ? `${(s.grams - committed(s)).toLocaleString("en-IN")} g` : "No jobs queued" },
+                { key: "lot", label: "Batch / lot", level: 2, render: (s) => s.lot || "—" },
+                { key: "b", label: "Bought", level: 2, render: (s) => s.bought ? shortDate(s.bought) : "—" },
+                { key: "k", label: "Cost / kg", level: 2, render: (s) => s.costKg ? inr(s.costKg) : "—" },
+                { key: "vd", label: "Supplier", level: 2, render: (s) => s.vendor || "—" },
+                { key: "v", label: "Value", level: 2, render: (s) => inr(spoolValue(s)) },
               ]} />
           </Disclosure>
         );

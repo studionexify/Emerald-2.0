@@ -171,7 +171,7 @@ export const alerts = {
   ],
   Quality: [
     { t: "danger", text: "EM-1038 coaster run 5 failed — no reprint queued", href: "/work/production" },
-    { t: "warn", text: "A1-02 failing 31% vs floor 12%", href: "/workshop" },
+    { t: "warn", text: "A1-02 failing 31% vs floor 12%", href: "/workshop/printers" },
     { t: "info", text: "EM-1038 QC ended in scrap (90 g)", href: "/work/qc" },
   ],
   Flow: [
@@ -180,7 +180,7 @@ export const alerts = {
     { t: "danger", text: "EM-1038 missed target date (03 Nov)", href: "/work/packing" },
   ],
   Stock: [
-    { t: "danger", text: "PETG Grey — out of stock", href: "/workshop/filament" },
+    { t: "danger", text: "PETG Grey — out of stock", href: "/workshop" },
     { t: "warn", text: "Bubble wrap 8 m — below reorder (15 m)", href: "/workshop/packing" },
     { t: "warn", text: "NFC tag NTAG215 — below reorder", href: "/workshop/parts" },
   ],

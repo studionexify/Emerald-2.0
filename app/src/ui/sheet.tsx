@@ -69,7 +69,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full }: {
       <div class="absolute inset-0 bg-black/40 sheet-fade" onClick={onClose} aria-hidden="true" />
       <div ref={panel} role="dialog" aria-modal="true" tabIndex={-1} aria-label={typeof title === "string" ? title : undefined}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : "max-h-[92dvh]"}`}
+        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 md:w-full md:max-w-lg md:mx-auto md:mb-[8vh] md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : "max-h-[92dvh]"}`}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dy ? "none" : undefined, touchAction: "pan-y" }}>
         <div class="shrink-0 pt-2 pb-1 flex justify-center cursor-grab" aria-hidden="true"><span class="w-9 h-1.5 rounded-full bg-c1" /></div>
         {title && (
@@ -130,24 +130,3 @@ export function FilterSheet({ children, label = "Filter & sort" }: { children: C
   );
 }
 
-/* ── Stepper: tactile ± with debounced commit (stock audit). ── */
-export function Stepper({ value, onCommit, step = 1, min = 0, label, delay = 500 }: { value: number; onCommit: (v: number) => void; step?: number; min?: number; label: string; delay?: number }) {
-  const [v, setV] = useState(value);
-  const t = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => setV(value), [value]);
-  useEffect(() => () => clearTimeout(t.current), []);
-  const bump = (d: number) => {
-    const n = Math.max(min, +(v + d).toFixed(3));
-    setV(n);
-    clearTimeout(t.current);
-    t.current = setTimeout(() => n !== value && onCommit(n), delay);
-  };
-  const b = "w-11 h-11 md:w-8 md:h-8 rounded-lg bg-c1 text-c4 text-lg font-semibold flex items-center justify-center cursor-pointer select-none";
-  return (
-    <div class="inline-flex items-center gap-1" role="group" aria-label={label}>
-      <button class={b} onClick={() => bump(-step)} disabled={v <= min} aria-label={`Decrease ${label}`}>−</button>
-      <span class="min-w-10 text-center num" aria-live="polite">{v}</span>
-      <button class={b} onClick={() => bump(step)} aria-label={`Increase ${label}`}>+</button>
-    </div>
-  );
-}

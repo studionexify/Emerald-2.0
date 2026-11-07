@@ -39,8 +39,8 @@ export const MAUNY_TABS = [
 ];
 
 export const WORKSHOP_TABS = [
-  { href: "/workshop", label: "Printers" },
-  { href: "/workshop/filament", label: "Filament" },
+  { href: "/workshop", label: "Filament" },
+  { href: "/workshop/printers", label: "Printers" },
   { href: "/workshop/parts", label: "Accessories & parts" },
   { href: "/workshop/packing", label: "Packing stock" },
   { href: "/workshop/movements", label: "Stock ledger" },

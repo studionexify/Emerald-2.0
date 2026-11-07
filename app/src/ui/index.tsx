@@ -1,11 +1,11 @@
 import type { ButtonHTMLAttributes, ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useLocation } from "../router";
 import { Icon } from "./icon";
 import { FilterSheet, isPhone, Sheet } from "./sheet";
 
 export { Icon };
-export { ask, AskHost, FilterSheet, isPhone, Sheet, Stepper } from "./sheet";
+export { ask, AskHost, FilterSheet, isPhone, Sheet } from "./sheet";
 
 type Btn = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" | "ghost"; icon?: string };
 export function Button({ variant = "primary", icon, children, class: c, ...rest }: Btn) {
@@ -129,26 +129,56 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
   );
 }
 
-/** card: where the column goes in the phone record card. Default = split key/value row; "status" = pill beside the title; "foot" = bottom meta line; "hide" = desktop only. */
-export type Col<T> = { key: string; label: string; render: (row: T) => ComponentChildren; align?: "right"; hideTablet?: boolean; card?: "status" | "foot" | "hide" };
-/** Table on iPad/desktop; vertical record cards on phone. Never scrolls sideways. */
-export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: T[]; rowKey: (r: T) => string; onRow?: (r: T) => void }) {
+/** Height-animated collapse with no layout jump: grid rows 0fr → 1fr. Content stays mounted only while open. */
+export function Collapse({ open, children, id }: { open: boolean; children: ComponentChildren; id?: string }) {
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => { if (open) setMounted(true); }, [open]);
+  return (
+    <div id={id} class="disc-x grid min-w-0" data-open={open ? "" : undefined} aria-hidden={!open} {...{ inert: !open || undefined }}
+      onTransitionEnd={(e) => e.target === e.currentTarget && !open && setMounted(false)}>
+      <div class="min-h-0 overflow-hidden">{(open || mounted) && children}</div>
+    </div>
+  );
+}
+
+/** card: where the column goes in the phone record card. Default = split key/value row; "status" = pill beside the title; "foot" = bottom meta line; "hide" = desktop only.
+    level 2 = secondary data: hidden from the scannable row, revealed by the row's + toggle (desktop/tablet) and in the record sheet (phone). */
+export type Col<T> = { key: string; label: string; render: (row: T) => ComponentChildren; align?: "right"; hideTablet?: boolean; card?: "status" | "foot" | "hide"; level?: 2 };
+/** Table on iPad/desktop; vertical record cards on phone. Never scrolls sideways.
+    act = the single contextual action for the row's current state; expand = extra Level-2 content under the row. */
+export function Table<T>({ cols: all, rows, rowKey, onRow, act, expand }: { cols: Col<T>[]; rows: T[]; rowKey: (r: T) => string; onRow?: (r: T) => void; act?: (r: T) => ComponentChildren; expand?: (r: T) => ComponentChildren }) {
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
   if (!rows.length) return <Empty title="Nothing here yet" />;
+  const cols = all.filter((c) => c.level !== 2), l2 = all.filter((c) => c.level === 2);
+  const canExpand = l2.length > 0 || !!expand;
+  const toggle = (k: string) => setOpenRows((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const [head, ...rest] = cols;
   const hid = (c: Col<T>) => (c.hideTablet ? "hidden xl:table-cell" : "");
   const status = rest.filter((c) => c.card === "status"), foot = rest.filter((c) => c.card === "foot");
   const body = rest.filter((c) => !c.card);
+  const span = cols.length + (canExpand ? 1 : 0) + (act ? 1 : 0);
+  /* Row keyboard: ↑/↓ move, → expand, ← collapse, Enter open. */
+  const key = (r: T, k: string) => (e: KeyboardEvent) => {
+    const tr = e.currentTarget as HTMLElement;
+    const sib = (d: 1 | -1) => { let x = tr as Element | null; do x = d > 0 ? x!.nextElementSibling : x!.previousElementSibling; while (x && !(x as HTMLElement).dataset.row); return x as HTMLElement | null; };
+    if (e.key === "ArrowDown") { e.preventDefault(); sib(1)?.focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); sib(-1)?.focus(); }
+    else if (e.key === "ArrowRight" && canExpand && !openRows.has(k)) toggle(k);
+    else if (e.key === "ArrowLeft" && openRows.has(k)) toggle(k);
+    else if (e.key === "Enter" && e.target === tr) onRow?.(r);
+  };
+  const stop = (e: Event) => e.stopPropagation();
   return (
     <>
       <ul class="md:hidden flex flex-col divide-y divide-line">
         {rows.map((r) => (
           <li key={rowKey(r)}>
-            <div role={onRow ? "button" : undefined} tabIndex={onRow ? 0 : undefined} onClick={onRow && (() => onRow(r))} onKeyDown={onRow && ((e) => e.key === "Enter" && onRow(r))}
+            <div role={onRow ? "button" : undefined} tabIndex={onRow ? 0 : undefined} onClick={onRow && (() => onRow(r))} onKeyDown={onRow && ((e) => e.key === "Enter" && e.target === e.currentTarget && onRow(r))}
               class={`block -mx-1 px-1 py-3 rounded-lg text-[14px] ${onRow ? "cursor-pointer active:bg-c1" : ""}`}>
               <div class="flex items-start gap-2 min-h-6">
                 <div class="flex-1 min-w-0 text-[15px] font-semibold leading-snug break-words">{head.render(r)}</div>
                 {status.map((c) => <div key={c.key} class="shrink-0 rounded-full bg-c1 px-2 py-0.5">{c.render(r)}</div>)}
-                {onRow && <span class="shrink-0 text-c2 mt-0.5"><Icon name="right" size={14} /></span>}
+                {onRow && !act && <span class="shrink-0 text-c2 mt-0.5"><Icon name="right" size={14} /></span>}
               </div>
               {body.length > 0 && (
                 <dl class="mt-2 flex flex-col">
@@ -160,7 +190,8 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
                   ) : <dd key={c.key} class="py-1 break-words">{c.render(r)}</dd>)}
                 </dl>
               )}
-              {foot.length > 0 && <div class="mt-2 pt-2 border-t border-line flex flex-wrap justify-between gap-x-3 gap-y-1 t-meta">{foot.map((c) => <span key={c.key}>{c.label && `${c.label} `}{c.render(r)}</span>)}</div>}
+              {foot.length > 0 && <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 t-meta">{foot.map((c) => <span key={c.key}>{c.label && `${c.label} `}{c.render(r)}</span>)}</div>}
+              {act && <div class="mt-2.5 flex items-center gap-2 [&_button]:h-11 [&>*:first-child]:flex-1" onClick={stop}>{act(r)}</div>}
             </div>
           </li>
         ))}
@@ -168,15 +199,35 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
       <table class="hidden md:table w-full text-[13px] table-auto">
         <thead>
           <tr class="text-left text-c3 text-xs">
+            {canExpand && <th class="w-7"><span class="sr-only">Expand</span></th>}
             {cols.map((c) => <th key={c.key} class={`py-1.5 pr-4 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
+            {act && <th class="text-right pr-1"><span class="sr-only">Action</span></th>}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`h-9 border-t border-line align-middle ${onRow ? "cursor-pointer hover:bg-c1/60" : ""}`}>
-              {cols.map((c) => <td key={c.key} class={`py-1.5 pr-4 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const k = rowKey(r), open = openRows.has(k);
+            return [
+              <tr key={k} data-row="1" tabIndex={0} onKeyDown={key(r, k)} onClick={onRow && (() => onRow(r))} aria-expanded={canExpand ? open : undefined}
+                class={`h-10 border-t border-line align-middle outline-none focus-visible:bg-c1 ${onRow ? "cursor-pointer hover:bg-c1/60" : ""}`}>
+                {canExpand && <td class="pl-0.5 w-7" onClick={stop}><button tabIndex={-1} aria-label={open ? "Hide details" : "Show details"} aria-expanded={open} onClick={() => toggle(k)} class="w-6 h-6 rounded-md inline-flex items-center justify-center text-c3 hover:bg-c1 hover:text-c4 cursor-pointer"><span class={`inline-flex transition-transform ${open ? "rotate-90" : ""}`}><Icon name="right" size={12} /></span></button></td>}
+                {cols.map((c) => <td key={c.key} class={`py-1.5 pr-4 break-words ${c.align === "right" ? "text-right num whitespace-nowrap" : ""} ${hid(c)}`}>{c.render(r)}</td>)}
+                {act && <td class="py-1 pr-1 text-right whitespace-nowrap" onClick={stop}><span class="inline-flex items-center gap-1">{act(r)}</span></td>}
+              </tr>,
+              canExpand && (
+                <tr key={k + ":x"} class={open ? "" : "border-0"}>
+                  <td colSpan={span} class="p-0">
+                    <Collapse open={open}>
+                      <div class="pl-8 pr-3 pb-3 pt-0.5 flex flex-col gap-2">
+                        {l2.length > 0 && <dl class="flex flex-wrap gap-x-6 gap-y-1.5">{l2.map((c) => <div key={c.key} class="min-w-0"><dt class="t-meta">{c.label}</dt><dd class="text-[13px] font-medium num">{c.render(r)}</dd></div>)}</dl>}
+                        {expand?.(r)}
+                      </div>
+                    </Collapse>
+                  </td>
+                </tr>
+              ),
+            ];
+          })}
         </tbody>
       </table>
     </>
@@ -189,12 +240,19 @@ export function Split({ detail, children }: { detail: ComponentChildren | null; 
   const phone = isPhone.value;
   const ref = useRef<HTMLDivElement>(null);
   const close = () => ref.current?.querySelector<HTMLButtonElement>("[data-close]")?.click();
+  const [hide, setHide] = useState(false);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") { e.preventDefault(); setHide((h) => !h); } };
+    addEventListener("keydown", k); return () => removeEventListener("keydown", k);
+  }, []);
+  useEffect(() => setHide(false), [!!detail]);
+  if (hide && !phone) detail = null;
   return (
     <div class={`min-h-0 h-full ${detail && !phone ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
       <div class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
         <div class="flex flex-col gap-4 max-w-[1600px]">{children}</div>
       </div>
-      {detail && !phone && <aside class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 border-l border-line p-4">{detail}</aside>}
+      {detail && !phone && <aside aria-label="Inspector (⌘I to hide)" class="sheet-fade min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 border-l border-line p-4">{detail}</aside>}
       {detail && phone && <Sheet full onClose={close}><div ref={ref} class="pt-1">{detail}</div></Sheet>}
     </div>
   );
