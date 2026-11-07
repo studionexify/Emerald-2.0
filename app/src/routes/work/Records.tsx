@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
+import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
 import {
   accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, ordersSig, photosSig, quotesSig, raiseInvoice,
   rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, X, log, patchOrder, nowS, consume,
@@ -52,7 +52,7 @@ export function Invoice() {
   };
   return (
     <WorkShell title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
-      actions={<><Button variant="outline" onClick={() => confirm("Renumber this FY's series in date order?") && resequence(fyOf(today()))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
+      actions={<><Button variant="outline" onClick={() => ask("Renumber this FY's series in date order?").then((ok) => ok && resequence(fyOf(today())))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
       detail={cur && (
         <div>
@@ -77,7 +77,7 @@ export function Invoice() {
                 <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
                   <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(Number((e.target as HTMLInputElement).value) || 0)} /></Field>
                   <Button variant="outline" onClick={() => { if (cn) { setOpen(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
-                  {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => confirm(`Cancel ${cur.no}? The number stays used.`) && cancelInvoice(cur)}>Cancel invoice</Button>}
+                  {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.`).then((ok) => ok && cancelInvoice(cur))}>Cancel invoice</Button>}
                 </div>
               )}
             </div>

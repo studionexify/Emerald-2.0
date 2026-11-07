@@ -3,7 +3,7 @@ import { signal } from "@preact/signals";
 import { navigate, useLocation } from "../router";
 import { syncState } from "../data/sync";
 import { NAV } from "../nav";
-import { Icon } from "../ui";
+import { AskHost, Icon } from "../ui";
 import { searchQ } from "../data/search";
 import { attention, batchesSig, can, isExternal, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
@@ -142,6 +142,7 @@ export function Frame({ children }: { children: ComponentChildren }) {
         <main class="flex-1 min-w-0 min-h-0 pr-[env(safe-area-inset-right)] md:pl-0 pl-[env(safe-area-inset-left)]">{children}</main>
       </div>
       <Dock />
+      <AskHost />
     </div>
   );
 }

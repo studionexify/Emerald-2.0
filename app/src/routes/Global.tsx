@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
-import { KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
+import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, X, type Role, type User } from "../data";
 
@@ -69,7 +69,7 @@ export function Bin() {
   const [open, setOpen] = useState<Binned | null>(null);
   return (
     <Page title="Bin" sub="Recoverable for 7 days · grouped by kind" detail={open && <Inspect title={open.label} row={{ kind: open.kind, deleted: shortDate(open.deletedAt), by: open.by, daysLeft: left(open.deletedAt), ...(open.data && typeof open.data === "object" ? open.data as Record<string, unknown> : {}) }} onClose={() => setOpen(null)}>
-      <Actions>{canRestore(open) && <Button onClick={() => { restoreBin(open); log("Restored from Bin", open.label); setOpen(null); }}>Restore</Button>}<Button variant="ghost" icon="bin" onClick={() => { if (confirm("Delete forever?")) { purgeBin(open); setOpen(null); } }}>Delete forever</Button></Actions></Inspect>}>
+      <Actions>{canRestore(open) && <Button onClick={() => { restoreBin(open); log("Restored from Bin", open.label); setOpen(null); }}>Restore</Button>}<Button variant="ghost" icon="bin" onClick={() => { ask("Delete forever?", { ok: "Delete" }).then((ok) => { if (ok) { purgeBin(open); setOpen(null); } }); }}>Delete forever</Button></Actions></Inspect>}>
       {!items.length && <Card><Empty title="The Bin is empty" hint="Deleted records stay here for 7 days." /></Card>}
       {kinds.map((k) => (
         <Section key={k} title={k} note={String(items.filter((b) => b.kind === k).length)}>
@@ -182,7 +182,7 @@ export function Profile() {
         {msg && <p class="text-[13px] font-medium mt-2" role="status">{msg}</p>}
       </Disclosure>
       <CloudCard />
-      {can("settings", "full") && <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Prototype data is saved on this device.</span><Button variant="outline" onClick={() => confirm("Erase all local data and reload the sample data?") && resetAll()}>Reset sample data</Button></Card>}
+      {can("settings", "full") && <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Prototype data is saved on this device.</span><Button variant="outline" onClick={() => ask("Erase all local data and reload the sample data?").then((ok) => ok && resetAll())}>Reset sample data</Button></Card>}
     </SettingsShell>
   );
 }

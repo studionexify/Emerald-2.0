@@ -1,8 +1,11 @@
 import type { ButtonHTMLAttributes, ComponentChildren } from "preact";
+import { useRef } from "preact/hooks";
 import { useLocation } from "../router";
 import { Icon } from "./icon";
+import { FilterSheet, isPhone, Sheet } from "./sheet";
 
 export { Icon };
+export { ask, AskHost, FilterSheet, isPhone, Sheet, Stepper } from "./sheet";
 
 type Btn = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" | "ghost"; icon?: string };
 export function Button({ variant = "primary", icon, children, class: c, ...rest }: Btn) {
@@ -126,26 +129,39 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
   );
 }
 
-export type Col<T> = { key: string; label: string; render: (row: T) => ComponentChildren; align?: "right"; hideTablet?: boolean };
-/** Table on iPad/desktop; stacked cards on phone. Never scrolls sideways. */
+/** card: where the column goes in the phone record card. Default = split key/value row; "status" = pill beside the title; "foot" = bottom meta line; "hide" = desktop only. */
+export type Col<T> = { key: string; label: string; render: (row: T) => ComponentChildren; align?: "right"; hideTablet?: boolean; card?: "status" | "foot" | "hide" };
+/** Table on iPad/desktop; vertical record cards on phone. Never scrolls sideways. */
 export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: T[]; rowKey: (r: T) => string; onRow?: (r: T) => void }) {
   if (!rows.length) return <Empty title="Nothing here yet" />;
   const [head, ...rest] = cols;
   const hid = (c: Col<T>) => (c.hideTablet ? "hidden xl:table-cell" : "");
+  const status = rest.filter((c) => c.card === "status"), foot = rest.filter((c) => c.card === "foot");
+  const body = rest.filter((c) => !c.card);
   return (
     <>
-      <ul class="md:hidden flex flex-col">
+      <ul class="md:hidden flex flex-col divide-y divide-line">
         {rows.map((r) => (
-          <li key={rowKey(r)} onClick={onRow && (() => onRow(r))} class={`border-b border-line last:border-0 py-2 text-[13px] ${onRow ? "cursor-pointer active:bg-c1" : ""}`}>
-            <div class="text-[13px] font-semibold mb-1 break-words">{head.render(r)}</div>
-            <dl class="grid grid-cols-3 gap-x-2 gap-y-1">
-              {rest.map((c) => (
-                <div key={c.key} class={`min-w-0 ${c.label ? "" : "col-span-3"}`}>
-                  {c.label && <dt class="text-[10px] uppercase tracking-[0.08em] font-medium text-c3">{c.label}</dt>}
-                  <dd class="break-words">{c.render(r)}</dd>
-                </div>
-              ))}
-            </dl>
+          <li key={rowKey(r)}>
+            <div role={onRow ? "button" : undefined} tabIndex={onRow ? 0 : undefined} onClick={onRow && (() => onRow(r))} onKeyDown={onRow && ((e) => e.key === "Enter" && onRow(r))}
+              class={`block -mx-1 px-1 py-3 rounded-lg text-[14px] ${onRow ? "cursor-pointer active:bg-c1" : ""}`}>
+              <div class="flex items-start gap-2 min-h-6">
+                <div class="flex-1 min-w-0 text-[15px] font-semibold leading-snug break-words">{head.render(r)}</div>
+                {status.map((c) => <div key={c.key} class="shrink-0 rounded-full bg-c1 px-2 py-0.5">{c.render(r)}</div>)}
+                {onRow && <span class="shrink-0 text-c2 mt-0.5"><Icon name="right" size={14} /></span>}
+              </div>
+              {body.length > 0 && (
+                <dl class="mt-2 flex flex-col">
+                  {body.map((c) => c.label ? (
+                    <div key={c.key} class="flex items-baseline justify-between gap-3 py-1 min-w-0">
+                      <dt class="text-c2 text-[13px] shrink-0">{c.label}</dt>
+                      <dd class={`min-w-0 text-right break-words ${c.align === "right" ? "num" : ""}`}>{c.render(r)}</dd>
+                    </div>
+                  ) : <dd key={c.key} class="py-1 break-words">{c.render(r)}</dd>)}
+                </dl>
+              )}
+              {foot.length > 0 && <div class="mt-2 pt-2 border-t border-line flex flex-wrap justify-between gap-x-3 gap-y-1 t-meta">{foot.map((c) => <span key={c.key}>{c.label && `${c.label} `}{c.render(r)}</span>)}</div>}
+            </div>
           </li>
         ))}
       </ul>
@@ -167,14 +183,19 @@ export function Table<T>({ cols, rows, rowKey, onRow }: { cols: Col<T>[]; rows: 
   );
 }
 
-/** Inline detail: phone shows the detail in place of the list; iPad/desktop put it in a fixed right column. Nothing overlays. */
+/** Detail: iPad/desktop put it in a fixed right column; phone slides it up as a full-height bottom sheet over the list.
+    The sheet closes through the detail's own DetailHead close button, so routes need no phone-specific code. */
 export function Split({ detail, children }: { detail: ComponentChildren | null; children: ComponentChildren }) {
+  const phone = isPhone.value;
+  const ref = useRef<HTMLDivElement>(null);
+  const close = () => ref.current?.querySelector<HTMLButtonElement>("[data-close]")?.click();
   return (
-    <div class={`min-h-0 h-full ${detail ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
-      <div class={`min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4 ${detail ? "hidden md:block" : ""}`}>
+    <div class={`min-h-0 h-full ${detail && !phone ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
+      <div class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
         <div class="flex flex-col gap-4 max-w-[1600px]">{children}</div>
       </div>
-      {detail && <aside class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 md:border-l border-line p-3 md:p-4">{detail}</aside>}
+      {detail && !phone && <aside class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 border-l border-line p-4">{detail}</aside>}
+      {detail && phone && <Sheet full onClose={close}><div ref={ref} class="pt-1">{detail}</div></Sheet>}
     </div>
   );
 }
@@ -182,7 +203,7 @@ export function Split({ detail, children }: { detail: ComponentChildren | null; 
 export function DetailHead({ title, onClose }: { title: ComponentChildren; onClose: () => void }) {
   return (
     <div class="flex items-center gap-2 mb-3">
-      <button class="w-7 h-7 shrink-0 rounded-full bg-c1 flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close details"><Icon name="close" size={16} /></button>
+      <button data-close class="w-11 h-11 md:w-7 md:h-7 -ml-2 md:ml-0 shrink-0 rounded-full flex items-center justify-center cursor-pointer" onClick={onClose} aria-label="Close details"><span class="w-7 h-7 rounded-full bg-c1 flex items-center justify-center"><Icon name="close" size={16} /></span></button>
       <h2 class="text-[17px] font-semibold tracking-tight min-w-0 break-words">{title}</h2>
     </div>
   );
@@ -210,7 +231,7 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
           {tabs && <div class="w-[46%] md:w-48 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
-        {toolbar && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}
+        {toolbar && (isPhone.value ? <FilterSheet>{toolbar}</FilterSheet> : <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>)}
       </div>
       <div class="flex-1 min-h-0">
         {detail !== undefined ? (
