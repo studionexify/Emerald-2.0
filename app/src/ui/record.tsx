@@ -3,10 +3,13 @@ import type { Signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { ask, Button, DetailHead, Field, inputCls } from "./index";
+import { Menu, Reveal } from "./disclose";
 import { log, me, toBin, uid, type LogKind } from "../data";
 
 export type FType = "text" | "number" | "date" | "select" | "textarea" | "color";
-export type FDef<T> = { k: keyof T & string; label: string; type?: FType; options?: string[] | (() => string[]); wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string };
+export type FDef<T> = { k: keyof T & string; label: string; type?: FType; options?: string[] | (() => string[]); wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string;
+  /** Form chunk. The first group is open; later groups sit behind a toggle. */ group?: string;
+  /** Conditional input: rendered only when true for the current draft. */ when?: (r: T) => boolean };
 
 /** Action row: one height, centred, evenly spaced. */
 export const Actions = ({ children, end }: { children: ComponentChildren; end?: boolean }) => (
@@ -51,14 +54,29 @@ export function Input<T>({ f, value, on }: { f: FDef<T>; value: unknown; on: (v:
   return <input class={inputCls} enterKeyHint="next" {...im} type={("type" in im ? im.type : t) as "text"} value={t === "number" && v === "" ? "" : String(v)} onInput={(e) => { const x = (e.target as HTMLInputElement).value; on(t === "number" ? (x === "" ? 0 : Number(x)) : x); }} />;
 }
 
+const groupsOf = <T,>(fields: FDef<T>[], r: T) => {
+  const m = new Map<string, FDef<T>[]>();
+  for (const f of fields) if (!f.hide && (!f.when || f.when(r))) { const g = f.group ?? ""; m.set(g, [...(m.get(g) ?? []), f]); }
+  return [...m.entries()];
+};
+
 export function FormGrid<T>({ fields, draft, set }: { fields: FDef<T>[]; draft: T; set: (p: Partial<T>) => void }) {
-  return (
+  const grid = (fs: FDef<T>[]) => (
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {fields.filter((f) => !f.hide).map((f) => (
+      {fs.map((f) => (
         <div key={f.k} class={f.wide || f.type === "textarea" ? "sm:col-span-2" : ""}>
           <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}><Input f={f} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v } as Partial<T>)} /></Field>
         </div>
       ))}
+    </div>
+  );
+  const gs = groupsOf(fields, draft);
+  if (gs.length < 2) return grid(gs[0]?.[1] ?? []);
+  return (
+    <div class="flex flex-col gap-1">
+      {gs.map(([g, fs], i) => i === 0
+        ? <div key={g}>{g && <h3 class="t-section mb-2">{g}</h3>}{grid(fs)}</div>
+        : <div key={g} class="border-t border-line pt-1"><Reveal label={g} meta={`${fs.length} fields`}>{grid(fs)}</Reveal></div>)}
     </div>
   );
 }
@@ -107,18 +125,25 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
       <div>
         <DetailHead title={c.title(cur)} onClose={close} />
         {retired && <p class="text-xs font-semibold bg-c1 rounded-lg px-3 py-2 mb-3">Retired — off every picker. Old records keep the name.</p>}
-        <div class="mb-4 grid grid-cols-2 gap-2 [&>*]:w-full [&>*]:min-w-0">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
           <Button icon="edit" onClick={() => setDraft({ ...cur })}>Edit</Button>
           {c.actions?.(cur, p)}
-          {!c.noDuplicate && <Button variant="outline" icon="copy" onClick={() => { const n = { ...cur, id: uid() }; c.sig.value = [n, ...c.sig.value]; log(`Duplicated ${c.kind.toLowerCase()}`, c.title(n), c.logKind ?? "stock"); setId(n.id); }}>Duplicate</Button>}
-          {"active" in cur && <Button variant="outline" onClick={() => p({ active: retired } as Partial<T>, retired ? `Restored ${c.kind.toLowerCase()}` : `Retired ${c.kind.toLowerCase()}`)}>{retired ? "Restore" : "Retire"}</Button>}
-          {!c.noDelete && <Button variant="outline" icon="bin" onClick={() => { ask(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`, { ok: "Delete" }).then((ok) => { if (!ok) return; toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); }); }}>Delete</Button>}
+          <span class="flex-1" />
+          <Menu label={`More for ${c.title(cur)}`} items={[
+            { label: "Duplicate", hidden: !!c.noDuplicate, on: () => { const n = { ...cur, id: uid() }; c.sig.value = [n, ...c.sig.value]; log(`Duplicated ${c.kind.toLowerCase()}`, c.title(n), c.logKind ?? "stock"); setId(n.id); } },
+            { label: retired ? "Restore" : "Retire", hidden: !("active" in cur), on: () => p({ active: retired } as Partial<T>, retired ? `Restored ${c.kind.toLowerCase()}` : `Retired ${c.kind.toLowerCase()}`) },
+            { label: "Delete", danger: true, hidden: !!c.noDelete, on: () => { ask(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`, { ok: "Delete" }).then((ok) => { if (!ok) return; toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); }); } },
+          ]} />
         </div>
         {c.facts && <Facts items={c.facts(cur)} />}
         {c.extra?.(cur, p)}
-        <PaneSection title="Details">
-          <Facts items={c.fields.filter((f) => !f.hide).map((f) => [f.label, f.show ? f.show(cur) : fmt((cur as Record<string, unknown>)[f.k], f.suffix)] as [string, ComponentChildren])} />
-        </PaneSection>
+        <div class="mt-4 border-t border-line pt-1">
+          {groupsOf(c.fields, cur).map(([g, fs]) => (
+            <Reveal key={g} label={g || "All details"} meta={`${fs.length}`}>
+              <Facts items={fs.map((f) => [f.label, f.show ? f.show(cur) : fmt((cur as Record<string, unknown>)[f.k], f.suffix)] as [string, ComponentChildren])} />
+            </Reveal>
+          ))}
+        </div>
       </div>
     );
   }

@@ -130,24 +130,3 @@ export function FilterSheet({ children, label = "Filter & sort" }: { children: C
   );
 }
 
-/* ── Stepper: tactile ± with debounced commit (stock audit). ── */
-export function Stepper({ value, onCommit, step = 1, min = 0, label, delay = 500 }: { value: number; onCommit: (v: number) => void; step?: number; min?: number; label: string; delay?: number }) {
-  const [v, setV] = useState(value);
-  const t = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => setV(value), [value]);
-  useEffect(() => () => clearTimeout(t.current), []);
-  const bump = (d: number) => {
-    const n = Math.max(min, +(v + d).toFixed(3));
-    setV(n);
-    clearTimeout(t.current);
-    t.current = setTimeout(() => n !== value && onCommit(n), delay);
-  };
-  const b = "w-11 h-11 md:w-8 md:h-8 rounded-lg bg-c1 text-c4 text-lg font-semibold flex items-center justify-center cursor-pointer select-none";
-  return (
-    <div class="inline-flex items-center gap-1" role="group" aria-label={label}>
-      <button class={b} onClick={() => bump(-step)} disabled={v <= min} aria-label={`Decrease ${label}`}>−</button>
-      <span class="min-w-10 text-center num" aria-live="polite">{v}</span>
-      <button class={b} onClick={() => bump(step)} aria-label={`Increase ${label}`}>+</button>
-    </div>
-  );
-}

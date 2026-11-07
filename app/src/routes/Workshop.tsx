@@ -2,7 +2,8 @@ import { useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Disclosure, Icon, isPhone, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Stepper, Table, type Col } from "../ui";
+import { Pick, Button, Card, Disclosure, Icon, isPhone, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
@@ -37,16 +38,30 @@ const matchQ = (q: string, ...xs: (string | undefined)[]) => !q || xs.join(" ").
 /* ================================================================ Printers */
 const STATUS = ["idle", "printing", "down"];
 const pFields: FDef<Printer>[] = [
-  { k: "name", label: "Name (what the floor calls it)" }, { k: "model", label: "Model" },
-  { k: "status", label: "Status", type: "select", options: STATUS }, { k: "nozzle", label: "Nozzle" },
-  { k: "volume", label: "Build volume", suffix: "mm" }, { k: "serial", label: "Serial no." },
-  { k: "location", label: "Location" }, { k: "hours", label: "Lifetime hours", type: "number", suffix: "h" },
-  { k: "bought", label: "Bought on", type: "date" }, { k: "cost", label: "Purchase cost", type: "number", suffix: "₹" },
-  { k: "lastService", label: "Last service", type: "date" }, { k: "serviceEvery", label: "Service every", type: "number", suffix: "h" },
-  { k: "notes", label: "Notes", type: "textarea" },
+  { k: "name", group: "Essentials", label: "Name (what the floor calls it)" }, { k: "model", group: "Essentials", label: "Model" },
+  { k: "status", group: "Essentials", label: "Status", type: "select", options: STATUS }, { k: "nozzle", group: "Essentials", label: "Nozzle" },
+  { k: "volume", group: "Service & specs", label: "Build volume", suffix: "mm" }, { k: "serial", group: "Service & specs", label: "Serial no." },
+  { k: "location", group: "Essentials", label: "Location" }, { k: "hours", group: "Service & specs", label: "Lifetime hours", type: "number", suffix: "h" },
+  { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "cost", group: "Purchase", label: "Purchase cost", type: "number", suffix: "₹" },
+  { k: "lastService", group: "Service & specs", label: "Last service", type: "date" }, { k: "serviceEvery", group: "Service & specs", label: "Service every", type: "number", suffix: "h" },
+  { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
 ];
 const mlog = (p: Printer) => X.machineLog.find((m) => m.printer === p.name) ?? { util: 0, uptime: 100, fail: 0, lost: 0, blocks: 0 };
 const pTone = (s: string) => (s === "printing" ? "active" : s === "down" ? "blocked" : "idle") as "active";
+
+const serviceDue = (p: Printer) => !!p.serviceEvery && p.serviceEvery - (p.hours % p.serviceEvery) <= 20;
+const loadedOn = (p: Printer) => { const s = spoolsSig.value.find((x) => x.printer === p.name && x.status === "loaded"); return s ? `${s.material} ${s.colour}` : ""; };
+function PrinterAct({ p, open }: { p: Printer; open: (p: Printer) => void }) {
+  const set = (st: Printer["status"], why: string) => { printersSig.value = printersSig.value.map((x) => (x.id === p.id ? { ...x, status: st } : x)); log(why, p.name); };
+  const primary = p.status === "down" ? <Button variant="outline" onClick={() => set("idle", "Back in service")}>Back in service</Button>
+    : p.status === "idle" ? <a href="/work/production" class="inline-flex items-center justify-center h-8 px-3.5 rounded-lg border border-line text-[13px] font-semibold hover:bg-c1">Assign job</a>
+    : <Button variant="outline" onClick={() => open(p)}>View job</Button>;
+  return <>{primary}<Menu label={`Actions for ${p.name}`} items={[
+    { label: "Open full inspector", on: () => open(p) },
+    { label: "Log service", on: () => { printersSig.value = printersSig.value.map((x) => (x.id === p.id ? { ...x, lastService: today() } : x)); log("Serviced", p.name); } },
+    { label: "Mark down", on: () => set("down", "Status → down"), hidden: p.status === "down" },
+  ]} /></>;
+}
 
 export function Printers() {
   const [f, setF] = useState("active");
@@ -91,14 +106,16 @@ export function Printers() {
         <a href="/work/production" class="shrink-0 h-11 md:h-8 px-3.5 rounded-full inline-flex items-center gap-1.5 text-[14px] md:text-[13px] font-semibold bg-c0 text-c4"><span class="num">{queued}</span> Queued <Icon name="right" size={12} /></a>
       </div>
       <Card class="!py-1">
-        <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} cols={[
-          { key: "n", label: "Printer", render: (p) => <span>{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}</span> },
-          { key: "m", label: "Model", render: (p) => p.model },
+        <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} act={(p) => <PrinterAct p={p} open={r.open} />} cols={[
+          { key: "n", label: "Printer", render: (p) => <span class="flex flex-col min-w-0"><span class="font-semibold">{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}{serviceDue(p) && <span class="ml-2 inline-flex items-center gap-1 text-[11px] font-bold"><span class="w-1.5 h-1.5 rounded-full bg-warn" />Service due</span>}</span><MetaRow items={[p.model, loadedOn(p)]} /></span> },
           { key: "s", label: "Status", card: "status", render: (p) => <Status tone={pTone(p.status)}>{p.status}</Status> },
-          { key: "j", label: "Job", render: (p) => p.job ?? "—", hideTablet: true },
-          { key: "u", label: "Util.", align: "right", render: (p) => `${mlog(p).util}%` },
-          { key: "f", label: "Fail", align: "right", render: (p) => `${mlog(p).fail}%` },
-          { key: "h", label: "Hours", align: "right", render: (p) => p.hours.toLocaleString("en-IN") },
+          { key: "j", label: "Now", card: "foot", render: (p) => p.job ? `Printing ${p.job}` : p.status === "down" ? "Needs attention" : "Free" },
+          { key: "u", label: "Utilisation", level: 2, render: (p) => `${mlog(p).util}%` },
+          { key: "f", label: "Fail rate", level: 2, render: (p) => `${mlog(p).fail}%` },
+          { key: "up", label: "Uptime", level: 2, render: (p) => `${mlog(p).uptime}%` },
+          { key: "h", label: "Lifetime", level: 2, render: (p) => `${p.hours.toLocaleString("en-IN")} h` },
+          { key: "sv", label: "Next service", level: 2, render: (p) => p.serviceEvery ? `in ${Math.max(0, p.serviceEvery - (p.hours % p.serviceEvery))} h` : "—" },
+          { key: "nz", label: "Nozzle", level: 2, render: (p) => p.nozzle ?? "—" },
         ]} />
       </Card>
       <p class="text-xs text-c3">Tap a printer for details. Retire takes it off every picker; old jobs keep its name. Delete is only for a row typed by mistake — it goes to the Bin.</p>

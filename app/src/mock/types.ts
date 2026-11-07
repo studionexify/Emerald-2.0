@@ -8,7 +8,8 @@ export type Order = {
   approved?: boolean; buildSheet?: boolean; jobsDone?: boolean; qcLogged?: boolean; packed?: boolean; tracking?: string;
   po?: string; paid?: boolean; skipPacking?: boolean;
 };
-export type Job = { id: string; orderNo: string; item: string; printer: string; operator: string; status: "queued" | "printing" | "done" | "failed"; hours: number; grams: number; spool?: string };
+export type Job = { id: string; orderNo: string; item: string; printer: string; operator: string; status: "queued" | "printing" | "done" | "failed"; hours: number; grams: number; spool?: string;
+  /** ISO time the job moved to printing — elapsed vs. estimated hours gives the ETA. */ startedAt?: string; finishedAt?: string };
 export type QcEntry = { id: string; orderNo: string; item: string; result: "pass" | "rework" | "scrap"; grams: number; defect?: string; by: string; date: string };
 export type Printer = { id: string; name: string; model: string; status: "printing" | "idle" | "down"; hours: number; job?: string; nozzle?: string; volume?: string; bought?: string; cost?: number; serial?: string; location?: string; lastService?: string; serviceEvery?: number; notes?: string; active?: boolean };
 export type SpoolStatus = "sealed" | "open" | "loaded" | "empty";
