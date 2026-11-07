@@ -382,7 +382,7 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   M.jobs.filter((j) => j.status === "failed").forEach((j) => quality.push({ t: "danger", text: `${j.orderNo} ${j.item} failed — no reprint queued`, href: "/work/production" }));
   const floor = X.machineLog.reduce((s, m) => s + m.fail, 0) / X.machineLog.length;
   if (floor > rate("failRate")) quality.push({ t: "warn", text: `Floor failure rate ${Math.round(floor)}% (alert at ${rate("failRate")}%)`, href: "/mauny/reports" });
-  X.machineLog.filter((m) => m.fail > floor * 2).forEach((m) => quality.push({ t: "warn", text: `${m.printer} failing ${m.fail}% vs floor ${Math.round(floor)}%`, href: "/workshop" }));
+  X.machineLog.filter((m) => m.fail > floor * 2).forEach((m) => quality.push({ t: "warn", text: `${m.printer} failing ${m.fail}% vs floor ${Math.round(floor)}%`, href: "/workshop/printers" }));
   M.qc.filter((q) => q.result === "scrap").forEach((q) => quality.push({ t: "info", text: `${q.orderNo} QC ended in scrap (${q.grams} g)`, href: "/work/qc" }));
   const flow: Alert[] = [];
   orders.filter((o) => o.stage !== "archived" && o.due < t).forEach((o) => flow.push({ t: "danger", text: `${o.no} missed target date (${o.due})`, href: "/work/orders" }));
@@ -391,7 +391,7 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   orders.filter((o) => o.stage === "shipping" && !o.tracking).forEach((o) => flow.push({ t: "warn", text: `${o.no} shipping — tracking missing`, href: "/work/shipping" }));
   shipmentsSig.value.filter((s) => s.eta < t && daysBetween(s.eta, t) < 30 && !s.tracking).forEach((s) => flow.push({ t: "warn", text: `${s.orderNo} shipment past delivery date`, href: "/work/shipping" }));
   const stock: Alert[] = [];
-  spools.forEach((s) => { if (s.grams === 0) stock.push({ t: "danger", text: `${s.material} ${s.colour} — out of stock`, href: "/workshop/filament" }); else if (s.grams < rate("reorderFilament")) stock.push({ t: "warn", text: `${s.material} ${s.colour} ${s.grams} g — below reorder`, href: "/workshop/filament" }); });
+  spools.forEach((s) => { if (s.grams === 0) stock.push({ t: "danger", text: `${s.material} ${s.colour} — out of stock`, href: "/workshop" }); else if (s.grams < rate("reorderFilament")) stock.push({ t: "warn", text: `${s.material} ${s.colour} ${s.grams} g — below reorder`, href: "/workshop" }); });
   pack.filter((p) => p.qty <= p.reorderAt).forEach((p) => stock.push({ t: "warn", text: `${p.name} ${p.qty} ${p.unit} — at reorder point`, href: "/workshop/packing" }));
   X.accessories.filter((a) => a.qty <= a.reorderAt).forEach((a) => stock.push({ t: "warn", text: `${a.name} — below reorder`, href: "/workshop/parts" }));
   const order = (l: Alert[]) => l.sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t));

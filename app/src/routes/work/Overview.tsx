@@ -67,7 +67,7 @@ export default function Overview() {
         </Section>
 
         <div class="flex flex-col gap-4 min-w-0">
-          <Section title="Machine fleet" note={`${busy}/${fleet.length} busy`} action={<a href="/workshop" class="t-meta">All →</a>}>
+          <Section title="Machine fleet" note={`${busy}/${fleet.length} busy`} action={<a href="/workshop/printers" class="t-meta">All →</a>}>
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
               {fleet.map((p) => {
                 const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing");
