@@ -1,13 +1,13 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Disclosure, Field, inputCls, KV, Page, SubTabs } from "../ui";
+import { Button, Card, CardTitle, Field, Icon, inputCls, isPhone, KV, Page, Sheet, SubTabs } from "../ui";
 import { navigate } from "../router";
-import { createOrder, inr, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
+import { createOrder, inr, spoolsSig, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
 
 type Fields = Record<string, number>;
 function useFields(init: Fields) {
   const [v, setV] = useState(init);
-  const bind = (k: string) => ({ value: v[k], type: "number" as const, inputMode: "decimal" as const, class: inputCls,
+  const bind = (k: string, im: "decimal" | "numeric" = "decimal") => ({ value: v[k], type: "number" as const, inputMode: im, step: "any", enterKeyHint: "next" as const, class: inputCls,
     onInput: (e: Event) => setV({ ...v, [k]: Number((e.target as HTMLInputElement).value) || 0 }) });
   return [v, bind, setV] as const;
 }
@@ -21,21 +21,104 @@ function U({ label, unit, b }: { label: string; unit?: string; b: ReturnType<Ret
   );
 }
 
-function Result({ rows, price }: { rows: [string, number][]; price: number }) {
+type Quote = { customer: string; item: string };
+type Rows = [string, number][];
+
+/** Create the quotation order (shared by desktop card and phone review sheet). */
+function useQuote(price: number, qty: number) {
+  return (q: Quote) => {
+    createOrder({ type: "client", customer: q.customer.trim() || "New client", item: q.item.trim() || "Calculated item", qty, price: Math.round(price), medium: "Instagram", due: "" });
+    navigate("/work/orders");
+  };
+}
+
+function Breakdown({ rows }: { rows: Rows }) {
+  return <div>{rows.map(([l, n], i) => <KV key={l} label={l} value={inr(n)} strong={i === rows.length - 1} />)}</div>;
+}
+
+/** Desktop/tablet: live result card beside the inputs. */
+function Result({ rows, price, q, create }: { rows: Rows; price: number; q: Quote; create: (q: Quote) => void }) {
   return (
-    <Card class="lg:sticky lg:top-0 self-start">
+    <Card class="hidden md:block lg:sticky lg:top-0 self-start">
       <div class="t-section">Quotation</div>
       <div class="t-meta mt-2">Suggested price incl. GST</div>
       <div class="num text-[28px] font-semibold leading-tight tracking-tight mb-2">{inr(price)}</div>
-      <div>{rows.map(([l, n], i) => <KV key={l} label={l} value={inr(n)} strong={i === rows.length - 1} />)}</div>
-      <Button class="mt-3 w-full" onClick={() => { const o = createOrder({ type: "client", customer: prompt("Customer name") || "New client", item: prompt("Item name") || "Calculated item", qty: 1, price: Math.round(price), medium: "Instagram", due: "" }); alert(`Created ${o.no} at Quotation for ${inr(price)}`); navigate("/work/orders"); }}>Use in quotation</Button>
+      <Breakdown rows={rows} />
+      <Button class="mt-3 w-full" onClick={() => create(q)}>Use in quotation</Button>
     </Card>
   );
 }
 
-function Shell({ children }: { children: preact.ComponentChildren }) {
+/** Phone: sticky total + Review & send → bottom sheet with the breakdown. */
+function PhoneTotal({ rows, price, q, create }: { rows: Rows; price: number; q: Quote; create: (q: Quote) => void }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Page title="Calculator" sub="Price a job before you quote it"  tabs={CALC_TABS}>
+    <>
+      <div class="flex flex-col justify-center min-w-0 !flex-none pr-1">
+        <span class="t-meta leading-none">Quote incl. GST</span>
+        <span class="num text-[20px] font-semibold leading-tight" aria-live="polite">{inr(price)}</span>
+      </div>
+      <Button onClick={() => setOpen(true)}>Review & send</Button>
+      <Sheet open={open} onClose={() => setOpen(false)} title="Review quotation"
+        footer={<Button onClick={() => { setOpen(false); create(q); }}>Create quotation</Button>}>
+        <div class="text-[15px] font-semibold">{q.customer || "New client"} <span class="text-c2 font-normal">· {q.item || "Calculated item"}</span></div>
+        <div class="num text-[28px] font-semibold tracking-tight my-2">{inr(price)}</div>
+        <Breakdown rows={rows} />
+      </Sheet>
+    </>
+  );
+}
+
+/** Steps: open sections on tablet/desktop; one-at-a-time accordion on phone. */
+function Steps({ steps }: { steps: [string, string, preact.ComponentChildren][] }) {
+  const [cur, setCur] = useState(0);
+  const phone = isPhone.value;
+  return (
+    <div class="flex flex-col">
+      {steps.map(([title, meta, body], i) => {
+        const open = !phone || cur === i;
+        return (
+          <section key={title} class={i ? "border-t border-line mt-3 pt-3" : ""}>
+            <button type="button" onClick={() => phone && setCur(open ? -1 : i)} aria-expanded={open} disabled={!phone}
+              class="w-full flex items-center gap-3 text-left disabled:cursor-default cursor-pointer min-h-11 md:min-h-0 md:mb-2">
+              <span class={`w-6 h-6 shrink-0 rounded-full text-[12px] font-semibold flex items-center justify-center ${open ? "bg-c4 text-c0" : "bg-c1 text-c3"}`}>{i + 1}</span>
+              <span class="flex-1 min-w-0"><span class="block text-[15px] md:text-[13px] font-semibold">{title}</span>{phone && !open && <span class="block t-meta truncate">{meta}</span>}</span>
+              {phone && <span class={`chev text-c2 transition-transform ${open ? "rotate-90" : ""}`}><Icon name="right" size={14} /></span>}
+            </button>
+            {open && <div class="pt-2 md:pt-0">{body}{phone && i < steps.length - 1 && <Button variant="outline" class="mt-3 w-full" onClick={() => setCur(i + 1)}>Next</Button>}</div>}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function ClientFields({ q, setQ }: { q: Quote; setQ: (q: Quote) => void }) {
+  return (
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2.5 mb-2.5">
+      <Field label="Client"><input class={inputCls} autoComplete="organization" enterKeyHint="next" value={q.customer} placeholder="New client" onInput={(e) => setQ({ ...q, customer: (e.target as HTMLInputElement).value })} /></Field>
+      <Field label="Item"><input class={inputCls} enterKeyHint="next" value={q.item} placeholder="Calculated item" onInput={(e) => setQ({ ...q, item: (e.target as HTMLInputElement).value })} /></Field>
+    </div>
+  );
+}
+
+/** Material picker: real spools in stock set the ₹/kg. */
+function SpoolPick({ onPick }: { onPick: (costKg: number) => void }) {
+  const spools = spoolsSig.value.filter((s) => s.active !== false && s.grams > 0);
+  if (!spools.length) return null;
+  return (
+    <Field label="Material from stock">
+      <select class={inputCls} onChange={(e) => { const s = spools.find((x) => x.id === (e.target as HTMLSelectElement).value); if (s?.costKg) onPick(s.costKg); }}>
+        <option value="">Custom price</option>
+        {spools.map((s) => <option key={s.id} value={s.id}>{s.material} {s.colour} · {s.spoolNo} · {s.grams} g</option>)}
+      </select>
+    </Field>
+  );
+}
+
+function Shell({ children, bar }: { children: preact.ComponentChildren; bar: preact.ComponentChildren }) {
+  return (
+    <Page title="Calculator" sub="Price a job before you quote it" tabs={CALC_TABS} actions={isPhone.value ? bar : undefined}>
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] items-start">{children}</div>
     </Page>
   );
@@ -43,63 +126,93 @@ function Shell({ children }: { children: preact.ComponentChildren }) {
 
 export function Nexcal() {
   const [mode, setMode] = useState<"direct" | "upload">("direct");
+  const [q, setQ] = useState<Quote>({ customer: "", item: "" });
   const [v, b, setV] = useFields({ grams: 120, perKg: rate("pla"), hours: 5, machine: rate("machine"), power: rate("power"), labour: rate("labour") / 2, packing: rate("packingDefault"), margin: rate("margin"), gst: rate("gst"), qty: 1 });
   const material = (v.grams / 1000) * v.perKg, machine = v.hours * (v.machine + v.power);
   const cost = material + machine + v.labour + v.packing;
   const pre = cost * (1 + v.margin / 100), price = pre * (1 + v.gst / 100);
+  const total = price * v.qty;
+  const rows: Rows = [["Material", material], ["Machine + power", machine], ["Labour", v.labour], ["Packaging", v.packing], ["Cost per unit", cost], ["Price per unit (ex-GST)", pre], [`Total ×${v.qty}`, total]];
+  const create = useQuote(price, v.qty);
   return (
-    <Shell>
+    <Shell bar={<PhoneTotal rows={rows} price={total} q={q} create={create} />}>
       <Card>
         <CardTitle>Nexcal · FDM</CardTitle>
-        <div class="mb-3"><SubTabs value={mode} onChange={setMode} items={[["direct", "Direct input"], ["upload", "Upload models"]]} /></div>
-        {mode === "upload" && <ModelUpload onTotal={(g, h) => setV({ ...v, grams: Math.round(g), hours: Math.round(h * 10) / 10 })} />}
-        <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
-          <U label="Filament used" unit="g" b={b("grams")} />
-          <U label="Filament price" unit="₹/kg" b={b("perKg")} />
-          <U label="Print time" unit="h" b={b("hours")} />
-          <U label="Quantity" unit="pcs" b={b("qty")} />
-          <U label="Labour & finishing" unit="₹" b={b("labour")} />
-          <U label="Packaging" unit="₹" b={b("packing")} />
-          <U label="Margin" unit="%" b={b("margin")} />
-          <U label="GST" unit="%" b={b("gst")} />
-        </div>
-        <Disclosure class="mt-3 !border-line" title="Advanced parameters" meta={`₹${v.machine + v.power}/h machine`}>
-          <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
-            <U label="Machine depreciation" unit="₹/h" b={b("machine")} />
-            <U label="Electricity" unit="₹/h" b={b("power")} />
-          </div>
-          <p class="t-meta mt-2">Defaults come from Calculator → Rates.</p>
-        </Disclosure>
+        <Steps steps={[
+          ["Client & specs", `${q.customer || "New client"} · ${v.grams} g`, <>
+            <ClientFields q={q} setQ={setQ} />
+            <div class="mb-3"><SubTabs value={mode} onChange={setMode} items={[["direct", "Direct input"], ["upload", "Upload models"]]} /></div>
+            {mode === "upload" && <ModelUpload onTotal={(g, h) => setV({ ...v, grams: Math.round(g), hours: Math.round(h * 10) / 10 })} />}
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              <div class="col-span-2"><SpoolPick onPick={(c) => setV({ ...v, perKg: c })} /></div>
+              <U label="Filament used" unit="g" b={b("grams")} />
+              <U label="Filament price" unit="₹/kg" b={b("perKg")} />
+            </div>
+          </>],
+          ["Print parameters", `${v.hours} h · ×${v.qty} · ₹${v.machine + v.power}/h`, <>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              <U label="Print time" unit="h" b={b("hours")} />
+              <U label="Quantity" unit="pcs" b={b("qty", "numeric")} />
+              <U label="Machine depreciation" unit="₹/h" b={b("machine")} />
+              <U label="Electricity" unit="₹/h" b={b("power")} />
+            </div>
+            <p class="t-meta mt-2">Defaults come from Calculator → Pricing settings.</p>
+          </>],
+          ["Pricing & commercials", `${v.margin}% margin · ${v.gst}% GST`, <>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              <U label="Labour & finishing" unit="₹" b={b("labour")} />
+              <U label="Packaging" unit="₹" b={b("packing")} />
+              <U label="Margin" unit="%" b={b("margin")} />
+              <U label="GST" unit="%" b={b("gst")} />
+            </div>
+            <div class="md:hidden mt-3"><Breakdown rows={rows} /></div>
+          </>],
+        ]} />
       </Card>
-      <Result price={price * v.qty} rows={[["Material", material], ["Machine + power", machine], ["Labour", v.labour], ["Packaging", v.packing], ["Cost per unit", cost], ["Price per unit (ex-GST)", pre], [`Total ×${v.qty}`, price * v.qty]]} />
+      <Result price={total} rows={rows} q={q} create={create} />
     </Shell>
   );
 }
 
 export function NexRes() {
+  const [q, setQ] = useState<Quote>({ customer: "", item: "" });
   const [v, b] = useFields({ ml: 180, perL: rate("resin"), parts: 6, hours: 4, machine: rate("resinMachine"), ipa: rate("ipa"), labour: rate("labour") * 0.8, margin: rate("resinMargin"), gst: rate("gst") });
   const plate = (v.ml / 1000) * v.perL + v.hours * v.machine + v.ipa + v.labour;
   const perPart = plate / Math.max(1, v.parts);
   const pre = perPart * (1 + v.margin / 100), price = pre * (1 + v.gst / 100);
+  const rows: Rows = [["Plate cost", plate], ["Cost per part", perPart], ["Price per part (ex-GST)", pre]];
+  const create = useQuote(price, 1);
   return (
-    <Shell>
+    <Shell bar={<PhoneTotal rows={rows} price={price} q={q} create={create} />}>
       <Card>
         <CardTitle>NexRes · Resin price per plate</CardTitle>
-        <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
-          <U label="Resin per plate" unit="ml" b={b("ml")} />
-          <U label="Resin price" unit="₹/L" b={b("perL")} />
-          <U label="Parts per plate" unit="pcs" b={b("parts")} />
-          <U label="Plate time" unit="h" b={b("hours")} />
-          <U label="IPA & gloves" unit="₹" b={b("ipa")} />
-          <U label="Labour & curing" unit="₹" b={b("labour")} />
-          <U label="Margin" unit="%" b={b("margin")} />
-          <U label="GST" unit="%" b={b("gst")} />
-        </div>
-        <Disclosure class="mt-3" title="Advanced parameters" meta={`₹${v.machine}/h machine`}>
-          <div class="grid grid-cols-2 gap-x-3 gap-y-2.5"><U label="Machine depreciation" unit="₹/h" b={b("machine")} /></div>
-        </Disclosure>
+        <Steps steps={[
+          ["Client & specs", `${q.customer || "New client"} · ${v.ml} ml`, <>
+            <ClientFields q={q} setQ={setQ} />
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              <U label="Resin per plate" unit="ml" b={b("ml")} />
+              <U label="Resin price" unit="₹/L" b={b("perL")} />
+            </div>
+          </>],
+          ["Print parameters", `${v.parts} parts · ${v.hours} h`, (
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              <U label="Parts per plate" unit="pcs" b={b("parts", "numeric")} />
+              <U label="Plate time" unit="h" b={b("hours")} />
+              <U label="Machine depreciation" unit="₹/h" b={b("machine")} />
+            </div>
+          )],
+          ["Pricing & commercials", `${v.margin}% margin · ${v.gst}% GST`, <>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              <U label="IPA & gloves" unit="₹" b={b("ipa")} />
+              <U label="Labour & curing" unit="₹" b={b("labour")} />
+              <U label="Margin" unit="%" b={b("margin")} />
+              <U label="GST" unit="%" b={b("gst")} />
+            </div>
+            <div class="md:hidden mt-3"><Breakdown rows={rows} /></div>
+          </>],
+        ]} />
       </Card>
-      <Result price={price} rows={[["Plate cost", plate], ["Cost per part", perPart], ["Price per part (ex-GST)", pre]]} />
+      <Result price={price} rows={rows} q={q} create={create} />
     </Shell>
   );
 }

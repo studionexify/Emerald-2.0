@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Disclosure, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Pick, Button, Card, Disclosure, Icon, isPhone, Meter, Field, inputCls, Page, Progress, Section, Stat, Status, Stepper, Table, type Col } from "../ui";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
@@ -22,6 +22,17 @@ const ActiveChips = ({ v, on }: { v: string; on: (x: string) => void }) => (
 );
 const byActive = <T extends { active?: boolean }>(rows: T[], f: string) => rows.filter((r) => (f === "all" ? true : f === "retired" ? r.active === false : r.active !== false));
 const stockTone = (q: number, at: number) => (q <= 0 ? <Status tone="blocked">Out</Status> : q <= at ? <Status tone="waiting">Reorder</Status> : <Status tone="done">OK</Status>);
+
+/** Quick search: inline in the desktop toolbar; full-width at the top of the list on phone (outside the filter sheet). */
+function SearchBar({ q, setQ, ph }: { q: string; setQ: (v: string) => void; ph: string }) {
+  return (
+    <label class="flex items-center gap-2 h-11 md:h-7 2xl:h-8 px-3 rounded-full bg-c0 md:bg-c0 border border-line md:border-0 text-c2 w-full md:w-44">
+      <Icon name="search" size={14} />
+      <input type="search" enterKeyHint="search" autoComplete="off" class="flex-1 min-w-0 bg-transparent outline-none text-c4 text-[16px] md:text-xs placeholder:text-c2" placeholder={ph} value={q} onInput={(e) => setQ(val(e))} aria-label={ph} />
+    </label>
+  );
+}
+const matchQ = (q: string, ...xs: (string | undefined)[]) => !q || xs.join(" ").toLowerCase().includes(q.toLowerCase());
 
 /* ================================================================ Printers */
 const STATUS = ["idle", "printing", "down"];
@@ -61,14 +72,29 @@ export function Printers() {
       </>;
     },
   });
-  const rows = byActive(printersSig.value, f);
+  const [ps, setPs] = useState<"all" | Printer["status"]>("all");
+  const live = printersSig.value.filter((p) => p.active !== false);
+  const queued = jobsSig.value.filter((j) => j.status === "queued").length;
+  const rows = byActive(printersSig.value, f).filter((p) => ps === "all" || p.status === ps);
+  const chip = (k: typeof ps, n: number, label: string, warn?: boolean) => (
+    <button key={k} onClick={() => setPs(ps === k ? "all" : k)} aria-pressed={ps === k}
+      class={`shrink-0 h-11 md:h-8 px-3.5 rounded-full inline-flex items-center gap-1.5 text-[14px] md:text-[13px] font-semibold cursor-pointer ${ps === k ? "bg-c4 text-c0" : "bg-c0 text-c4"}`}>
+      {warn && n > 0 && <span class="w-2 h-2 rounded-full bg-warn" />}<span class="num">{n}</span> {label}
+    </button>
+  );
   return (
     <Shell sub="Machines · status, utilisation, service, spools loaded" actions={<Button icon="plus" onClick={() => r.add()}>Add printer</Button>} toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail}>
+      <div class="flex gap-2 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Filter by status">
+        {chip("printing", live.filter((p) => p.status === "printing").length, "Printing")}
+        {chip("idle", live.filter((p) => p.status === "idle").length, "Idle")}
+        {chip("down", live.filter((p) => p.status === "down").length, "Down", true)}
+        <a href="/work/production" class="shrink-0 h-11 md:h-8 px-3.5 rounded-full inline-flex items-center gap-1.5 text-[14px] md:text-[13px] font-semibold bg-c0 text-c4"><span class="num">{queued}</span> Queued <Icon name="right" size={12} /></a>
+      </div>
       <Card class="!py-1">
         <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} cols={[
           { key: "n", label: "Printer", render: (p) => <span>{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}</span> },
           { key: "m", label: "Model", render: (p) => p.model },
-          { key: "s", label: "Status", render: (p) => <Status tone={pTone(p.status)}>{p.status}</Status> },
+          { key: "s", label: "Status", card: "status", render: (p) => <Status tone={pTone(p.status)}>{p.status}</Status> },
           { key: "j", label: "Job", render: (p) => p.job ?? "—", hideTablet: true },
           { key: "u", label: "Util.", align: "right", render: (p) => `${mlog(p).util}%` },
           { key: "f", label: "Fail", align: "right", render: (p) => `${mlog(p).fail}%` },
@@ -159,10 +185,11 @@ export function Filament() {
   return (
     <Shell sub="Every spool — weight, colour, brand, cost, storage · tap a spool for weigh-in and history" actions={<><Button variant="outline" icon="in" onClick={() => navigate("/workshop/movements")}>Log movement</Button><Button icon="plus" onClick={() => r.add()}>Add spool</Button></>}
       toolbar={<div class="flex flex-wrap items-center gap-2">
-        <input class="h-7 2xl:h-8 px-3 rounded-full bg-c0 text-xs w-36" placeholder="Search colour, brand…" value={q} onInput={(e) => setQ(val(e))} aria-label="Search spools" />
+        {!isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search colour, brand…" />}
         <Pick title="Material" value={mat} on={setMat} items={["all", ...mats]} label={(m) => m === "all" ? "All materials" : m} />
         <Pick title="Status" value={st} on={setSt} items={["in stock", "sealed", "open", "loaded", "empty", "retired", "all"]} label={(x) => x[0].toUpperCase() + x.slice(1)} />
       </div>} detail={r.detail}>
+      {isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search colour, brand, spool no." />}
       <div class="strip grid grid-cols-2 md:grid-cols-4">
         <Stat value={`${(tot.reduce((s, x) => s + x.grams, 0) / 1000).toFixed(2)} kg`} label="on shelf" />
         <Stat value={inr(tot.reduce((s, x) => s + spoolValue(x), 0))} label="value" />
@@ -183,7 +210,7 @@ export function Filament() {
                 { key: "a", label: "After queue", align: "right", render: (s) => { const a = s.grams - committed(s); return committed(s) ? `${a.toLocaleString("en-IN")} g` : "—"; }, hideTablet: true },
                 { key: "l", label: "Where", render: (s) => (s.status === "loaded" ? s.printer : s.location) || "—", hideTablet: true },
                 { key: "v", label: "Value", align: "right", render: (s) => inr(spoolValue(s)), hideTablet: true },
-                { key: "s", label: "State", render: (s) => spTone(s), hideTablet: true },
+                { key: "s", label: "State", card: "status", render: (s) => spTone(s), hideTablet: true },
                 { key: "x", label: "", align: "right", render: (s) => <button class="h-6 px-2 rounded-md border border-line text-[11px] font-semibold hover:bg-c1 cursor-pointer" onClick={(e) => { e.stopPropagation(); r.open(s); }}>Weigh</button> },
               ]} />
           </Disclosure>
@@ -211,6 +238,21 @@ function Adjust({ it, cat }: { it: PackItem; cat: string }) {
   );
 }
 
+/** Rapid audit: ± on the row itself, debounced into one logged stock movement. */
+function QuickCount({ p }: { p: PackItem }) {
+  const cat = p.cat === "Part" ? "part" : p.cat === "Accessory" ? "accessory" : "packing";
+  return (
+    <span class="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      <Stepper label={`${p.name} stock`} value={p.qty} onCommit={(n) => {
+        const d = n - p.qty; if (!d) return;
+        applyMove({ id: uid(), date: today(), cat, item: p.name, dir: d > 0 ? "in" : "out", qty: Math.abs(d), unit: p.unit, unitCost: p.cost, vendor: "", notes: "Quick count", by: who() });
+        log(`Stock count ${d > 0 ? "+" : ""}${d} ${p.unit}`, p.name, "stock");
+      }} />
+      <span class="t-meta">{p.unit}</span>
+    </span>
+  );
+}
+
 const iFields = (part: boolean): FDef<PackItem>[] => [
   { k: "name", label: "Name", wide: true }, { k: "unit", label: "Unit", type: "select", options: ["pcs", "m", "roll", "kg", "g", "set"] },
   { k: "size", label: "Size / spec" }, { k: "qty", label: "In stock", type: "number" }, { k: "reorderAt", label: "Reorder at", type: "number" },
@@ -220,12 +262,12 @@ const iFields = (part: boolean): FDef<PackItem>[] => [
 ];
 const iCols = (): Col<PackItem>[] => [
   { key: "n", label: "Item", render: (p) => <span>{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}</span> },
-  { key: "q", label: "Stock", align: "right", render: (p) => `${p.qty} ${p.unit}` },
+  { key: "q", label: "Stock", align: "right", render: (p) => <QuickCount p={p} /> },
   { key: "r", label: "Reorder at", align: "right", render: (p) => p.reorderAt },
   { key: "c", label: "Unit cost", align: "right", render: (p) => inr(p.cost) },
   { key: "v", label: "Value", align: "right", render: (p) => inr(p.cost * p.qty) },
   { key: "w", label: "Vendor", render: (p) => p.vendor || "—", hideTablet: true },
-  { key: "s", label: "State", render: (p) => stockTone(p.qty, p.reorderAt) },
+  { key: "s", label: "State", card: "status", render: (p) => stockTone(p.qty, p.reorderAt) },
 ];
 function useItems(sig: Signal<PackItem[]>, kind: string, cat: (p: PackItem) => string, part: (p: PackItem) => boolean, blankCat?: string) {
   return useRecord<PackItem>({
@@ -252,11 +294,13 @@ function useItems(sig: Signal<PackItem[]>, kind: string, cat: (p: PackItem) => s
 
 export function Parts() {
   const [f, setF] = useState("active");
+  const [q, setQ] = useState("");
   const r = useItems(itemsSig, "Accessory / part", (p) => (p.cat === "Part" ? "part" : "accessory"), (p) => p.cat === "Part");
-  const rows = byActive(itemsSig.value, f);
+  const rows = byActive(itemsSig.value, f).filter((p) => matchQ(q, p.name, p.size, p.vendor, p.machine));
   return (
-    <Shell sub="Magnets, NFC tags, inserts and machine spares · tap a row to adjust stock" toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail}
+    <Shell sub="Magnets, NFC tags, inserts and machine spares · tap a row to adjust stock" toolbar={<div class="flex flex-wrap items-center gap-2">{!isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search parts…" />}<ActiveChips v={f} on={setF} /></div>} detail={r.detail}
       actions={<><Button variant="outline" icon="plus" onClick={() => r.add({ cat: "Part" })}>Add part</Button><Button icon="plus" onClick={() => r.add({ cat: "Accessory" })}>Add accessory</Button></>}>
+      {isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search parts, spares, vendor" />}
       <Section title="Accessories" note={String(rows.filter((a) => a.cat !== "Part").length)}><Card class="!py-1"><Table rows={rows.filter((a) => a.cat !== "Part")} rowKey={(a) => a.id} onRow={r.open} cols={iCols()} /></Card></Section>
       <Section title="Parts & spares" note={String(rows.filter((a) => a.cat === "Part").length)}><Card class="!py-1"><Table rows={rows.filter((a) => a.cat === "Part")} rowKey={(a) => a.id} onRow={r.open} cols={[...iCols().slice(0, 1), { key: "m", label: "Machine", render: (p) => p.machine || "Any" }, ...iCols().slice(1)]} /></Card></Section>
     </Shell>
@@ -265,10 +309,12 @@ export function Parts() {
 
 export function PackStock() {
   const [f, setF] = useState("active");
+  const [q, setQ] = useState("");
   const r = useItems(packSig, "Packing item", () => "packing", () => false);
-  const rows = byActive(packSig.value, f);
+  const rows = byActive(packSig.value, f).filter((p) => matchQ(q, p.name, p.size, p.vendor));
   return (
-    <Shell sub="Boxes, wrap, tape, stickers — consumed at packing" toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail} actions={<Button icon="plus" onClick={() => r.add()}>Add packing item</Button>}>
+    <Shell sub="Boxes, wrap, tape, stickers — consumed at packing" toolbar={<div class="flex flex-wrap items-center gap-2">{!isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search packing…" />}<ActiveChips v={f} on={setF} /></div>} detail={r.detail} actions={<Button icon="plus" onClick={() => r.add()}>Add packing item</Button>}>
+      {isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search boxes, tape, vendor" />}
       <div class="strip grid grid-cols-3">
         <Stat value={rows.length} label="items" />
         <Stat value={inr(rows.reduce((s, p) => s + p.qty * p.cost, 0))} label="value" />

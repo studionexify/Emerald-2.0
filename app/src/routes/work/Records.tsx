@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
+import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
 import {
   accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, ordersSig, photosSig, quotesSig, raiseInvoice,
   rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, X, log, patchOrder, nowS, consume,
@@ -52,7 +52,7 @@ export function Invoice() {
   };
   return (
     <WorkShell title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
-      actions={<><Button variant="outline" onClick={() => confirm("Renumber this FY's series in date order?") && resequence(fyOf(today()))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
+      actions={<><Button variant="outline" onClick={() => ask("Renumber this FY's series in date order?").then((ok) => ok && resequence(fyOf(today())))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
       detail={cur && (
         <div>
@@ -77,7 +77,7 @@ export function Invoice() {
                 <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
                   <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(Number((e.target as HTMLInputElement).value) || 0)} /></Field>
                   <Button variant="outline" onClick={() => { if (cn) { setOpen(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
-                  {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => confirm(`Cancel ${cur.no}? The number stays used.`) && cancelInvoice(cur)}>Cancel invoice</Button>}
+                  {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.`).then((ok) => ok && cancelInvoice(cur))}>Cancel invoice</Button>}
                 </div>
               )}
             </div>
@@ -114,7 +114,7 @@ export function Invoice() {
             { key: "o", label: "Order", render: (i) => (i.orderNo ? `${i.orderNo}${i.batch ? " · " + i.batch : ""}` : "—"), hideTablet: true },
             { key: "t", label: "Taxable", align: "right", render: (i) => inr(invTax(i).taxable), hideTablet: true },
             { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) },
-            { key: "p", label: "Status", render: (i) => <Status tone={i.status === "cancelled" ? "idle" : i.kind === "credit" ? "active" : i.paidOn ? "done" : "waiting"}>{i.status === "cancelled" ? "Cancelled" : i.kind === "credit" ? "Credit note" : i.paidOn ? "Paid" : "Unpaid"}</Status> },
+            { key: "p", label: "Status", card: "status", render: (i) => <Status tone={i.status === "cancelled" ? "idle" : i.kind === "credit" ? "active" : i.paidOn ? "done" : "waiting"}>{i.status === "cancelled" ? "Cancelled" : i.kind === "credit" ? "Credit note" : i.paidOn ? "Paid" : "Unpaid"}</Status> },
           ]} />
         </Card>
       </Section>
@@ -166,7 +166,7 @@ export function Quotes() {
           { key: "d", label: "Date", render: (q) => shortDate(q.date) },
           { key: "c", label: "Customer", render: (q) => q.customer },
           { key: "v", label: "Valid till", render: (q) => shortDate(q.valid) },
-          { key: "o", label: "Outcome", render: (q) => <Status tone={q.outcome === "approved" ? "done" : q.outcome === "lost" ? "blocked" : q.outcome === "open" ? "waiting" : "idle"}>{q.outcome}</Status> },
+          { key: "o", label: "Outcome", card: "status", render: (q) => <Status tone={q.outcome === "approved" ? "done" : q.outcome === "lost" ? "blocked" : q.outcome === "open" ? "waiting" : "idle"}>{q.outcome}</Status> },
           { key: "a", label: "Value", align: "right", render: (q) => inr(q.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + q.gstRate / 100)) },
         ]} />
       </Card>

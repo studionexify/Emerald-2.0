@@ -2,7 +2,7 @@
 import type { Signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { Button, DetailHead, Field, inputCls } from "./index";
+import { ask, Button, DetailHead, Field, inputCls } from "./index";
 import { log, me, toBin, uid, type LogKind } from "../data";
 
 export type FType = "text" | "number" | "date" | "select" | "textarea" | "color";
@@ -44,7 +44,11 @@ export function Input<T>({ f, value, on }: { f: FDef<T>; value: unknown; on: (v:
   }
   if (t === "textarea") return <textarea class={`${inputCls} h-20 py-2`} value={String(v)} onInput={(e) => on((e.target as HTMLTextAreaElement).value)} />;
   if (t === "color") return <div class="flex items-center gap-2"><input type="color" class="h-10 w-12 rounded-lg border border-c3 bg-c0 shrink-0 cursor-pointer" value={String(v) || "#000000"} onInput={(e) => on((e.target as HTMLInputElement).value)} aria-label={f.label} /><input class={inputCls} value={String(v)} onInput={(e) => on((e.target as HTMLInputElement).value)} /></div>;
-  return <input class={inputCls} type={t as "text"} value={t === "number" && v === "" ? "" : String(v)} onInput={(e) => { const x = (e.target as HTMLInputElement).value; on(t === "number" ? (x === "" ? 0 : Number(x)) : x); }} />;
+  const im = t === "number" ? { inputMode: (/qty|count|units|pcs|no$/i.test(f.k) ? "numeric" : "decimal") as "decimal", step: "any" }
+    : /email/i.test(f.k) ? { type: "email" as const, inputMode: "email" as const, autoComplete: "email" }
+    : /phone|mobile|whatsapp/i.test(f.k) ? { type: "tel" as const, inputMode: "tel" as const, autoComplete: "tel" }
+    : /pin(code)?$|zip/i.test(f.k) ? { inputMode: "numeric" as const } : {};
+  return <input class={inputCls} enterKeyHint="next" {...im} type={("type" in im ? im.type : t) as "text"} value={t === "number" && v === "" ? "" : String(v)} onInput={(e) => { const x = (e.target as HTMLInputElement).value; on(t === "number" ? (x === "" ? 0 : Number(x)) : x); }} />;
 }
 
 export function FormGrid<T>({ fields, draft, set }: { fields: FDef<T>[]; draft: T; set: (p: Partial<T>) => void }) {
@@ -108,7 +112,7 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
           {c.actions?.(cur, p)}
           {!c.noDuplicate && <Button variant="outline" icon="copy" onClick={() => { const n = { ...cur, id: uid() }; c.sig.value = [n, ...c.sig.value]; log(`Duplicated ${c.kind.toLowerCase()}`, c.title(n), c.logKind ?? "stock"); setId(n.id); }}>Duplicate</Button>}
           {"active" in cur && <Button variant="outline" onClick={() => p({ active: retired } as Partial<T>, retired ? `Restored ${c.kind.toLowerCase()}` : `Retired ${c.kind.toLowerCase()}`)}>{retired ? "Restore" : "Retire"}</Button>}
-          {!c.noDelete && <Button variant="outline" icon="bin" onClick={() => { if (confirm(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`)) { toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); } }}>Delete</Button>}
+          {!c.noDelete && <Button variant="outline" icon="bin" onClick={() => { ask(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`, { ok: "Delete" }).then((ok) => { if (!ok) return; toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); }); }}>Delete</Button>}
         </div>
         {c.facts && <Facts items={c.facts(cur)} />}
         {c.extra?.(cur, p)}

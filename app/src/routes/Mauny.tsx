@@ -215,11 +215,11 @@ export function Finance() {
         {tab === "today" && (doToday.length ? <ul class="text-[13px] -my-1">{doToday.map((t) => <li key={t} class="h-9 flex items-center border-t border-line first:border-0 truncate">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
         {tab === "expenses" && <Table rows={[...expensesSig.value].filter((x) => x.date >= win[0] && x.date <= win[1]).sort((a, b) => b.date.localeCompare(a.date))} rowKey={(x) => x.id} onRow={peek} cols={[
           { key: "h", label: "Head", render: (x) => <b>{x.head}</b> }, { key: "d", label: "Date", render: (x) => shortDate(x.date) }, { key: "v", label: "Vendor", render: (x) => x.vendor },
-          { key: "p", label: "Paid", render: (x) => <Status tone={x.paid ? "done" : "waiting"}>{x.paid ? "Paid" : "Unpaid"}</Status> },
+          { key: "p", label: "Paid", card: "status", render: (x) => <Status tone={x.paid ? "done" : "waiting"}>{x.paid ? "Paid" : "Unpaid"}</Status> },
           { key: "b", label: "Bill", render: (x) => (x.billId ? <a class="underline" href="/mauny/purchases">View</a> : "—") }, { key: "a", label: "Amount", align: "right", render: (x) => inr(x.amount) }]} />}
         {tab === "outstanding" && <Table rows={invoicesSig.value.filter((i) => !i.paidOn && i.kind === "invoice" && i.status === "issued").map((i) => ({ ...i, age: Math.round((Date.now() - Date.parse(i.date)) / 864e5) })).sort((a, b) => b.age - a.age)} rowKey={(i) => i.id} onRow={peek} cols={[
           { key: "n", label: "Invoice", render: (i) => <b>{i.no}</b> }, { key: "c", label: "Customer", render: (i) => i.customer },
-          { key: "a", label: "Age", render: (i) => <Status tone={i.age > 75 ? "blocked" : "waiting"}>{i.age} days</Status> }, { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) }]} />}
+          { key: "a", label: "Age", card: "status", render: (i) => <Status tone={i.age > 75 ? "blocked" : "waiting"}>{i.age} days</Status> }, { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) }]} />}
         {tab === "receipts" && <Table rows={moneySig.value.filter((m) => m.kind === "receipt" || m.kind === "advance")} rowKey={(m) => m.id} onRow={peek} cols={[
           { key: "n", label: "From", render: (m) => <b>{m.note}</b> }, { key: "r", label: "Against", render: (m) => m.ref ?? "—" }, { key: "d", label: "Date", render: (m) => shortDate(m.date) }, { key: "v", label: "Amount", align: "right", render: (m) => inr(m.amount) }]} />}
       </Card>
@@ -401,7 +401,7 @@ export function Gst() {
           { key: "o", label: "Output", align: "right", render: (r) => inr(r.cgst + r.sgst + r.igst) },
           { key: "i", label: "ITC", align: "right", render: (r) => inr(r.itc), hideTablet: true },
           { key: "n", label: "Docs", render: (r) => `${r.b2b} B2B · ${r.b2c} B2C · ${r.credits} CN`, hideTablet: true },
-          { key: "f", label: "Status", render: (r) => <Status tone={r.filed.locked ? "done" : r.inv.length ? "waiting" : "idle"}>{r.filed.locked ? "Filed · locked" : r.inv.length ? "Open" : "No activity"}</Status> },
+          { key: "f", label: "Status", card: "status", render: (r) => <Status tone={r.filed.locked ? "done" : r.inv.length ? "waiting" : "idle"}>{r.filed.locked ? "Filed · locked" : r.inv.length ? "Open" : "No activity"}</Status> },
         ]} />
       </Card>
     </Shell>

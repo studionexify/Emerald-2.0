@@ -41,7 +41,11 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary .chev { transition: transform .15s ease; }
 details[open] > summary .chev { transform: rotate(90deg); }
 html, body, #app { height: 100%; }
-body { overflow: hidden; }
+body { overflow: hidden; overscroll-behavior: none; }
+#app { overflow-x: clip; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+/* iOS zooms into inputs under 16px: lift form text on touch phones only. */
+@media (pointer: coarse) and (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }
 body { margin: 0; background: var(--bg); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
@@ -76,3 +80,16 @@ tbody td:first-child { font-weight: 600; }
 /* Dense list box. */
 .listbox { background: var(--c-0); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
 .listbox > * + * { border-top: 1px solid var(--line); }
+
+/* Sheets: slide/fade in, off for reduced motion (global rule above). */
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@keyframes sheet-fade { from { opacity: 0; } }
+.sheet-up { animation: sheet-up .28s cubic-bezier(.32,.72,0,1); transition: transform .2s ease; }
+.sheet-fade { animation: sheet-fade .2s ease; }
+
+/* Touch ergonomics: every control gets a 44px hit box on coarse pointers (phone + tablet); desktop density untouched. */
+@media (pointer: coarse) {
+  button, select, [role="button"], input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]), textarea { min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
+  summary { min-height: 44px; display: flex; align-items: center; }
+}
