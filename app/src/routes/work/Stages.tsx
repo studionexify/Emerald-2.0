@@ -22,36 +22,19 @@ const jFields: FDef<Job>[] = [
 const qcFocus = signal<string | null>(null);
 /* ── Job state machine: one primary action per state, everything else in the … menu. ── */
 const setJob = (j: Job, p: Partial<Job>, why: string) => { jobsSig.value = jobsSig.value.map((x) => (x.id === j.id ? { ...x, ...p } : x)); log(why, `${j.orderNo} · ${j.item}`); };
-const startJob = (j: Job) => setJob(j, { status: "printing", startedAt: new Date().toISOString() }, "Job started");
+const startJob = (j: Job) => setJob(j, { status: "printing" }, "Job started");
 function finishJob(j: Job) {
   const js = jobSpool(j), sp = js ? spoolLabel(js) : "";
-  setJob(j, { status: "done", spool: js?.spoolNo, finishedAt: new Date().toISOString() }, "Job done");
+  setJob(j, { status: "done", spool: js?.spoolNo }, "Job done");
   if (sp) consume({ kind: "filament", item: sp, qty: j.grams, orderNo: j.orderNo, printer: j.printer });
   if (j.printer !== "—") { consume({ kind: "machine", item: j.printer, qty: j.hours, orderNo: j.orderNo, printer: j.printer }); consume({ kind: "power", item: "Electricity", qty: j.hours, orderNo: j.orderNo, printer: j.printer }); }
 }
 function failJob(j: Job, reason = "") {
   const js = jobSpool(j);
-  setJob(j, { status: "failed", finishedAt: new Date().toISOString() }, `Job failed${reason ? ` — ${reason}` : ""}`);
+  setJob(j, { status: "failed" }, `Job failed${reason ? ` — ${reason}` : ""}`);
   if (js) consume({ kind: "scrap", item: spoolLabel(js), qty: Math.round(j.grams / 2), orderNo: j.orderNo, printer: j.printer });
 }
-const requeue = (j: Job) => { jobsSig.value = [{ ...j, id: uid(), status: "queued", startedAt: undefined, finishedAt: undefined }, ...jobsSig.value]; log("Re-queued job", `${j.orderNo} · ${j.item}`); };
-/** Elapsed share of the estimate — an estimate, not machine telemetry. */
-export function jobEta(j: Job, at = Date.now()) {
-  if (j.status !== "printing" || !j.startedAt) return null;
-  const el = (at - Date.parse(j.startedAt)) / 36e5, left = j.hours - el;
-  return { pct: Math.min(100, Math.max(0, (el / Math.max(j.hours, 0.01)) * 100)), left, over: left < 0 };
-}
-const dur = (h: number) => { const m = Math.round(Math.abs(h) * 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
-function EtaBar({ j }: { j: Job }) {
-  const e = jobEta(j);
-  if (!e) return null;
-  return (
-    <span class="flex items-center gap-2 min-w-[140px]" title="Elapsed vs. estimated print time">
-      <span class="flex-1 h-1.5 rounded-full bg-c1 overflow-hidden"><span class={`block h-full rounded-full ${e.over ? "bg-warn" : "bg-c4"}`} style={{ width: `${e.pct}%` }} /></span>
-      <span class={`num text-[12px] whitespace-nowrap ${e.over ? "font-bold" : "text-c3"}`}>{e.over ? `${dur(e.left)} over` : `${dur(e.left)} left`}</span>
-    </span>
-  );
-}
+const requeue = (j: Job) => { jobsSig.value = [{ ...j, id: uid(), status: "queued" }, ...jobsSig.value]; log("Re-queued job", `${j.orderNo} · ${j.item}`); };
 function JobAct({ j, open }: { j: Job; open: (j: Job) => void }) {
   const primary = {
     queued: <Button onClick={() => startJob(j)}>Start</Button>,
@@ -65,7 +48,7 @@ function JobAct({ j, open }: { j: Job; open: (j: Job) => void }) {
     { label: "Open full inspector", on: () => open(j) },
     { label: "Mark failed", on: () => failJob(j), hidden: j.status !== "printing" },
     { label: "Reprint (new job)", on: () => requeue(j), hidden: j.status === "queued" || j.status === "failed" },
-    { label: "Back to queue", on: () => setJob(j, { status: "queued", startedAt: undefined }, "Job back to queue"), hidden: j.status !== "printing" },
+    { label: "Back to queue", on: () => setJob(j, { status: "queued" }, "Job back to queue"), hidden: j.status !== "printing" },
     { label: "Delete", danger: true, on: async () => { if (await ask(`Move job ${j.orderNo} · ${j.item} to the Bin?`, { ok: "Delete", danger: true })) { toBin("Job", j, `${j.orderNo} · ${j.item}`, me.value?.name ?? "You"); log("Deleted job", `${j.orderNo} · ${j.item}`); } }, hidden: j.status === "printing" },
   ]} /></>;
 }
@@ -81,7 +64,6 @@ function JobRun({ j, put }: { j: Job; put: (p: Partial<Job>, why?: string) => vo
       <Field label="Spool used"><select class={inputCls} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)}><option value="">Choose spool</option>{spoolOpts().map((o) => <option key={o}>{o}</option>)}</select></Field>
       {js && j.status !== "done" && <div class="rounded-xl bg-c1 px-3 py-2.5 text-sm flex items-center justify-between gap-3"><span>Spool after this job</span><b class="num">{js.grams.toLocaleString("en-IN")} − {j.grams} = {after.toLocaleString("en-IN")} g</b></div>}
       {js && j.status !== "done" && after < 250 && <p class="text-xs font-semibold">{after < 0 ? `⚠ Not enough filament — short by ${-after} g. Load another spool.` : "⚠ Spool will be low after this job."}</p>}
-      {jobEta(j) && <EtaBar j={j} />}
       <Actions>
         {j.status === "queued" && <Button onClick={() => startJob(j)}>Start print</Button>}
         {j.status === "printing" && <Button onClick={() => finishJob(j)}>Mark done · draw {j.grams} g</Button>}
@@ -111,11 +93,10 @@ export function Production() {
           <Table rows={jobs} rowKey={(j) => j.id} onRow={r.open} act={(j) => <JobAct j={j} open={r.open} />} cols={[
             { key: "i", label: "Job", render: (j) => <span class="flex flex-col min-w-0"><b class="font-semibold">{j.item || "Untitled run"}</b><MetaRow items={[j.orderNo, j.printer !== "—" && j.printer, `${j.grams} g`]} /></span> },
             { key: "s", label: "Status", card: "status", render: (j) => <Status tone={jobTone(j.status)}>{j.status}</Status> },
-            { key: "e", label: "ETA", card: "foot", render: (j) => jobEta(j) ? <EtaBar j={j} /> : <span class="t-meta num">{j.hours} h est.</span> },
+            { key: "e", label: "Est.", card: "foot", align: "right", render: (j) => `${j.hours} h` },
             { key: "op", label: "Operator", level: 2, render: (j) => j.operator },
             { key: "sp", label: "Spool", level: 2, render: (j) => { const s = jobSpool(j); return s ? `${spoolLabel(s)} · ${s.grams.toLocaleString("en-IN")} g left` : "—"; } },
             { key: "c", label: "Customer", level: 2, render: (j) => ordersSig.value.find((o) => o.no === j.orderNo)?.customer ?? "—" },
-            { key: "st", label: "Started", level: 2, render: (j) => j.startedAt ? new Date(j.startedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—" },
           ]} />
         </Card>
       </Section>
