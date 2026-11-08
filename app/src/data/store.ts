@@ -35,7 +35,7 @@ function diff(kind: string, prev: unknown, next: unknown): Change[] {
     const before = new Map((prev as { id: string }[] | undefined ?? []).map((r) => [r.id, r]));
     const out: Change[] = [];
     for (const r of next) { const p = before.get(r.id); before.delete(r.id); if (p !== r && JSON.stringify(p) !== JSON.stringify(r)) out.push({ kind, id: r.id, data: r, deleted: false }); }
-    before.forEach((r, id) => out.push({ kind, id, data: r, deleted: true }));
+    before.forEach((_r, id) => out.push({ kind, id, data: null, deleted: true })); // tombstone only: the Bin keeps its own copy
     return out;
   }
   return [{ kind, id: "_", data: next, deleted: false }];

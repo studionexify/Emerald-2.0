@@ -6,7 +6,7 @@ import {
   type InvLine, type Invoice, type Order, type Quote, type Shipment,
 } from "../../data";
 import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
-import { clientsSig, type Client } from "../../data";
+import { clientsSig, shrinkImage, type Client } from "../../data";
 import { DocSheet, fromInvoice, fromQuote, type DocData } from "./Doc";
 import { WorkShell } from "./shared";
 
@@ -209,7 +209,7 @@ export function Shipping() {
   const save = () => {
     if (!o) return;
     const lines = o.items.map((i) => ({ name: i.name, qty: d.qty[i.name] ?? Math.max(0, i.qty - sent(i.name)) })).filter((l) => l.qty > 0);
-    const s: Shipment = { id: uid(), orderNo: o.no, date: today(), courier: d.courier, service: d.service, tracking: d.tracking, lines, freightPaid: d.paid, freightRecovered: d.rec, eta: new Date(Date.now() + 4 * 864e5).toISOString().slice(0, 10), photo: d.photo || undefined };
+    const s: Shipment = { id: uid(), orderNo: o.no, date: today(), courier: d.courier, service: d.service, tracking: d.tracking, lines, freightPaid: d.paid, freightRecovered: d.rec, eta: new Date(Date.now() + 4 * 864e5).toISOString().slice(0, 10) };
     shipmentsSig.value = [s, ...shipmentsSig.value];
     if (d.photo) photosSig.value = [...photosSig.value, { id: uid(), ref: o.no, stage: "courier handover", name: "handover", data: d.photo, at: nowS() }];
     if (d.paid) consume({ kind: "freight", item: `${d.courier} ${d.service}`, qty: d.paid, orderNo: o.no });
@@ -221,7 +221,7 @@ export function Shipping() {
     <WorkShell stage="shipping" title="Shipping" sub="Courier, tracking, freight paid vs recovered · many dispatches per order, part quantities allowed"
       detail={sel && <Inspect title={`${sel.orderNo} · ${sel.courier}`} row={{ order: sel.orderNo, sent: shortDate(sel.date), eta: shortDate(sel.eta), courier: sel.courier, service: sel.service, tracking: sel.tracking || "Missing", contents: sel.lines.map((l) => `${l.qty}× ${l.name}`).join(", "), freightPaid: inr(sel.freightPaid), recovered: inr(sel.freightRecovered), net: inr(sel.freightPaid - sel.freightRecovered) }} onClose={() => setSel(null)}>
         <div class="flex flex-wrap items-end gap-2"><input class={`${inputCls} flex-1 min-w-0`} placeholder="Tracking no." defaultValue={sel.tracking} id="trk" /><Button onClick={() => { const v = (document.getElementById("trk") as HTMLInputElement).value; shipmentsSig.value = shipmentsSig.value.map((x) => (x.id === sel.id ? { ...x, tracking: v } : x)); setSel({ ...sel, tracking: v }); log("Updated tracking", sel.orderNo); }}>Save tracking</Button></div>
-        {sel.photo && <img src={sel.photo} alt="Handover" class="mt-3 rounded-xl max-h-48" />}</Inspect>}>
+        {(() => { const ph = sel.photo || photosSig.value.find((p) => p.ref === sel.orderNo && p.stage === "courier handover")?.data; return ph && <img src={ph} alt="Handover" class="mt-3 rounded-xl max-h-48" />; })()}</Inspect>}>
       <div class="strip grid grid-cols-3">
         <Stat value={shipmentsSig.value.length} label="dispatches" />
         <Stat value={inr(shipmentsSig.value.reduce((s, x) => s + x.freightPaid, 0))} label="freight paid" />
@@ -241,7 +241,7 @@ export function Shipping() {
             <li key={i.name} class="flex items-center justify-between gap-2 py-1 border-t border-line"><span>{i.name} <span class="text-xs text-c3">{sent(i.name)}/{i.qty} shipped</span></span>
               <input class="h-8 w-20 px-2 rounded-lg border border-c3 bg-c0 text-xs" type="number" aria-label={`Qty of ${i.name} in this dispatch`} value={d.qty[i.name] ?? Math.max(0, left)} onInput={(e) => setD({ ...d, qty: { ...d.qty, [i.name]: Number((e.target as HTMLInputElement).value) || 0 } })} /></li>); })}</ul>}
           <div class="flex flex-wrap items-center gap-2">
-            <label class="text-xs underline cursor-pointer">{d.photo ? "Photo attached ✓" : "Handover photo"}<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) { const r = new FileReader(); r.onload = () => setD({ ...d, photo: String(r.result) }); r.readAsDataURL(f); } }} /></label>
+            <label class="text-xs underline cursor-pointer">{d.photo ? "Photo attached ✓" : "Handover photo"}<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) { shrinkImage(f).then((photo) => setD({ ...d, photo })); } }} /></label>
             <Button onClick={save}>Save dispatch</Button>
           </div>
         </Card>
