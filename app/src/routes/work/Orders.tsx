@@ -49,7 +49,7 @@ export default function Orders() {
           <div class="md:hidden flex flex-col gap-2">
             {list.filter((o) => o.stage === stage).map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
             {batchesAt(stage).map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
-            {!count(stage) && <div class="rounded-[10px] border border-dashed border-line p-3 text-center t-meta">No orders at this stage</div>}
+            {!count(stage) && <div class="rounded-2xl border border-dashed border-line p-3 text-center t-meta">No orders at this stage</div>}
           </div>
           <div class={`hidden md:grid gap-2.5 ${open || creating ? "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "grid-cols-4 2xl:grid-cols-8"}`}>
             {STAGES.map((s) => {
@@ -63,7 +63,7 @@ export default function Orders() {
                   <div class="flex flex-col gap-1.5">
                     {col.map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
                     {bcol.map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
-                    {!col.length && !bcol.length && <div class="rounded-[10px] border border-dashed border-line h-10 flex items-center justify-center t-meta">Empty</div>}
+                    {!col.length && !bcol.length && <div class="rounded-2xl border border-dashed border-line h-10 flex items-center justify-center t-meta">Empty</div>}
                   </div>
                 </div>
               );
@@ -91,7 +91,7 @@ export default function Orders() {
 
 function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} class="w-full text-left rounded-[10px] px-2.5 py-2 cursor-pointer bg-c0 text-[13px] border border-dashed border-c2">
+    <button onClick={onOpen} class="w-full text-left rounded-2xl px-2.5 py-2 cursor-pointer bg-c0 text-[13px] border border-dashed border-c2">
       <div class="flex justify-between gap-2"><span class="font-mono text-[11px] font-bold">{b.orderNo}</span><span class="t-meta">Batch</span></div>
       <div class="font-medium truncate mt-0.5">{b.name}</div>
       <div class="t-meta num">{b.customer} · {b.done}/{b.units}</div>

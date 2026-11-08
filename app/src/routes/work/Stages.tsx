@@ -85,7 +85,7 @@ export function Production() {
   });
   const jobs = jobsSig.value.filter((j) => f === "all" || j.status === f);
   return (
-    <WorkShell title="Production" sub="Build sheet at approval · one job per line item · tap a job to run it" detail={r.detail}
+    <WorkShell stage="production" title="Production" sub="Build sheet at approval · one job per line item · tap a job to run it" detail={r.detail}
       actions={<><Button variant="outline" onClick={() => { const p = prompt("Which printer is blocked, and why? (e.g. A1-02 — nozzle clog)"); if (p) log("Logged block", p, "order"); }}>Log block</Button><Button icon="plus" onClick={() => r.add()}>New job</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "queued", "printing", "done", "failed"]} label={(s) => s === "all" ? "All jobs" : s} /></div>}>
       <Section title="Job queue" note={`${jobs.length} jobs`}>
@@ -159,7 +159,7 @@ export function QC() {
   };
   const qc = qcSig.value;
   return (
-    <WorkShell title="QC & Logging" sub="A work queue, not a form — pass, rework or scrap, reason kept" detail={r.detail}>
+    <WorkShell stage="qc" title="QC & Logging" sub="A work queue, not a form — pass, rework or scrap, reason kept" detail={r.detail}>
       <div class="strip grid grid-cols-4">
         <Stat value={qc.filter((q) => q.result === "pass").length} label="passed" />
         <Stat value={qc.filter((q) => q.result === "rework").length} label="rework" />
@@ -244,7 +244,7 @@ export function Packing() {
   const r = useRecord<PackRecord>({ sig: packRecSig, kind: "Packing record", title: (p) => `${p.order} · ${p.box || "packing"}`, fields: pkFields, logKind: "order",
     blank: () => ({ id: uid(), order: "", box: "", weight: "", materials: "", cost: 0, by: me.value?.name ?? "You", notes: "", date: today() }) });
   return (
-    <WorkShell title="Packing" sub="Materials used and their cost, weight, box size, handling notes" detail={r.detail}>
+    <WorkShell stage="packing" title="Packing" sub="Materials used and their cost, weight, box size, handling notes" detail={r.detail}>
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Section title="To pack" note={String(list.length)}>
           {list.map((o) => <PackCard key={o.id} o={o} />)}
@@ -280,7 +280,7 @@ export function Archive() {
   const [open, setOpen] = useState<Order | null>(null);
   const cur = open && (ordersSig.value.find((o) => o.id === open.id) ?? open);
   return (
-    <WorkShell title="Archive" sub="Final cost rollup · tap an order to see its cost lines or reopen it" detail={cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}>
+    <WorkShell stage="archived" title="Archive" sub="Final cost rollup · tap an order to see its cost lines or reopen it" detail={cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}>
       <Card class="!py-1">
         <Table rows={list} rowKey={(o) => o.id} onRow={setOpen} cols={[
           { key: "o", label: "Order", render: (o) => `${o.no} · ${o.customer}` },

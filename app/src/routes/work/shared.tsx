@@ -2,10 +2,11 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fact, Page, Status } from "../../ui";
-import { addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { can, ordersSig, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { StageStrip } from "../../ui/stage-strip";
 
-export function WorkShell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
-  return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{children}</Page>;
+export function WorkShell({ title, sub, actions, toolbar, detail, children, stage }: { stage?: Stage; title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
+  return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={ordersSig.value} showValue={can("mauny")} active={stage} />}{children}</Page>;
 }
 
 export type TypeFilter = "all" | OrderType;
@@ -20,7 +21,7 @@ export const stageLabel = (o: Order) => STAGE_LABEL[o.stage];
 
 export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void; inset?: boolean }) {
   return (
-    <button onClick={() => onOpen(o)} class="w-full min-w-0 text-left rounded-[10px] bg-c0 border border-line hover:border-c2 px-2.5 py-2 cursor-pointer text-[13px]">
+    <button onClick={() => onOpen(o)} class="w-full min-w-0 text-left rounded-2xl bg-c0 border border-line hover:border-c2 px-2.5 py-2 cursor-pointer text-[13px]">
       <div class="flex items-center justify-between gap-2"><span class="font-mono text-[11px] font-bold">{o.no}</span><span class="t-meta">{o.type === "bulk" ? "Bulk" : shortDate(o.due)}</span></div>
       <div class="font-medium truncate mt-0.5">{o.customer}</div>
       <div class="t-meta truncate">{o.items.map((i) => i.name).join(", ")}</div>

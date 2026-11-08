@@ -23,7 +23,7 @@ export function Button({ variant = "primary", icon, children, class: c, ...rest 
 }
 
 export function Card({ children, class: c, dark, dashed }: { children: ComponentChildren; class?: string; dark?: boolean; dashed?: boolean }) {
-  const base = dark ? "bg-c0 border border-c4" : dashed ? "bg-transparent border border-dashed border-c2" : "bg-c0 border border-line";
+  const base = dark ? "bg-c0 border border-c4" : dashed ? "bg-transparent border border-dashed border-c2" : "bg-c0 border border-transparent";
   return <section class={`rounded-[var(--radius-card)] p-3 md:p-4 min-w-0 ${base} ${c ?? ""}`}>{children}</section>;
 }
 
@@ -69,7 +69,7 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
     <label class="relative block">
       <span class="sr-only">Section</span>
       <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
-        class="appearance-none cursor-pointer w-full h-8 pl-3 pr-8 rounded-lg truncate bg-c0 border border-line text-c4 font-semibold text-[13px]">
+        class="appearance-none cursor-pointer w-full h-8 pl-4 pr-8 rounded-full truncate bg-c0 border border-transparent text-c4 font-semibold text-[13px]">
         {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
       </select>
       <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c2"><Icon name="down" size={12} /></span>
@@ -85,7 +85,7 @@ export function Pick<T extends string>({ value, on, items, label, title }: { val
     <label class="relative inline-block min-w-0">
       <span class="sr-only">{title ?? "Filter"}</span>
       <select value={value} onChange={(e) => on((e.target as HTMLSelectElement).value as T)} aria-label={title ?? "Filter"}
-        class="appearance-none cursor-pointer h-7 pl-3 pr-8 rounded-lg bg-c0 border border-line text-xs font-medium max-w-full truncate">
+        class="appearance-none cursor-pointer h-7 pl-3 pr-8 rounded-full bg-c0 border border-transparent text-xs font-medium max-w-full truncate">
         {items.map((x) => <option key={x} value={x}>{title ? `${title}: ${L(x)}` : L(x)}</option>)}
       </select>
       <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c3"><Icon name="down" size={12} /></span>
@@ -97,14 +97,15 @@ export function Pick<T extends string>({ value, on, items, label, title }: { val
 export type Tone = "done" | "active" | "waiting" | "blocked" | "idle";
 export function Status({ tone, children }: { tone: Tone; children: ComponentChildren }) {
   const mark = {
-    done: <span class="w-2.5 h-2.5 rounded-full bg-c4" />,
-    active: <span class="w-2.5 h-2.5 rounded-full border-2 border-c4" />,
-    waiting: <span class="w-2.5 h-2.5 rounded-full border-2 border-dashed border-c3" />,
-    blocked: <span class="w-2.5 h-2.5 bg-c4 rotate-45" />,
-    idle: <span class="w-2.5 h-2.5 rounded-full bg-c2" />,
+    done: <Icon name="check" size={11} />,
+    active: <span class="w-1.5 h-1.5 rounded-full bg-current" />,
+    waiting: <Icon name="hourglass" size={11} />,
+    blocked: <Icon name="alert" size={11} />,
+    idle: <span class="w-1.5 h-1.5 rounded-full bg-current opacity-60" />,
   }[tone];
+  const pill = { done: "bg-grn-bg text-grn", active: "bg-c1 text-c4", waiting: "bg-amb-bg text-amb", blocked: "bg-red-bg text-red", idle: "bg-c1 text-c2" }[tone];
   return (
-    <span class={`inline-flex items-center gap-2 text-xs ${tone === "blocked" ? "font-bold" : tone === "done" ? "font-medium" : "font-normal"}`}>
+    <span class={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold whitespace-nowrap ${pill}`}>
       {mark}
       {children}
     </span>
@@ -198,7 +199,7 @@ export function Table<T>({ cols: all, rows, rowKey, onRow, act, expand }: { cols
       </ul>
       <table class="hidden md:table w-full text-[13px] table-auto">
         <thead>
-          <tr class="text-left text-c3 text-xs">
+          <tr class="text-left text-c3 text-xs bg-thead [&>th:first-child]:rounded-l-xl [&>th:last-child]:rounded-r-xl [&>th:first-child]:pl-3">
             {canExpand && <th class="w-7"><span class="sr-only">Expand</span></th>}
             {cols.map((c) => <th key={c.key} class={`py-1.5 pr-4 ${c.align === "right" ? "text-right" : ""} ${hid(c)}`}>{c.label}</th>)}
             {act && <th class="text-right pr-1"><span class="sr-only">Action</span></th>}
@@ -280,7 +281,7 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
 }) {
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 border-b border-line bg-canvas">
+      <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 bg-canvas">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-baseline gap-3">
             <h1 class="t-title truncate">{title}</h1>
@@ -349,7 +350,7 @@ export function Field({ label, children }: { label: string; children: ComponentC
   );
 }
 
-export const inputCls = "h-8 px-2.5 rounded-lg border border-line bg-c0 text-c4 text-[13px] placeholder:text-c2 w-full focus:border-c4 outline-none";
+export const inputCls = "h-8 px-3 rounded-xl border border-line bg-c0 text-c4 text-[13px] placeholder:text-c2 w-full focus:border-c4 outline-none";
 
 /** Split-row key/value: label left, value right on one baseline. */
 export function KV({ label, value, strong }: { label: ComponentChildren; value: ComponentChildren; strong?: boolean }) {
@@ -364,7 +365,7 @@ export function KV({ label, value, strong }: { label: ComponentChildren; value: 
 /** Disclosure triangle: collapsed detail behind a summary row. */
 export function Disclosure({ title, meta, open, children, class: c }: { title: ComponentChildren; meta?: ComponentChildren; open?: boolean; children: ComponentChildren; class?: string }) {
   return (
-    <details open={open} class={`rounded-[var(--radius-card)] bg-c0 border border-line min-w-0 ${c ?? ""}`}>
+    <details open={open} class={`rounded-[var(--radius-card)] bg-c0 border border-transparent min-w-0 ${c ?? ""}`}>
       <summary class="flex items-center gap-2 h-10 px-3 select-none">
         <span class="chev text-c2 inline-flex"><Icon name="right" size={12} /></span>
         <span class="text-[13px] font-semibold min-w-0 truncate">{title}</span>

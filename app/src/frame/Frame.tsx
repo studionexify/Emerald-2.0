@@ -116,13 +116,13 @@ function Dock() {
     : [NAV[0], NAV[1], NAV[2], NAV[4], { href: "/more", label: "More", icon: "grid" }].filter((n) => n.href === "/more" || can(moduleOf(n.href)));
   const moreOn = !items.filter((n) => n.href !== "/more").some((n) => isActive(path, n.href));
   return (
-    <nav class="md:hidden shrink-0 bg-c0/85 backdrop-blur-md border-t border-line flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
+    <nav class="md:hidden shrink-0 bg-c0 rounded-t-[22px] flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
         return (
           <a key={n.href} href={n.href} aria-current={on ? "page" : undefined}
             class={`flex-1 relative flex flex-col items-center justify-center h-14 gap-0.5 text-[10px] min-w-0 ${on ? "text-c4 font-semibold" : "text-c2 font-medium"}`}>
-            <span class="relative inline-flex"><Icon name={n.icon} size={22} />
+            <span class={`relative inline-flex items-center justify-center h-8 w-12 rounded-full ${on ? "bg-c4 text-c0" : ""}`}><Icon name={n.icon} size={20} />
               {n.href === "/more" && urgent > 0 && <span class="absolute -top-1.5 -right-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-warn text-black text-[9px] leading-[14px] text-center num">{urgent}</span>}
             </span>
             <span class="truncate max-w-full">{n.label.split(" ")[0]}</span>

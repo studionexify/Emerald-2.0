@@ -4,20 +4,20 @@
 :root {
   --bg: #e4e1da; --c-0: #ffffff; --c-1: #f3f1ec; --line: #ece9e2;
   --c-2: #6b685f; --c-3: #3a3833; --c-4: #1c1b19; --warn: #ff9500;
-  --lime: #d8f36a; --panel: #f6f4ef; --thead: #efece5; --avatar: #e5e2da; --late: #c4552b;
+  --lime: #d8f36a; --red-bg: #f6d9cc; --red: #a2401c; --amb-bg: #fbe6cf; --amb: #9a5a12; --grn-bg: #d5ecdf; --grn: #0f5d47; --panel: #f6f4ef; --thead: #efece5; --avatar: #e5e2da; --late: #c4552b;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
   --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
   --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
-  --lime: #d8f36a; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
+  --lime: #d8f36a; --red-bg: #3a1d12; --red: #ff9b74; --amb-bg: #3a2810; --amb: #f5b860; --grn-bg: #11291f; --grn: #6fd3a8; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
     --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
-  --lime: #d8f36a; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
+  --lime: #d8f36a; --red-bg: #3a1d12; --red: #ff9b74; --amb-bg: #3a2810; --amb: #f5b860; --grn-bg: #11291f; --grn: #6fd3a8; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
     color-scheme: dark;
   }
 }
@@ -32,6 +32,12 @@
   --color-line: var(--line);
   --color-warn: var(--warn);
   --color-lime: var(--lime);
+  --color-red-bg: var(--red-bg);
+  --color-red: var(--red);
+  --color-amb-bg: var(--amb-bg);
+  --color-amb: var(--amb);
+  --color-grn-bg: var(--grn-bg);
+  --color-grn: var(--grn);
   --color-panel: var(--panel);
   --color-thead: var(--thead);
   --color-avatar: var(--avatar);
@@ -83,10 +89,10 @@ tbody td { font-weight: 400; }
 tbody td:first-child { font-weight: 600; }
 
 /* Summary strip: a grid of figures joined into one hairline panel. */
-.strip { gap: 0 !important; background: var(--c-0); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.strip { gap: 0 !important; background: var(--c-0); border: 1px solid transparent; border-radius: var(--radius-card); overflow: hidden; }
 .strip > * { border: 0 !important; border-radius: 0 !important; box-shadow: -1px -1px 0 var(--line); }
 /* Dense list box. */
-.listbox { background: var(--c-0); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.listbox { background: var(--c-0); border: 1px solid transparent; border-radius: var(--radius-card); overflow: hidden; }
 .listbox > * + * { border-top: 1px solid var(--line); }
 
 /* Sheets: slide/fade in, off for reduced motion (global rule above). */

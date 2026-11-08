@@ -72,7 +72,7 @@ export default function Overview() {
               {fleet.map((p) => {
                 const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing");
                 return (
-                  <a key={p.id} href="/work/production" class="rounded-[10px] bg-c0 border border-line px-3 py-2 min-w-0 block hover:bg-c1/40">
+                  <a key={p.id} href="/work/production" class="rounded-2xl bg-c0 border border-line px-3 py-2 min-w-0 block hover:bg-c1/40">
                     <div class="flex items-center justify-between gap-2">
                       <span class="font-mono text-[12px] font-bold truncate">{p.name}</span>
                       <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
