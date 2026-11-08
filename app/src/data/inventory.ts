@@ -1,8 +1,6 @@
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
 import { persisted, today, uid } from "./store";
-import * as M from "../mock/data";
-import * as XX from "../mock/extra";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
 
 /** Persisted list that fills new fields from the seed (by id) so old saved rows gain them. */
@@ -18,21 +16,21 @@ function list<T extends { id: string }>(key: string, seed: T[], fill: Partial<T>
     : s.value.map((r) => ({ ...fill, ...(seed.find((x) => x.id === r.id) ?? {}), ...r }));
   return s;
 }
-export const printersSig = list<Printer>("printers", M.printers, { active: true });
-export const spoolsSig = list<Spool>("spools", M.spools, { active: true, tare: 250, diameter: 1.75, costKg: 1250, status: "open" });
-export const packSig = list<PackItem>("packStock", M.packStock, { active: true });
-export const itemsSig = list<PackItem>("accessories", XX.accessories as PackItem[], { active: true });
-export const movesSig = persisted<Movement[]>("movements2", XX.movements as Movement[]);
-export const jobsSig = list<Job>("jobs", M.jobs);
-export const qcSig = list<QcEntry>("qc", M.qc);
-export const packRecSig = list<PackRecord>("packRecords", XX.packRecords as PackRecord[]);
-export const tasksSig = list<Task>("tasks", M.tasks);
-export const binSig = persisted<Binned[]>("bin", M.bin);
+export const printersSig = list<Printer>("printers", [], { active: true });
+export const spoolsSig = list<Spool>("spools", [], { active: true, tare: 250, diameter: 1.75, costKg: 1250, status: "open" });
+export const packSig = list<PackItem>("packStock", [], { active: true });
+export const itemsSig = list<PackItem>("accessories", [], { active: true });
+export const movesSig = persisted<Movement[]>("movements2", []);
+export const jobsSig = list<Job>("jobs", []);
+export const qcSig = list<QcEntry>("qc", []);
+export const packRecSig = list<PackRecord>("packRecords", []);
+export const tasksSig = list<Task>("tasks", []);
+export const binSig = persisted<Binned[]>("bin", []);
 /** The Bin keeps a deletion for 7 days, then it is gone for good (blueprint 18). */
 export const BIN_DAYS = 7;
 { const cut = new Date(Date.now() - BIN_DAYS * 864e5).toISOString().slice(0, 10); if (binSig.value.some((b) => b.deletedAt < cut)) binSig.value = binSig.value.filter((b) => b.deletedAt >= cut); }
 export type Client = { id: string; name: string; kind: string; phone: string; email?: string; city: string; address?: string; gstin: string; medium: string; notes?: string; active?: boolean };
-export const clientsSig = list<Client>("clients", XX.clients.map(({ orders: _o, value: _v, ...c }) => ({ ...c, active: true })));
+export const clientsSig = list<Client>("clients", []);
 
 /** Bin registry: kind → list it came from, so Restore puts it back. */
 const REG: Record<string, Signal<{ id: string }[]>> = {};
@@ -77,3 +75,10 @@ export const jobSpool = (j: Job) => spoolsSig.value.find((s) => s.spoolNo === j.
 /** Grams already promised to queued or printing jobs. */
 export const committed = (s: Spool) => jobsSig.value.filter((j) => (j.status === "queued" || j.status === "printing") && jobSpool(j)?.id === s.id).reduce((a, j) => a + j.grams, 0);
 export const spoolLabel = (s: Spool) => `${s.material} ${s.colour} · ${s.spoolNo}`;
+
+/** Printer stats from real print jobs: failure %, job count and hours. Utilisation/uptime need downtime logging, which isn't recorded, so they read as unknown (0 / 100). */
+export function machineStats(printer: string) {
+  const js = jobsSig.value.filter((j) => j.printer === printer && (j.status === "done" || j.status === "failed"));
+  const failed = js.filter((j) => j.status === "failed").length;
+  return { jobs: js.length, fail: js.length ? Math.round((failed / js.length) * 100) : 0, hours: Math.round(js.reduce((a, j) => a + j.hours, 0)), util: 0, uptime: 100, lost: 0, blocks: 0 };
+}

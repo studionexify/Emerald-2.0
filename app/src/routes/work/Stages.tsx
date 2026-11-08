@@ -3,7 +3,7 @@ import { signal } from "@preact/signals";
 import { navigate } from "../../router";
 import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { Menu, MetaRow } from "../../ui/disclose";
-import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, X, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order } from "../../data";
+import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
 import { ConsumeForm, OrderDetail, WorkShell } from "./shared";
 
@@ -79,7 +79,7 @@ export function Production() {
   const [f, setF] = useState("all");
   const r = useRecord<Job>({
     sig: jobsSig, kind: "Job", title: (j) => `${j.orderNo} · ${j.item}`, fields: jFields, logKind: "order",
-    blank: () => ({ id: uid(), orderNo: ordersSig.value.find((o) => o.stage === "production")?.no ?? ordersSig.value[0].no, item: "", printer: printersSig.value[0]?.name ?? "—", operator: me.value?.name ?? "—", status: "queued", hours: 1, grams: 100 }),
+    blank: () => ({ id: uid(), orderNo: ordersSig.value.find((o) => o.stage === "production")?.no ?? ordersSig.value[0]?.no ?? "", item: "", printer: printersSig.value[0]?.name ?? "—", operator: me.value?.name ?? "—", status: "queued", hours: 1, grams: 100 }),
     facts: (j) => { const o = ordersSig.value.find((x) => x.no === j.orderNo); return [["Status", <Status tone={jobTone(j.status)}>{j.status}</Status>], ["Customer", o?.customer ?? "—"], ["Printer · operator", `${j.printer} · ${j.operator}`], ["Estimate", `${j.grams} g · ${j.hours} h`]]; },
     extra: (j, put) => <JobRun j={j} put={put} />,
   });
@@ -104,7 +104,7 @@ export function Production() {
         <div class="listbox">
           <div class="hidden lg:grid grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 px-3 h-7 items-center t-meta uppercase tracking-[0.06em]"><span>Printer</span><span>Status</span><span class="text-right">Util</span><span class="text-right">Uptime</span><span class="text-right">Blocked</span><span class="text-right">Fail</span><span>Now</span></div>
           {printersSig.value.filter((p) => p.active !== false).map((p) => {
-            const m = X.machineLog.find((x) => x.printer === p.name) ?? { util: 0, uptime: 100, lost: 0, fail: 0 };
+            const m = machineStats(p.name);
             return (
               <a key={p.id} href="#workshop" class="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 items-center px-3 py-2 lg:py-1.5 lg:min-h-9 hover:bg-c1/60 text-[13px]">
                 <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{p.name}</span><span class="text-c3">{p.model}</span></span>

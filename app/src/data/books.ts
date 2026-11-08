@@ -2,7 +2,7 @@
 import { billsSig, balanceOf, orderValue, gstSig, invoicesSig, expensesSig, moneySig, assetsSig, loansSig, openingSig, accountsSig, fyOf, fyWindow, inWin, invTax, r2, daysBetween, financeSummary, logFn, type Asset, type Goal, type GoalMetric, type GstMonth } from "./ledger";
 import type { Order } from "../mock/types";
 import { today } from "./store";
-import * as M from "../mock/data";
+import { consSig } from "./index";
 /* ---------------------------------------------------------------- Books */
 export const depreciation = (a: Asset, fy: string) => { const [s] = fyWindow(fy); const half = a.date >= `${Number(fy.slice(0, 4))}-10-03` && a.date <= fyWindow(fy)[1]; const wdvStart = a.date < s ? a.cost * Math.pow(1 - a.blockRate / 100, Math.max(0, Number(fy.slice(0, 4)) - Number(fyOf(a.date).slice(0, 4)))) : a.cost; const dep = r2(wdvStart * a.blockRate / 100 * (half ? 0.5 : 1)); return { open: r2(wdvStart), dep, wdv: r2(wdvStart - dep) }; };
 export function books(fy: string) {
@@ -41,7 +41,7 @@ export function books(fy: string) {
   const suspense = r2(assetsSide - (capital + creditorsTot + loansOut));
   const cf = (kinds: string[]) => moneySig.value.filter((m) => kinds.includes(m.kind) && inWin(m.date, win)).reduce((s, m) => s + m.amount, 0);
   const cashflow = { operating: cf(["receipt", "expense", "advance", "other_income", "tax_payment"]), investing: cf(["asset_purchase"]), financing: cf(["capital_in", "drawings", "loan_taken", "loan_repayment"]) };
-  const wastage = M.consumption.filter((c) => c.kind === "scrap").reduce((s, c) => s + c.cost, 0);
+  const wastage = consSig.value.filter((c) => c.kind === "scrap").reduce((s, c) => s + c.cost, 0);
   return { sales, purchase, debtors, creditors, heads: [...heads].map(([head, amount], k) => ({ id: String(k), head, amount })), wastage, deps,
     pl: { salesTot, opening: op.stock, direct, closing: op.closingStock, gross, indirect, depTot, interest, net },
     bs: { capital, creditorsTot, loansOut, suspense, fixed, debtorsTot, cash, stock: op.closingStock, total: assetsSide }, cashflow };
