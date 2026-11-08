@@ -241,7 +241,7 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
 
 export function Filament() {
   const [vw, setVw] = useState(innerWidth); useLayoutEffect(() => { const f = () => setVw(innerWidth); addEventListener("resize", f); return () => removeEventListener("resize", f); }, []);
-  const cols = vw >= 1536 ? 4 : vw >= 1024 ? 3 : vw >= 640 ? 2 : 1;
+  const cols = vw >= 1536 ? 4 : vw >= 900 ? 3 : vw >= 640 ? 2 : 1;
   const stripRef = useRef<HTMLDivElement>(null); const [cur, setCur] = useState<string | null>(null);
   useLayoutEffect(() => {
     const f = () => { const secs = document.querySelectorAll<HTMLElement>("section[data-mat]"); const sc = secs[0]?.closest(".overflow-y-auto");
@@ -281,7 +281,7 @@ export function Filament() {
     },
   });
   const all = spoolsSig.value.filter((s) => s.active !== false || st === "retired");
-  const mats = [...new Set(spoolsSig.value.map((s) => s.material))];
+  const mats = [...new Set(spoolsSig.value.map((s) => s.material))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
   const shown = all.filter((s) => (mat === "all" || s.material === mat) && (st === "all" ? true : st === "in stock" ? s.grams > 0 && s.active !== false : st === "retired" ? s.active === false : s.status === st)
     && (!q || `${s.colour} ${s.brand} ${s.spoolNo} ${s.finish}`.toLowerCase().includes(q.toLowerCase())));
   const tot = spoolsSig.value.filter((s) => s.active !== false);
