@@ -74,7 +74,7 @@ export function mapEmerald1(t: Tables): Migrated {
   });
   for (const b of T("bulk_orders")) {
     const lines = json<{ name?: string; qty?: number; price?: number | null }[]>(b.lines, []);
-    orders.push({ id: str(b.id), no: str(b.id), type: "bulk", customer: str(b.party_name), medium: str(b.deal_type), stage: b.status === "closed" ? "archived" : "production",
+    orders.push({ id: str(b.id), no: str(b.id), type: "bulk", customer: str(b.party_name), medium: b.party_type === "store" ? "Store" : "Bulk", stage: b.status === "closed" ? "archived" : "production",
       created: day(b.order_date || b.created_at), due: day(b.order_date || b.created_at), items: lines.map((l) => ({ name: str(l.name), material: "PLA", colour: "", qty: num(l.qty, 1), price: num(l.price), cost: 0 })),
       approved: true, invoiced: !!b.invoice_number });
   }
@@ -91,7 +91,7 @@ export function mapEmerald1(t: Tables): Migrated {
       status: j.print_status === "success" ? "done" : j.print_status === "failed" ? "failed" : j.print_status === "running" ? "printing" : "queued", hours: r2(hrs), grams: num(j.material_used) };
   });
   const qc: QcEntry[] = T("qc_records").map((q) => ({ id: str(q.id), orderNo: str(q.order_id), item: str(lineById.get(str(q.line_item_id))?.product_name), result: (["pass", "rework", "scrap"].includes(str(q.result)) ? q.result : "pass") as QcEntry["result"],
-    grams: num(q.wastage_g), defect: str(q.defect_tag) || undefined, by: str(q.checked_by), date: day(q.timestamp) }));
+    grams: num(q.wastage_g), defect: str(q.defect_tag) || undefined, cause: str(q.root_cause) || undefined, note: str(q.improvement_note) || undefined, by: str(q.checked_by), date: day(q.timestamp) }));
   const packRecords: PackRecord[] = T("packing_records").map((p) => ({ id: str(p.id), order: str(p.order_id), box: str(p.box_dimensions), weight: p.gross_weight_g ? `${p.gross_weight_g} g` : "",
     materials: bool(p.no_packaging) ? "No packaging" : json<{ name?: string; qty?: number }[]>(p.materials, []).map((m) => `${m.name} ×${m.qty}`).join(", "), cost: 0, by: str(p.packed_by), notes: str(p.special_notes), date: day(p.packed_at) }));
   const shipments: Shipment[] = T("shipments").map((s) => ({ id: str(s.id), orderNo: str(s.order_id), date: day(s.dispatched_at), courier: str(s.courier), service: str(s.service), tracking: str(s.tracking_number),

@@ -4,12 +4,13 @@ import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
 import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
+import { fyWindow, inWin, quotesSig, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate } from "../data";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaFile } from "../ui/media";
 import {
   accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, books, can, confirmBill, confirmLine, consSig, csv, daySummary, download, expensesSig,
   financeSummary, fyOf, GOAL_HINT, GOAL_LABEL, goalProgress, goalsSig, gstMonths, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
-  parseStatementCsv, parties, rejectLine, setGst, shortDate, statementSig, suggest, tallyXml, today, transfer, uid, windowFor, X,
+  parseStatementCsv, parties, rejectLine, setGst, shortDate, statementSig, suggest, tallyXml, today, transfer, uid, windowFor,
   type Bill, type Goal, type GoalMetric, type MoneyKind,
 } from "../data";
 
@@ -424,35 +425,95 @@ export function Gst() {
 }
 
 /* ======================================================= Reports */
+/** Blueprint 14: where work comes from and what keeps going wrong. Everything derived on view; every row links to its record. */
+const med = (xs: number[]) => { if (!xs.length) return 0; const v = [...xs].sort((a, b) => a - b), m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+const NoData = ({ what }: { what: string }) => <p class="text-sm text-c3 py-2">{what}</p>;
 export function Reports() {
   const [fy, setFy] = useState(fyOf(today()));
-  const o = ordersSig.value;
-  const q = (s: string) => o.filter((x) => x.stage === s).length;
-  const funnel = [["Quoted", o.length], ["Past quotation", o.filter((x) => x.stage !== "quotation").length], ["In production", q("production")], ["Archived", q("archived")]] as const;
-  const val = (x: (typeof o)[number]) => x.items.reduce((s, i) => s + i.qty * i.price, 0);
-  const cost = (x: (typeof o)[number]) => x.items.reduce((s, i) => s + i.qty * i.cost, 0);
-  const channels = [...new Set(o.map((x) => x.medium))].map((m) => { const l = o.filter((x) => x.medium === m), won = l.filter((x) => x.stage !== "quotation"); const v = won.reduce((s, x) => s + val(x), 0);
-    return { id: m, m, quotes: l.length, won: won.length, rate: Math.round((won.length / l.length) * 100), value: v, margin: v ? Math.round((1 - won.reduce((s, x) => s + cost(x), 0) / v) * 100) : 0 }; }).sort((a, b) => b.rate - a.rate);
-  const byType = (["client", "bulk", "inhouse"] as const).map((t) => o.filter((x) => x.type === t).reduce((s, x) => s + val(x), 0) / 1000);
-  const cons = new Map<string, number>(); consSig.value.forEach((c) => cons.set(c.kind, (cons.get(c.kind) ?? 0) + c.cost));
-  const byOrder = new Map<string, number>(); consSig.value.forEach((c) => c.orderNo && byOrder.set(c.orderNo, (byOrder.get(c.orderNo) ?? 0) + c.cost));
-  const est = o.reduce((s, x) => s + cost(x), 0), act = [...byOrder.values()].reduce((s, v) => s + v, 0);
-  const mo = monthly(fy);
+  const [tab, setTab] = useState("funnel");
+  const win = fyWindow(fy), inFy = (d: string) => inWin(d, win);
+  const fyLabel = `FY ${fy}`;
+  const orders = ordersSig.value.filter((x) => inFy(x.created));
+  const quotes = quotesSig.value.filter((x) => inFy(x.date));
+  const qVal = (q: (typeof quotes)[number]) => q.lines.reduce((s, l) => s + l.qty * l.rate, 0);
+  const val = (x: (typeof orders)[number]) => x.items.reduce((s, i) => s + i.qty * i.price, 0);
+  const cost = (x: (typeof orders)[number]) => x.items.reduce((s, i) => s + i.qty * i.cost, 0);
+  const actual = (no: string) => consSig.value.filter((c) => c.orderNo === no).reduce((s, c) => s + c.cost, 0);
+
+  /* Funnel — quotations by outcome; unknown outcomes are their own band, never "lost". */
+  const band = (o: string) => quotes.filter((q) => q.outcome === o);
+  const approved = band("approved"), qTot = quotes.reduce((s, q) => s + qVal(q), 0), aTot = approved.reduce((s, q) => s + qVal(q), 0);
+  const archived = orders.filter((x) => x.stage === "archived");
+  const funnel: [string, number, number | null, string][] = [
+    ["Quoted", quotes.length, qTot, "/work/quotes"], ["Approved", approved.length, aTot, "/work/quotes"], ["Open (awaiting answer)", band("open").length, band("open").reduce((s, q) => s + qVal(q), 0), "/work/quotes"],
+    ["Lost", band("lost").length, band("lost").reduce((s, q) => s + qVal(q), 0), "/work/quotes"], ["Outcome unrecorded", band("unrecorded").length, band("unrecorded").reduce((s, q) => s + qVal(q), 0), "/work/quotes"],
+    ["In production", orders.filter((x) => x.stage === "production").length, null, "/work/production"], ["Archived", archived.length, archived.reduce((s, x) => s + val(x), 0), "/work/archive"]];
+
+  /* Channels — sorted by rate, margin shown; volume is not the insight. */
+  const channels = [...new Set(orders.filter((x) => x.type !== "inhouse").map((x) => x.medium || "Unknown"))].map((m) => {
+    const l = orders.filter((x) => x.type !== "inhouse" && (x.medium || "Unknown") === m), won = l.filter((x) => x.approved || x.stage !== "quotation");
+    const v = won.reduce((s, x) => s + val(x), 0), c = won.reduce((s, x) => s + (actual(x.no) || cost(x)), 0);
+    return { id: m, m, quotes: l.length, won: won.length, rate: Math.round((won.length / l.length) * 100), value: v, margin: v && c ? Math.round((1 - c / v) * 100) : null };
+  }).sort((a, b) => b.rate - a.rate || (b.margin ?? -1) - (a.margin ?? -1));
+
+  /* Quality — failure by machine and material, defect Pareto by count and cost, improvement notes. */
+  const jobs = jobsSig.value.filter((j) => j.status === "done" || j.status === "failed");
+  const rateBy = (key: (j: (typeof jobs)[number]) => string) => [...new Set(jobs.map(key))].map((k) => { const l = jobs.filter((j) => key(j) === k), f = l.filter((j) => j.status === "failed").length; return { id: k, k, jobs: l.length, failed: f, pct: Math.round((f / l.length) * 100) }; }).sort((a, b) => b.pct - a.pct);
+  const floor = jobs.length ? Math.round((jobs.filter((j) => j.status === "failed").length / jobs.length) * 100) : 0;
+  const matOf = (j: (typeof jobs)[number]) => ordersSig.value.find((o) => o.no === j.orderNo)?.items.find((i) => i.name === j.item)?.material ?? "Unknown";
+  const byMachine = rateBy((j) => j.printer || "—"), byMaterial = rateBy(matOf);
+  const qc = qcSig.value.filter((x) => inFy(x.date));
+  const perG = rate("pla") / 1000;
+  const defects = [...new Set(qc.filter((x) => x.result !== "pass" || x.defect).map((x) => x.defect || "Untagged"))].map((d) => { const l = qc.filter((x) => (x.defect || "Untagged") === d && (x.result !== "pass" || x.defect)); const g = l.reduce((s, x) => s + x.grams, 0); return { id: d, d, n: l.length, g, cost: Math.round(g * perG) }; });
+  const notes = qc.filter((x) => x.note);
+
+  /* Costs — estimate vs logged consumption, by line and by order kind. */
+  const logged = archived.filter((x) => actual(x.no) > 0);
+  const kinds = ["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"];
+  const byLine = kinds.map((k) => ({ id: k, k, v: consSig.value.filter((c) => c.kind === k && logged.some((o) => o.no === c.orderNo)).reduce((s, c) => s + c.cost, 0) })).filter((r) => r.v);
+  const byKind = (["client", "bulk", "inhouse"] as const).map((t) => { const l = logged.filter((x) => x.type === t), e = l.reduce((s, x) => s + cost(x), 0), a = l.reduce((s, x) => s + actual(x.no), 0); return { id: t, t, n: l.length, e, a, drift: e ? Math.round(((a - e) / e) * 100) : 0 }; }).filter((r) => r.n);
+
+  /* Cycle time — median days in each stage from stage history; outliers listed. */
+  const hist = historySig.value;
+  const spans: { stage: string; order: string; days: number }[] = [];
+  for (const no of new Set(hist.map((h) => h.orderNo))) {
+    const h = hist.filter((x) => x.orderNo === no).sort((a, b) => a.at.localeCompare(b.at));
+    h.forEach((m, i) => { const next = h[i + 1]; if (next) spans.push({ stage: m.to, order: no, days: daysBetween(m.at.slice(0, 10), next.at.slice(0, 10)) }); });
+  }
+  const cycle = STAGE_ORDER.filter((s) => s !== "archived").map((s) => { const d = spans.filter((x) => x.stage === s).map((x) => x.days); const m = med(d); return { id: s, s, n: d.length, m, out: spans.filter((x) => x.stage === s && x.days > Math.max(3, m * 2)) }; }).filter((r) => r.n);
+
+  const exportCsv = () => download(`Emerald-reports-FY${fy}-${tab}.csv`, csv(tab === "funnel" ? funnel.map(([l, n, v]) => ({ band: l, count: n, value: v ?? "" })) : tab === "channels" ? channels : tab === "quality" ? [...byMachine.map((r) => ({ by: "machine", ...r })), ...byMaterial.map((r) => ({ by: "material", ...r })), ...defects.map((r) => ({ by: "defect", ...r }))] : tab === "costs" ? byKind : cycle.map(({ out: _o, ...r }) => r)), "text/csv");
+  const link = (href: string, children: ComponentChildren) => <a href={href} class="block hover:underline">{children}</a>;
   return (
-    <Shell title="Reports & analytics" sub="Derived from records, never stored · every number recomputes on view" toolbar={<FY v={fy} on={setFy} />}>
-      <div class="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
-        <Card><CardTitle>Quotation funnel</CardTitle><ul class="text-sm flex flex-col gap-2">{funnel.map(([l, n]) => <li key={l}><a href="/work/orders" class="block"><div class="flex justify-between"><span>{l}</span><span class="num">{n}</span></div><Progress value={(n / Math.max(1, o.length)) * 100} /></a></li>)}</ul></Card>
-        <Card><CardTitle>Order value by type (₹k)</CardTitle><Bars data={byType.map(Math.round)} labels={["Client", "Bulk", "In-house"]} /></Card>
-        <Card><CardTitle>Earned by month (₹k)</CardTitle><Bars data={mo.map((m) => Math.round(m.earned / 1000))} labels={mo.map((m) => m.label)} /></Card>
-        <Card class="lg:col-span-2"><CardTitle>Channel attribution · sorted by rate</CardTitle>
-          <Table rows={channels} rowKey={(x) => x.id} onRow={peek} cols={[{ key: "c", label: "Channel", render: (x) => <b>{x.m}</b> }, { key: "q", label: "Orders", align: "right", render: (x) => x.quotes }, { key: "w", label: "Won", align: "right", render: (x) => x.won }, { key: "r", label: "Rate", align: "right", render: (x) => `${x.rate}%` }, { key: "v", label: "Value won", align: "right", render: (x) => inr(x.value) }, { key: "m", label: "Margin", align: "right", render: (x) => `${x.margin}%` }]} /></Card>
-        <Card><CardTitle>Consumption by kind (₹)</CardTitle><Bars data={[...cons.values()].map(Math.round)} labels={[...cons.keys()]} /></Card>
-        <Card><CardTitle>Failure rate by machine (%)</CardTitle><Bars data={X.machineLog.map((m) => m.fail)} labels={X.machineLog.map((m) => m.printer)} /></Card>
-        <Card><CardTitle>Machine utilisation (%)</CardTitle><Bars data={X.machineLog.map((m) => m.util)} labels={X.machineLog.map((m) => m.printer)} /></Card>
-        <Card><CardTitle>Estimate vs logged consumption</CardTitle><div class="grid grid-cols-3 gap-2 text-sm"><Fact label="Estimated (all orders)" value={inr(est)} /><Fact label="Logged" value={inr(act)} /><Fact label="Orders with logs" value={String(byOrder.size)} /></div>
-          <ul class="text-xs mt-2">{[...byOrder].map(([no, v]) => { const x = o.find((y) => y.no === no); return <li key={no} class="flex justify-between border-t border-line py-1"><span>{no}</span><span class="num">{inr(v)} vs est. {inr(x ? cost(x) : 0)}</span></li>; })}</ul></Card>
-        <Card><CardTitle>Retail vs bulk vs in-house · count</CardTitle><Bars data={(["client", "bulk", "inhouse"] as const).map((t) => o.filter((x) => x.type === t).length)} labels={["Client", "Bulk", "In-house"]} /></Card>
-      </div>
+    <Shell title="Reports & analytics" sub="Where work comes from and what keeps going wrong · derived on view, never stored"
+      actions={<Button variant="outline" onClick={exportCsv}>Export CSV</Button>}
+      toolbar={<div class="flex flex-wrap items-center gap-2"><FY v={fy} on={setFy} /><SubTabs value={tab} onChange={setTab} items={[["funnel", "Funnel"], ["channels", "Channels"], ["quality", "Quality"], ["costs", "Costs"], ["cycle", "Cycle time"]]} /></div>}>
+      {tab === "funnel" && <Card><CardTitle>Quotation funnel · {fyLabel}</CardTitle>
+        {!quotes.length ? <NoData what={`No quotations in ${fyLabel} yet.`} /> : <>
+          <ul class="text-sm flex flex-col gap-2">{funnel.map(([l, n, v, href]) => <li key={l}>{link(href, <><div class="flex justify-between gap-2"><span>{l}</span><span class="num">{n}{v != null ? ` · ${inr(v)}` : ""}</span></div><Progress value={(n / Math.max(1, quotes.length)) * 100} /></>)}</li>)}</ul>
+          <div class="grid grid-cols-2 gap-2 mt-3"><Fact label="Conversion by count" value={`${Math.round((approved.length / quotes.length) * 100)}%`} /><Fact label="Conversion by value" value={`${qTot ? Math.round((aTot / qTot) * 100) : 0}%`} /></div>
+        </>}</Card>}
+      {tab === "channels" && <Card><CardTitle>Channel attribution · sorted by rate, then margin</CardTitle>
+        {!channels.length ? <NoData what={`No client orders in ${fyLabel} yet.`} /> :
+          <Table rows={channels} rowKey={(x) => x.id} onRow={peek} cols={[{ key: "c", label: "Channel", render: (x) => <b>{x.m}</b> }, { key: "q", label: "Orders", align: "right", render: (x) => x.quotes }, { key: "w", label: "Won", align: "right", render: (x) => x.won }, { key: "r", label: "Rate", align: "right", render: (x) => `${x.rate}%` }, { key: "v", label: "Value won", align: "right", render: (x) => inr(x.value) }, { key: "m", label: "Margin", align: "right", render: (x) => (x.margin == null ? "—" : `${x.margin}%`) }]} />}
+        <p class="t-meta mt-2">Margin uses logged consumption where an order has it, else the line-item cost estimate; “—” means neither was recorded.</p></Card>}
+      {tab === "quality" && <div class="grid gap-2 lg:grid-cols-2">
+        <Card><CardTitle>Failure rate by machine · floor {floor}%</CardTitle>{!byMachine.length ? <NoData what="No finished print jobs yet." /> :
+          <Table rows={byMachine} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "k", label: "Machine", render: (r) => link("/work/production", <b>{r.k}</b>) }, { key: "j", label: "Jobs", align: "right", render: (r) => r.jobs }, { key: "f", label: "Failed", align: "right", render: (r) => r.failed }, { key: "p", label: "Rate", align: "right", render: (r) => r.pct > Math.max(floor * 1.5, rate("failRate")) ? <Status tone="blocked">{r.pct}%</Status> : `${r.pct}%` }]} />}</Card>
+        <Card><CardTitle>Failure rate by material</CardTitle>{!byMaterial.length ? <NoData what="No finished print jobs yet." /> : <Bars data={byMaterial.map((r) => r.pct)} labels={byMaterial.map((r) => r.k)} />}</Card>
+        <Card><CardTitle>Defects · by count</CardTitle>{!defects.length ? <NoData what={`No rework, scrap or tagged defects in ${fyLabel} — every QC passed clean.`} /> : <Bars data={[...defects].sort((a, b) => b.n - a.n).map((r) => r.n)} labels={[...defects].sort((a, b) => b.n - a.n).map((r) => r.d)} />}</Card>
+        <Card><CardTitle>Defects · by cost (₹ wasted)</CardTitle>{!defects.length ? <NoData what="Nothing wasted yet." /> : <Bars data={[...defects].sort((a, b) => b.cost - a.cost).map((r) => r.cost)} labels={[...defects].sort((a, b) => b.cost - a.cost).map((r) => r.d)} />}</Card>
+        <Card class="lg:col-span-2"><CardTitle>Improvement notes · by defect</CardTitle>{!notes.length ? <NoData what="No improvement notes written at QC yet." /> :
+          <ul class="text-sm">{notes.map((x) => <li key={x.id} class="border-t border-line py-1.5">{link("/work/qc", <><b>{x.defect || "Untagged"}</b> · {x.orderNo} — {x.note}{x.cause ? <span class="text-c3"> (cause: {x.cause})</span> : null}</>)}</li>)}</ul>}</Card>
+      </div>}
+      {tab === "costs" && <div class="grid gap-2 lg:grid-cols-2">
+        {!logged.length ? <Card class="lg:col-span-2"><NoData what={`No archived orders in ${fyLabel} have logged consumption yet — estimate vs actual needs both.`} /></Card> : <>
+          <Card><CardTitle>Estimate vs actual by order kind</CardTitle><Table rows={byKind} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Kind", render: (r) => <b>{TYPE_LABEL[r.t]}</b> }, { key: "n", label: "Orders", align: "right", render: (r) => r.n }, { key: "e", label: "Estimated", align: "right", render: (r) => inr(r.e) }, { key: "a", label: "Actual", align: "right", render: (r) => inr(r.a) }, { key: "d", label: "Drift", align: "right", render: (r) => `${r.drift > 0 ? "+" : ""}${r.drift}%` }]} /></Card>
+          <Card><CardTitle>Actual cost by line (₹)</CardTitle><Bars data={byLine.map((r) => Math.round(r.v))} labels={byLine.map((r) => r.k)} /></Card>
+        </>}</div>}
+      {tab === "cycle" && <Card><CardTitle>Median days per stage</CardTitle>{!cycle.length ? <NoData what="No stage moves recorded yet — cycle time starts counting from the first order moved in 2.0." /> :
+        <Table rows={cycle} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "s", label: "Stage", render: (r) => <b>{STAGE_LABEL[r.s]}</b> }, { key: "n", label: "Moves", align: "right", render: (r) => r.n }, { key: "m", label: "Median days", align: "right", render: (r) => r.m },
+          { key: "o", label: "Outliers", render: (r) => r.out.length ? r.out.map((x) => <a key={x.order} class="underline mr-2" href="/work/orders">{x.order} ({x.days} d)</a>) : "—" }]} />}</Card>}
     </Shell>
   );
 }
