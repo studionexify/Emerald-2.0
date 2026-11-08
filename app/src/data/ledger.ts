@@ -16,9 +16,9 @@ export type Invoice = {
 };
 export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string };
 export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string };
-export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number }[] };
+export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number; qty?: number; unit?: string }[]; stockApplied?: string };
 export type Account = { id: string; name: string; opening: number };
-export type MoneyKind = "receipt" | "expense" | "transfer_out" | "transfer_in" | "capital_in" | "drawings" | "loan_taken" | "loan_repayment" | "asset_purchase" | "other_income" | "advance";
+export type MoneyKind = "receipt" | "expense" | "transfer_out" | "transfer_in" | "capital_in" | "drawings" | "loan_taken" | "loan_repayment" | "asset_purchase" | "other_income" | "advance" | "tax_payment";
 export type MoneyEntry = { id: string; date: string; account: string; kind: MoneyKind; amount: number; note: string; ref?: string; pair?: string; source?: string };
 export type Goal = { id: string; title: string; metric: GoalMetric; start: string; end: string; period: string; target: number; manual?: number; note: string; archived: boolean };
 export type GoalMetric = "revenue" | "collection" | "profit" | "expense_cap" | "orders" | "margin_pct" | "custom";
@@ -195,6 +195,22 @@ export function confirmBill(b: Bill, paidFrom: string | "") {
   expensesSig.value = [...expensesSig.value, e];
   if (paidFrom) moneySig.value = [...moneySig.value, { id: uid(), date: b.date, account: paidFrom, kind: "expense", amount: -b.total, note: b.vendor, ref: e.id, source: "purchases" }];
   logFn("Logged bill as expense", `${b.vendor} ${b.no}`, "money");
+  receiveStock(b);
+}
+/** Bill → stock: filament and packing lines with a quantity come into the stock ledger once (blueprint 12, receiving). */
+let applyMoveFn: ((m: import("../mock/types").Movement) => void) | null = null;
+export const setStockSink = (f: typeof applyMoveFn) => (applyMoveFn = f);
+export function receiveStock(b: Bill) {
+  if (b.stockApplied || !applyMoveFn || !/filament|packing/i.test(b.cat)) return 0;
+  const cat = /filament/i.test(b.cat) ? "filament" : "packing";
+  const rows = (b.lines ?? []).filter((l) => l.qty && l.qty > 0);
+  for (const l of rows) {
+    const kg = /kg/i.test(l.unit ?? "") || (cat === "filament" && !l.unit);
+    const qty = cat === "filament" ? (kg ? l.qty! * 1000 : l.qty!) : l.qty!;
+    applyMoveFn({ id: uid(), date: b.date, cat, item: l.desc, dir: "in", qty, unit: cat === "filament" ? "g" : l.unit || "pcs", unitCost: r2(l.amount / qty), vendor: b.vendor, notes: `Bill ${b.no}`, by: "Purchases" });
+  }
+  if (rows.length) billsSig.value = billsSig.value.map((x) => (x.id === b.id ? { ...x, stockApplied: today() } : x));
+  return rows.length;
 }
 export function addBill(file: { name: string; data?: string }) {
   const b: Bill = { id: uid(), vendor: "", no: "", date: today(), subtotal: 0, tax: 0, total: 0, cat: "Other", status: "needs_review", note: "Not read — type the figures (AI reader connects with the backend)", file: file.data, fy: `FY ${fyOf(today())}` };
@@ -332,7 +348,7 @@ export function books(fy: string) {
   const capital = op.capital + capitalIn - drawings + net;
   const suspense = r2(assetsSide - (capital + creditorsTot + loansOut));
   const cf = (kinds: string[]) => moneySig.value.filter((m) => kinds.includes(m.kind) && inWin(m.date, win)).reduce((s, m) => s + m.amount, 0);
-  const cashflow = { operating: cf(["receipt", "expense", "advance", "other_income"]), investing: cf(["asset_purchase"]), financing: cf(["capital_in", "drawings", "loan_taken", "loan_repayment"]) };
+  const cashflow = { operating: cf(["receipt", "expense", "advance", "other_income", "tax_payment"]), investing: cf(["asset_purchase"]), financing: cf(["capital_in", "drawings", "loan_taken", "loan_repayment"]) };
   const wastage = M.consumption.filter((c) => c.kind === "scrap").reduce((s, c) => s + c.cost, 0);
   return { sales, purchase, debtors, creditors, heads: [...heads].map(([head, amount], k) => ({ id: String(k), head, amount })), wastage, deps,
     pl: { salesTot, opening: op.stock, direct, closing: op.closingStock, gross, indirect, depTot, interest, net },

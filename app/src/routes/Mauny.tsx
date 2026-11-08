@@ -36,7 +36,7 @@ function Fig({ label, value, note, dark, rule, inputs }: { label: string; value:
 
 /* ======================================================= Overview / Mauny money book */
 const KINDS: [MoneyKind, string, 1 | -1][] = [["receipt", "Customer receipt", 1], ["advance", "Customer advance", 1], ["other_income", "Other income", 1], ["capital_in", "Capital introduced", 1], ["loan_taken", "Loan taken", 1],
-  ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1]];
+  ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1], ["tax_payment", "GST / tax paid", -1]];
 export function MaunyHome() {
   const accs = accountsSig.value;
   const [acc, setAcc] = useState(accs[0].id);
@@ -140,6 +140,19 @@ export function Purchases() {
             <Field label="Subtotal"><input {...num("subtotal")} /></Field><Field label="Tax"><input {...num("tax")} /></Field>
             <Field label="Total"><input {...num("total")} /></Field>
             <Field label="Category"><select class={inputCls} value={open.cat} onChange={(e) => upd({ cat: (e.target as HTMLSelectElement).value })}>{["Filament", "Resin", "Packing", "Accessories", "Spares", "Courier", "Electricity", "Utilities", "Rent", "Software", "Marketing", "Tools", "Other"].map((c) => <option key={c}>{c}</option>)}</select></Field>
+          </div>
+          <div class="mt-2">
+            <div class="text-xs font-semibold mb-1">Lines {/filament|packing/i.test(open.cat) && <span class="font-normal text-c3">· lines with a quantity come into stock on confirm{open.stockApplied ? ` (applied ${open.stockApplied})` : ""}</span>}</div>
+            {(open.lines ?? []).map((l, i) => (
+              <div key={i} class="grid grid-cols-[1fr_60px_60px_90px_28px] gap-1 mb-1">
+                <input class={inputCls} value={l.desc} onInput={(e) => upd({ lines: open.lines!.map((x, k) => (k === i ? { ...x, desc: (e.target as HTMLInputElement).value } : x)) })} />
+                <input class={inputCls} type="number" placeholder="Qty" value={l.qty ?? ""} onInput={(e) => upd({ lines: open.lines!.map((x, k) => (k === i ? { ...x, qty: Number((e.target as HTMLInputElement).value) || undefined } : x)) })} />
+                <input class={inputCls} placeholder="Unit" value={l.unit ?? ""} onInput={(e) => upd({ lines: open.lines!.map((x, k) => (k === i ? { ...x, unit: (e.target as HTMLInputElement).value || undefined } : x)) })} />
+                <input class={inputCls} type="number" value={l.amount} onInput={(e) => upd({ lines: open.lines!.map((x, k) => (k === i ? { ...x, amount: Number((e.target as HTMLInputElement).value) || 0 } : x)) })} />
+                <button aria-label="Remove line" class="cursor-pointer" onClick={() => upd({ lines: open.lines!.filter((_, k) => k !== i) })}>×</button>
+              </div>
+            ))}
+            <Button variant="outline" onClick={() => upd({ lines: [...(open.lines ?? []), { desc: "", amount: 0 }] })}>Add line</Button>
           </div>
           <div class="text-xs text-c3 mt-2">Filed in Drive → “Emerald — Purchase Documents / FY {fyOf(open.date || today())}”</div>
           {[...chk.block.map((t) => ["Blocks", t]), ...chk.warn.map((t) => ["Check", t])].map(([k, t]) => <div key={t} class={`mt-2 rounded-xl p-2 text-xs ${k === "Blocks" ? "bg-c4 text-c0" : "bg-c1"}`}><b>{k}:</b> {t}</div>)}

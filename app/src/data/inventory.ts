@@ -28,6 +28,9 @@ export const qcSig = list<QcEntry>("qc", M.qc);
 export const packRecSig = list<PackRecord>("packRecords", XX.packRecords as PackRecord[]);
 export const tasksSig = list<Task>("tasks", M.tasks);
 export const binSig = persisted<Binned[]>("bin", M.bin);
+/** The Bin keeps a deletion for 7 days, then it is gone for good (blueprint 18). */
+export const BIN_DAYS = 7;
+{ const cut = new Date(Date.now() - BIN_DAYS * 864e5).toISOString().slice(0, 10); if (binSig.value.some((b) => b.deletedAt < cut)) binSig.value = binSig.value.filter((b) => b.deletedAt >= cut); }
 export type Client = { id: string; name: string; kind: string; phone: string; email?: string; city: string; address?: string; gstin: string; medium: string; notes?: string; active?: boolean };
 export const clientsSig = list<Client>("clients", XX.clients.map(({ orders: _o, value: _v, ...c }) => ({ ...c, active: true })));
 

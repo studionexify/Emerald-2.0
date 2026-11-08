@@ -55,6 +55,19 @@ export function log(action: string, target: string, kind: LogKind = "order") {
   logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
 setLogger(log);
+import { applyMove } from "./inventory";
+import { setStockSink } from "./ledger";
+/** Filament on a bill arrives as sealed 1 kg spools (material and colour read from the line); other stock tops up its item. */
+setStockSink((m) => {
+  if (m.cat !== "filament") return applyMove(m);
+  const mat = /PETG|ABS|TPU|ASA|PLA/i.exec(m.item)?.[0].toUpperCase() ?? "PLA";
+  const colour = m.item.split("/").pop()?.trim() || "—";
+  const n = Math.max(1, Math.round(m.qty / 1000));
+  const base = spoolsSig.value.length;
+  spoolsSig.value = [...Array.from({ length: n }, (_, k) => ({ id: crypto.randomUUID(), material: mat, colour, brand: m.vendor, grams: 1000, size: 1000, spoolNo: `SP-${String(base + k + 1).padStart(3, "0")}`,
+    tare: 250, gross: 1250, costKg: Math.round(m.unitCost * 1000), vendor: m.vendor, bought: m.date, status: "sealed" as const, active: true, notes: m.notes })), ...spoolsSig.value];
+  applyMove({ ...m, item: `${mat} ${colour}` }, true);
+});
 const putOrder = (o: Order) => (ordersSig.value = ordersSig.value.map((x) => (x.id === o.id ? o : x)));
 const putBatch = (b: Batch) => (batchesSig.value = batchesSig.value.map((x) => (x.id === b.id ? b : x)));
 

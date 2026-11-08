@@ -24,7 +24,7 @@ export type Migrated = {
 };
 
 const STAGE: Record<string, Stage> = { quotation: "quotation", production: "production", qc: "qc", packing: "packing", invoice: "invoice", shipping: "shipping", archived: "archived", po: "po" };
-const KIND: Record<string, MoneyKind> = { customer_receipt: "receipt", customer_advance: "advance", expense: "expense", other_income: "other_income", refund_received: "other_income", capital_in: "capital_in", drawings: "drawings", tax_payment: "expense", customer_refund: "expense", asset_purchase: "asset_purchase", loan_taken: "loan_taken", loan_repayment: "loan_repayment" };
+const KIND: Record<string, MoneyKind> = { customer_receipt: "receipt", customer_advance: "advance", expense: "expense", other_income: "other_income", refund_received: "other_income", capital_in: "capital_in", drawings: "drawings", tax_payment: "tax_payment", customer_refund: "expense", asset_purchase: "asset_purchase", loan_taken: "loan_taken", loan_repayment: "loan_repayment" };
 const METRIC: Record<string, GoalMetric> = { revenue: "revenue", collection: "collection", cash_collected: "collection", profit: "profit", expense_cap: "expense_cap", spend_cap: "expense_cap", orders: "orders", orders_closed: "orders", margin_pct: "margin_pct", avg_margin: "margin_pct", custom: "custom" };
 
 export function mapEmerald1(t: Tables): Migrated {
@@ -118,7 +118,7 @@ export function mapEmerald1(t: Tables): Migrated {
     const x = json<any>(d.extracted, {});
     return { id: str(d.id), vendor: str(x.vendor), gstin: str(x.vendor_gstin) || undefined, no: str(x.bill_number), date: day(x.bill_date || d.uploaded_at), subtotal: num(x.subtotal), tax: num(x.tax_amount), total: num(x.total),
       cat: str(x.category) || "Other", status: (["needs_review", "logged", "failed", "rejected"].includes(str(d.status)) ? d.status : "needs_review") as Bill["status"], note: str(d.note) || str(d.file_name),
-      file: str(d.drive_view_link) || undefined, fy: str(d.drive_folder) || undefined, lines: (x.lines ?? []).map((l: any) => ({ desc: str(l.description), amount: num(l.amount) })) };
+      file: str(d.drive_view_link) || undefined, fy: str(d.drive_folder) || undefined, lines: (x.lines ?? []).map((l: any) => ({ desc: str(l.description), amount: num(l.amount), qty: l.qty != null ? num(l.qty) : undefined, unit: str(l.unit) || undefined })), stockApplied: d.stock_applied_at ? day(d.stock_applied_at) : undefined };
   });
   const accounts: Account[] = T("money_accounts").map((a) => ({ id: str(a.id), name: str(a.name) + (a.number_last4 ? ` ··${a.number_last4}` : ""), opening: num(a.opening_balance) }));
   const money: MoneyEntry[] = T("money_entries").map((m) => {

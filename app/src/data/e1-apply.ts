@@ -3,7 +3,7 @@ import { batch } from "@preact/signals";
 import type { Signal } from "@preact/signals";
 import { batchesSig, consSig, logsSig, ordersSig } from "./index";
 import { binSig, clientsSig, itemsSig, jobsSig, movesSig, packRecSig, packSig, printersSig, qcSig, spoolsSig, tasksSig } from "./inventory";
-import { accountsSig, assetsSig, billsSig, expensesSig, goalsSig, historySig, invoicesSig, loansSig, moneySig, quotesSig, shipmentsSig, statementSig, gstSig } from "./ledger";
+import { accountsSig, assetsSig, openingSig, billsSig, expensesSig, goalsSig, historySig, invoicesSig, loansSig, moneySig, quotesSig, shipmentsSig, statementSig, gstSig } from "./ledger";
 import { usersSig } from "./auth";
 import { bizSig } from "./biz";
 import { ratesSig } from "./rates";
@@ -25,6 +25,8 @@ export function applyEmerald1(m: Migrated) {
     // Floor staff join the roster as non-login members; existing accounts are kept.
     const have = new Set(usersSig.value.map((u) => u.name.toLowerCase()));
     usersSig.value = [...usersSig.value, ...m.team.filter((t) => !have.has(t.name.toLowerCase())).map((t) => ({ id: t.id, name: t.name, email: "", role: "operator" as const, pass: "", active: t.active, login: false, job: t.job }))];
+    // Books start on 1 Apr 2025 with the accounts' own openings; closing stock = filament on hand at its cost.
+    openingSig.value = { capital: m.accounts.reduce((a, x) => a + x.opening, 0), stock: 0, closingStock: Math.round(m.spools.reduce((a, s) => a + (s.grams / 1000) * (s.costKg ?? 800), 0)) };
     ratesSig.value = { ...ratesSig.value, ...m.rates };
     if (m.nexcal) nexcalSig.value = { ...nexcalSig.value, ...(m.nexcal as object) };
     if (m.nexres) nexresSig.value = { ...nexresSig.value, ...(m.nexres as object) };

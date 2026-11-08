@@ -72,14 +72,14 @@ export function DocSheet({ d }: { d: DocData }) {
       <span class="font-semibold">Contact:</span><span>{d.contact || ""}</span><span class="font-semibold">GST No.</span><span>{d.gstin || ""}</span></div>
   );
   return (
-    <article class="print-area bg-white text-black rounded-xl p-5 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] relative">
+    <article class="print-area bg-white text-black rounded-xl p-4 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] @container overflow-x-auto [&_td.text-right]:whitespace-nowrap relative">
       {d.cancelled && <div class="absolute inset-x-0 top-1/3 text-center text-5xl font-bold opacity-20 rotate-[-12deg] pointer-events-none">CANCELLED</div>}
       <header class="text-center mb-3">
         <div class="text-xl font-bold">{b.name.toUpperCase()}</div><div>{b.address}</div>
         <div>Mo: {b.phone} | Email: {b.email}</div><div>{b.website ? `${b.website} | ` : ""}GSTIN: {b.gstin || "—"}</div>
       </header>
       <h1 class="text-right text-lg font-bold uppercase mb-3">{d.title}</h1>
-      <section class="grid grid-cols-[1fr_auto] gap-6 mb-3">
+      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6 mb-3">
         <div class="space-y-2">{party("Bill to:", d.address)}{party("Ship to:", d.shipTo || d.address)}</div>
         <div class="grid grid-cols-[auto_auto] gap-x-4 h-fit">
           <span>{d.kind === "credit" ? "Credit note No.:" : d.kind === "challan" ? "Challan No.:" : "Invoice No.:"}</span><b class="text-right">{d.no}</b>
@@ -89,13 +89,13 @@ export function DocSheet({ d }: { d: DocData }) {
           {d.extra?.map(([k, v]) => <><span key={k}>{k}:</span><span class="text-right">{v}</span></>)}
         </div>
       </section>
-      <table class="w-full border-collapse mb-3">
+      <table class="w-full border-collapse mb-3 [&_td]:px-1 [&_th]:px-1">
         <thead><tr class="border-y border-black text-left"><th class="py-1 w-12">Sr. No.</th><th>Description</th><th>HSN / SAC</th><th class="text-right">Unit Price</th><th class="text-right">Qty</th><th class="text-right">Total</th></tr></thead>
         <tbody>{d.lines.map((l, i) => <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td>{l.hsn}</td><td class="text-right">{amt(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{amt(l.qty * l.rate)}</td></tr>)}</tbody>
       </table>
-      <section class="grid grid-cols-[1fr_auto] gap-6">
+      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6">
         <div><div class="font-bold">TERMS AND CONDITIONS</div><ol class="list-decimal pl-4">{INVOICE_TERMS(b).map((x) => <li key={x}>{x}</li>)}</ol>{d.note && <p class="mt-2">{d.note}</p>}</div>
-        <table class="w-60 h-fit"><tbody>
+        <table class="w-full @lg:w-64 h-fit whitespace-nowrap [&_td]:pl-3 [&_td:first-child]:pl-0"><tbody>
           <tr><td>Sub total</td><td class="text-right">{amt(t.taxable)}</td></tr>
           {!d.gstRate ? null : d.interstate ? <tr><td>IGST ({d.gstRate}%)</td><td class="text-right">{amt(t.igst)}</td></tr> : <><tr><td>CGST ({d.gstRate / 2}%)</td><td class="text-right">{amt(t.cgst)}</td></tr><tr><td>SGST ({d.gstRate / 2}%)</td><td class="text-right">{amt(t.sgst)}</td></tr></>}
           <tr><td>Shipping cost</td><td class="text-right">{amt(t.shipping)}</td></tr>
@@ -113,20 +113,20 @@ export function DocSheet({ d }: { d: DocData }) {
 function QuoteSheet({ d, b, t }: { d: DocData; b: Biz; t: ReturnType<typeof invTax> }) {
   const g = d.gstRate / 100;
   return (
-    <article class="print-area bg-white text-black rounded-xl p-5 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px]">
+    <article class="print-area bg-white text-black rounded-xl p-4 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] @container overflow-x-auto [&_td.text-right]:whitespace-nowrap">
       <h1 class="text-2xl font-bold mb-3">QUOTATION</h1>
       <div class="flex flex-wrap justify-between gap-3 mb-2"><span>Date: <b>{quoteDate(d.date)}</b></span><span>Valid until date: <b>{quoteDate(d.valid ?? "")}</b></span><span>Quote Number: <b>{d.no}</b></span></div>
       <div class="flex flex-wrap justify-between gap-3 mb-3"><span>To: <b>{d.party}</b></span>{d.address && <span>Address: {d.address}</span>}</div>
-      <table class="w-full border-collapse mb-3">
+      <table class="w-full border-collapse mb-3 [&_td]:px-1 [&_th]:px-1">
         <thead><tr class="border-y border-black text-left"><th class="py-1 w-12">Sr. No</th><th>Description</th><th class="text-right">Price</th><th class="text-right">QTY</th><th class="text-right">GST ({d.gstRate}%)</th><th class="text-right">Amount</th></tr></thead>
         <tbody>{d.lines.map((l, i) => { const v = l.qty * l.rate; return <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td class="text-right">{rs(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{rs(v * g)}</td><td class="text-right">{rs(v * (1 + g))}</td></tr>; })}</tbody>
       </table>
-      <section class="grid grid-cols-[1fr_auto] gap-6">
+      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6">
         <div>
           <div class="font-bold">Notes</div><ol class="list-decimal pl-4">{QUOTE_NOTES(b).map((x) => <li key={x}>{x}</li>)}</ol>
           {d.tech && <><div class="font-bold mt-2">Technical Data:</div><ol class="list-decimal pl-4">{d.tech.split("\n").filter(Boolean).map((x) => <li key={x}>{x}</li>)}</ol></>}
         </div>
-        <table class="w-60 h-fit"><tbody>
+        <table class="w-full @lg:w-64 h-fit whitespace-nowrap [&_td]:pl-3 [&_td:first-child]:pl-0"><tbody>
           <tr><td>Sub-Total</td><td class="text-right">{rs(t.taxable)}</td></tr>
           <tr><td>GST ({d.gstRate}%)</td><td class="text-right">{rs(t.cgst + t.sgst + t.igst)}</td></tr>
           <tr class="border-t-2 border-black font-bold"><td class="py-1">Total</td><td class="text-right">{rs(t.taxable + t.cgst + t.sgst + t.igst)}</td></tr>
