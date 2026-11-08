@@ -129,18 +129,18 @@ const groupSpools = (sp: Spool[]) => { const m = new Map<string, Spool[]>(); for
 const setHex = (list: Spool[], hex: string) => { const ids = new Set(list.map((x) => x.id)); spoolsSig.value = spoolsSig.value.map((x) => ids.has(x.id) ? { ...x, hex } : x); };
 function SpoolCard({ list, open }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const g = list.reduce((t, x) => t + x.grams, 0);
-  return <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-3 flex flex-col gap-2">
-    <div class="flex items-center gap-3">
-      <label class="relative w-9 h-9 rounded-full border-2 border-line shrink-0 cursor-pointer" style={{ background: hex }} title="Change colour">
+  return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2 flex flex-col gap-1">
+    <div class="flex items-center gap-2">
+      <label class="relative w-5 h-5 rounded-full border border-line shrink-0 cursor-pointer" style={{ background: hex }} title="Change colour">
         <input type="color" class="absolute inset-0 opacity-0 cursor-pointer" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#888888"} onChange={(e) => setHex(list, (e.target as HTMLInputElement).value)} aria-label={`Colour for ${h.colour}`} />
       </label>
-      <div class="min-w-0 flex-1"><div class="font-semibold text-[15px] leading-tight">{h.colour || h.material}</div><div class="t-meta">{[h.brand, `${list.length} spool${list.length > 1 ? "s" : ""}`, `${g.toLocaleString("en-IN")} g`].filter(Boolean).join(" · ")}</div></div>
-      <input class="w-24 h-8 rounded-lg border border-line bg-c1 px-2 text-xs font-mono uppercase" value={h.hex ?? ""} placeholder={hex} onChange={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (/^#?[0-9a-f]{6}$/i.test(v)) setHex(list, v.startsWith("#") ? v : `#${v}`); }} aria-label="Hex colour" />
+      <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="t-meta">{[h.brand, `${list.length} spool${list.length > 1 ? "s" : ""}`, `${g.toLocaleString("en-IN")} g`].filter(Boolean).join(" · ")}</div></div>
+      <input class="w-[72px] !min-h-0 h-6 rounded-md border border-line bg-c1 px-1.5 text-[10px] font-mono uppercase" value={h.hex ?? ""} placeholder={hex} onChange={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (/^#?[0-9a-f]{6}$/i.test(v)) setHex(list, v.startsWith("#") ? v : `#${v}`); }} aria-label="Hex colour" />
     </div>
     <div class="flex flex-col divide-y divide-line">
-      {list.map((s) => <div key={s.id} class="flex items-center gap-3 py-1.5">
-        <button class="text-[30px] font-extrabold num leading-none min-w-[52px] text-left hover:text-acc" onClick={() => open(s)} aria-label={`Open spool ${s.spoolNo}`}>{s.spoolNo}</button>
-        <div class="flex-1 min-w-0"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /><div class="mt-1 flex items-center gap-2">{spTone(s)}{(s.status === "loaded" ? s.printer : s.location) && <span class="t-meta">{s.status === "loaded" ? s.printer : s.location}</span>}</div></div>
+      {list.map((s) => <div key={s.id} class="flex items-center gap-2 py-1">
+        <button class="text-[20px] font-extrabold num leading-none min-w-8 text-left hover:text-acc" onClick={() => open(s)} aria-label={`Open spool ${s.spoolNo}`}>{s.spoolNo}</button>
+        <div class="flex-1 min-w-0"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /><div class="mt-0.5 flex items-center gap-1.5 [&>*]:scale-90 [&>*]:origin-left">{spTone(s)}{(s.status === "loaded" ? s.printer : s.location) && <span class="t-meta">{s.status === "loaded" ? s.printer : s.location}</span>}</div></div>
         <SpoolAct s={s} open={open} />
       </div>)}
     </div>
@@ -172,7 +172,7 @@ const spTone = (s: Spool) => (s.grams <= 0 ? <Status tone="blocked">Out</Status>
 function SpoolAct({ s, open }: { s: Spool; open: (s: Spool) => void }) {
   const use = (g: number) => { const q = Math.min(g, s.grams); if (!q) return; applyMove({ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "out", qty: q, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", notes: "Quick deduction", by: me.value?.name ?? "You" }); log(`Used ${q} g`, s.spoolNo, "stock"); };
   return <>
-    <Button variant="outline" disabled={s.grams <= 0} onClick={() => use(50)} aria-label={`Deduct 50 g from ${s.spoolNo}`}>−50 g</Button>
+    <Button variant="outline" class="!h-7 !px-2 !py-1 !text-[11px] md:!h-7" disabled={s.grams <= 0} onClick={() => use(50)} aria-label={`Deduct 50 g from ${s.spoolNo}`}>−50 g</Button>
     <Menu label={`Actions for ${s.spoolNo}`} items={[
       { label: "Edit spool / colour", on: () => open(s) }, { label: "Weigh in (exact)", on: () => open(s) },
       { label: "Deduct 10 g", on: () => use(10) }, { label: "Deduct 100 g", on: () => use(100) }, { label: "Deduct 250 g", on: () => use(250) },
@@ -257,7 +257,7 @@ export function Filament() {
         return (
           <Disclosure key={m} open title={<span class="inline-flex items-center gap-2">{m}<span class="t-meta font-normal">{sp.length} spools</span>{g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}</span>}
             meta={`${(g / 1000).toFixed(2)} kg · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}>
-              <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
                 {groupSpools(sp).map((gs) => <SpoolCard key={gs[0].id} list={gs} open={r.open} />)}
               </div>
           </Disclosure>
