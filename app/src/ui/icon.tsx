@@ -27,6 +27,15 @@ const P: Record<string, string> = {
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   rows: "M4 5h16M4 12h16M4 19h16",
   printer: "M7 3h10v5H7zM4 8h16v9H4zM7 14h10v7H7z",
+  doc: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
+  stamp: "M9 4h6l-1 7h-4zM5 15h14v3H5zM7 21h10",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM8.5 12l2.5 2.5L16 9.5",
+  receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3",
+  truck: "M3 6h11v10H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4",
+  archive: "M3 4h18v4H3zM5 8v12h14V8M10 12h4",
+  alert: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8v5M12 16v.01",
+  hourglass: "M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9",
+  calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   settings: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2",
 };
 

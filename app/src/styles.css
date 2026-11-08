@@ -1,20 +1,23 @@
 @import "tailwindcss";
 
-/* HIG monochrome: canvas, card, subdued, hairline, ink + one tactical accent (critical only). */
+/* "Warm & clean": beige canvas, white cards, sunken wells, ink + lime (always with ink text) + warn. */
 :root {
-  --bg: #f5f5f7; --c-0: #ffffff; --c-1: #e5e5ea; --line: #d1d1d6;
-  --c-2: #8e8e93; --c-3: #3c3c43; --c-4: #000000; --warn: #ff9500;
+  --bg: #e4e1da; --c-0: #ffffff; --c-1: #f3f1ec; --line: #ece9e2;
+  --c-2: #6b685f; --c-3: #3a3833; --c-4: #1c1b19; --warn: #ff9500;
+  --lime: #d8f36a; --panel: #f6f4ef; --thead: #efece5; --avatar: #e5e2da; --late: #c4552b;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
   --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
   --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
+  --lime: #d8f36a; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
     --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
+  --lime: #d8f36a; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
     color-scheme: dark;
   }
 }
@@ -28,8 +31,13 @@
   --color-canvas: var(--bg);
   --color-line: var(--line);
   --color-warn: var(--warn);
+  --color-lime: var(--lime);
+  --color-panel: var(--panel);
+  --color-thead: var(--thead);
+  --color-avatar: var(--avatar);
+  --color-late: var(--late);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
-  --radius-card: 12px;
+  --radius-card: 20px;
 }
 
 /* Micro-interactions: short, property-scoped, off for reduced motion. */

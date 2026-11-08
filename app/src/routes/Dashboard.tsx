@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
-import { Card, KV, Page, Section, Stat, Status } from "../ui";
-import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, STAGES , printersSig, tasksSig } from "../data";
+import { Card, KV, Page, Section, Status } from "../ui";
+import { Initials, StageStrip } from "../ui/stage-strip";
+import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
 
 export default function Dashboard() {
   const open = ordersSig.value.filter((o) => o.stage !== "archived");
@@ -58,14 +59,12 @@ export default function Dashboard() {
       </div>
 
       <Section title="Pipeline" note={`${open.length} open`} action={<a href="/work" class="t-meta">Production →</a>}>
-        <div class="grid grid-cols-4 md:grid-cols-8 gap-2">
-          {STAGES.map((s) => <Stat key={s.key} value={ordersSig.value.filter((o) => o.stage === s.key).length} label={s.label} />)}
-        </div>
+        <StageStrip orders={ordersSig.value} showValue={can("mauny")} />
       </Section>
 
       <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
         <Section title="Due soonest" action={<a href="/work/orders" class="t-meta">All →</a>}>
-          <Card class="!py-1">{dueSoon.map((o) => <KV key={o.id} label={<span><span class="font-mono text-[12px] font-bold text-c4 mr-1.5">{o.no}</span>{o.customer}</span>} value={shortDate(o.due)} />)}</Card>
+          <Card class="!py-1">{dueSoon.map((o) => <KV key={o.id} label={<span class="flex items-center gap-2.5 min-w-0"><Initials name={o.customer} /><span class="min-w-0"><span class="block truncate font-semibold text-c4">{o.customer}</span><span class="block font-mono text-[11px] text-c2">{o.no}</span></span></span>} value={shortDate(o.due)} />)}</Card>
         </Section>
         <Section title="To-do" note={String(todo.length)} action={<a href="/todo" class="t-meta">All →</a>}>
           <Card class="!py-1">{todo.slice(0, 5).map((t) => <KV key={t.id} label={t.title} value={<span class="t-meta">{t.who} · {shortDate(t.due)}</span>} />)}</Card>

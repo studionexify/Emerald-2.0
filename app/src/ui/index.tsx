@@ -10,12 +10,12 @@ export { ask, AskHost, FilterSheet, isPhone, Sheet } from "./sheet";
 type Btn = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" | "ghost"; icon?: string };
 export function Button({ variant = "primary", icon, children, class: c, ...rest }: Btn) {
   const v = {
-    primary: "bg-c4 text-c0 border-c4 hover:opacity-85",
+    primary: "bg-c4 text-c0 border-c4 hover:opacity-90",
     outline: "bg-c0 text-c4 border-line hover:bg-c1",
     ghost: "bg-transparent text-c4 border-transparent hover:bg-c1",
   }[variant];
   return (
-    <button {...rest} class={`inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-lg border text-[13px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-line ${v} ${c ?? ""}`}>
+    <button {...rest} class={`inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full border text-[13px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-100 disabled:bg-c1 disabled:text-c2 disabled:border-line ${v} ${c ?? ""}`}>
       {icon && <Icon name={icon} size={14} />}
       {children}
     </button>
@@ -38,7 +38,7 @@ export function CardTitle({ children, action }: { children: ComponentChildren; a
 
 export function Stat({ value, label }: { value: string | number; label: string; dark?: boolean }) {
   return (
-    <div class={`rounded-[10px] px-3 py-2 min-w-0 flex flex-col justify-center bg-c0 border border-line`}>
+    <div class={`rounded-2xl px-3 py-2 min-w-0 flex flex-col justify-center bg-c0`}>
       <div class="t-meta truncate">{label}</div>
       <div class="num text-[17px] font-semibold leading-tight mt-0.5">{value}</div>
     </div>
@@ -56,7 +56,7 @@ export function Big({ value, label }: { value: string; label: string }) {
 
 export function Chip({ active, children, onClick }: { active?: boolean; children: ComponentChildren; onClick?: () => void }) {
   return (
-    <button onClick={onClick} class={`h-7 px-3 inline-flex items-center rounded-md text-xs cursor-pointer whitespace-nowrap ${active ? "bg-c0 text-c4 font-semibold shadow-sm" : "bg-transparent text-c3 font-medium hover:text-c4"}`}>
+    <button onClick={onClick} class={`h-7 px-3 inline-flex items-center rounded-full text-xs cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0 font-semibold" : "bg-transparent text-c3 font-medium hover:text-c4"}`}>
       {children}
     </button>
   );
@@ -80,7 +80,7 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
 /** Filter control: chips for up to 3 options, a dropdown beyond that. */
 export function Pick<T extends string>({ value, on, items, label, title }: { value: T; on: (v: T) => void; items: readonly T[] | T[]; label?: (v: T) => string; title?: string }) {
   const L = label ?? ((x: T) => x[0].toUpperCase() + x.slice(1));
-  if (items.length <= 3) return <div class="inline-flex flex-wrap max-w-full items-center gap-0.5 p-0.5 rounded-lg bg-c1">{items.map((x) => <Chip key={x} active={value === x} onClick={() => on(x)}>{L(x)}</Chip>)}</div>;
+  if (items.length <= 3) return <div class="inline-flex flex-wrap max-w-full items-center gap-0.5 p-1 rounded-full bg-c0">{items.map((x) => <Chip key={x} active={value === x} onClick={() => on(x)}>{L(x)}</Chip>)}</div>;
   return (
     <label class="relative inline-block min-w-0">
       <span class="sr-only">{title ?? "Filter"}</span>
