@@ -114,3 +114,8 @@ tbody td:first-child { font-weight: 600; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px); } }
 .pop-in { animation: pop-in .12s ease-out; }
 @media (prefers-reduced-motion: reduce) { .disc-x, .pop-in, .sheet-up { transition: none; animation: none; } }
+
+/* No clipped text anywhere: `truncate` wraps instead of cutting with an ellipsis. Unlayered, so it wins over the utility. */
+.truncate { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+/* A two-up stat strip with an odd count: the last figure takes the full row instead of leaving a hole. */
+@media (max-width: 1279px) { .strip.grid-cols-2 > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
