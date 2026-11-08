@@ -6,7 +6,8 @@ import {
   type InvLine, type Invoice, type Order, type Quote, type Shipment,
 } from "../../data";
 import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
-import { clientsSig, shrinkImage, type Client } from "../../data";
+import { MediaImg } from "../../ui/media";
+import { clientsSig, shrinkImage, storeMedia, type Client } from "../../data";
 import { DocSheet, fromInvoice, fromQuote, type DocData } from "./Doc";
 import { WorkShell } from "./shared";
 
@@ -211,7 +212,7 @@ export function Shipping() {
     const lines = o.items.map((i) => ({ name: i.name, qty: d.qty[i.name] ?? Math.max(0, i.qty - sent(i.name)) })).filter((l) => l.qty > 0);
     const s: Shipment = { id: uid(), orderNo: o.no, date: today(), courier: d.courier, service: d.service, tracking: d.tracking, lines, freightPaid: d.paid, freightRecovered: d.rec, eta: new Date(Date.now() + 4 * 864e5).toISOString().slice(0, 10) };
     shipmentsSig.value = [s, ...shipmentsSig.value];
-    if (d.photo) photosSig.value = [...photosSig.value, { id: uid(), ref: o.no, stage: "courier handover", name: "handover", data: d.photo, at: nowS() }];
+    if (d.photo) photosSig.value = [...photosSig.value, { id: uid(), ref: o.no, stage: "courier handover", name: "handover", data: storeMedia(d.photo, "handover " + o.no), at: nowS() }];
     if (d.paid) consume({ kind: "freight", item: `${d.courier} ${d.service}`, qty: d.paid, orderNo: o.no });
     patchOrder(o, { tracking: d.tracking || o.tracking });
     log(`Dispatched ${lines.map((l) => `${l.qty}× ${l.name}`).join(", ")}`, o.no);
@@ -221,7 +222,7 @@ export function Shipping() {
     <WorkShell stage="shipping" title="Shipping" sub="Courier, tracking, freight paid vs recovered · many dispatches per order, part quantities allowed"
       detail={sel && <Inspect title={`${sel.orderNo} · ${sel.courier}`} row={{ order: sel.orderNo, sent: shortDate(sel.date), eta: shortDate(sel.eta), courier: sel.courier, service: sel.service, tracking: sel.tracking || "Missing", contents: sel.lines.map((l) => `${l.qty}× ${l.name}`).join(", "), freightPaid: inr(sel.freightPaid), recovered: inr(sel.freightRecovered), net: inr(sel.freightPaid - sel.freightRecovered) }} onClose={() => setSel(null)}>
         <div class="flex flex-wrap items-end gap-2"><input class={`${inputCls} flex-1 min-w-0`} placeholder="Tracking no." defaultValue={sel.tracking} id="trk" /><Button onClick={() => { const v = (document.getElementById("trk") as HTMLInputElement).value; shipmentsSig.value = shipmentsSig.value.map((x) => (x.id === sel.id ? { ...x, tracking: v } : x)); setSel({ ...sel, tracking: v }); log("Updated tracking", sel.orderNo); }}>Save tracking</Button></div>
-        {(() => { const ph = sel.photo || photosSig.value.find((p) => p.ref === sel.orderNo && p.stage === "courier handover")?.data; return ph && <img src={ph} alt="Handover" class="mt-3 rounded-xl max-h-48" />; })()}</Inspect>}>
+        {(() => { const ph = sel.photo || photosSig.value.find((p) => p.ref === sel.orderNo && p.stage === "courier handover")?.data; return ph && <MediaImg v={ph} alt="Handover" class="mt-3 rounded-xl max-h-48" />; })()}</Inspect>}>
       <div class="strip grid grid-cols-3">
         <Stat value={shipmentsSig.value.length} label="dispatches" />
         <Stat value={inr(shipmentsSig.value.reduce((s, x) => s + x.freightPaid, 0))} label="freight paid" />

@@ -4,7 +4,8 @@ import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
 import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
-import { shrinkImage } from "../data";
+import { shrinkImage, storeMedia } from "../data";
+import { MediaFile } from "../ui/media";
 import {
   accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, books, can, confirmBill, confirmLine, consSig, csv, daySummary, download, expensesSig,
   financeSummary, fyOf, GOAL_HINT, GOAL_LABEL, goalProgress, goalsSig, gstMonths, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
@@ -122,7 +123,7 @@ export function Purchases() {
   const rows = billsSig.value.filter((b) => f === "all" || b.status === f);
   const tone = (s: string) => (s === "logged" ? "done" : s === "failed" ? "blocked" : s === "rejected" ? "idle" : "waiting") as "done";
   const upd = (p: Partial<Bill>) => { if (!open) return; const n = { ...open, ...p }; setOpen(n); billsSig.value = billsSig.value.map((b) => (b.id === n.id ? n : b)); };
-  const onFiles = (fl: FileList | null) => [...(fl ?? [])].forEach((file) => { if (file.type.startsWith("image/")) shrinkImage(file).then((data) => setOpen(addBill({ name: file.name, data }))); else { const r = new FileReader(); r.onload = () => setOpen(addBill({ name: file.name, data: file.size < 400000 ? String(r.result) : undefined })); r.readAsDataURL(file); } });
+  const onFiles = (fl: FileList | null) => [...(fl ?? [])].forEach((file) => { if (file.type.startsWith("image/")) shrinkImage(file).then((data) => setOpen(addBill({ name: file.name, data: storeMedia(data, file.name) }))); else { const r = new FileReader(); r.onload = () => setOpen(addBill({ name: file.name, data: file.size < 8e6 ? storeMedia(String(r.result), file.name) : undefined })); r.readAsDataURL(file); } });
   const chk = open && billChecks(open);
   const num = (k: keyof Bill) => ({ class: inputCls, type: "number" as const, value: String(open?.[k] ?? ""), onInput: (e: Event) => upd({ [k]: Number((e.target as HTMLInputElement).value) || 0 } as Partial<Bill>) });
   const txt = (k: keyof Bill) => ({ class: inputCls, value: String(open?.[k] ?? ""), onInput: (e: Event) => upd({ [k]: (e.target as HTMLInputElement).value } as Partial<Bill>) });
@@ -132,7 +133,7 @@ export function Purchases() {
       detail={open && chk && (
         <div>
           <DetailHead title={`Review · ${open.vendor || "new bill"}`} onClose={() => setOpen(null)} />
-          <div class="rounded-xl bg-c1 h-44 flex items-center justify-center text-xs text-c3 mb-3 overflow-hidden">{open.file?.startsWith("data:image") ? <img src={open.file} alt="Bill" class="h-full object-contain" /> : open.file ? <embed src={open.file} class="w-full h-full" /> : "Document preview"}</div>
+          <div class="rounded-xl bg-c1 h-44 flex items-center justify-center text-xs text-c3 mb-3 overflow-hidden"><MediaFile v={open.file} alt="Bill" class="h-full object-contain" fallback="Document preview" /></div>
           <div class="grid grid-cols-2 gap-2">
             <Field label="Vendor"><input {...txt("vendor")} /></Field><Field label="GSTIN"><input {...txt("gstin")} placeholder="24AAA…" /></Field>
             <Field label="Bill no."><input {...txt("no")} /></Field><Field label="Date"><input {...txt("date")} type="date" /></Field>

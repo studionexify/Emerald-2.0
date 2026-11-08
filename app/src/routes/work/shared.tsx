@@ -2,7 +2,8 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fact, Page, Status } from "../../ui";
-import { shrinkImage, can, ordersSig, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { storeMedia, shrinkImage, can, ordersSig, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { MediaImg } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
 export function WorkShell({ title, sub, actions, toolbar, detail, children, stage }: { stage?: Stage; title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
@@ -128,8 +129,8 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
           ); })}
       </div>
 
-      <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Photos <label class="text-xs underline cursor-pointer">+ Add (QC / packing)<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data, at: nowS() }]; onOpen({ ...order }); }); }} /></label></h3>
-      <div class="grid grid-cols-4 gap-2 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><img src={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
+      <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Photos <label class="text-xs underline cursor-pointer">+ Add (QC / packing)<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); }); }} /></label></h3>
+      <div class="grid grid-cols-4 gap-2 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><MediaImg v={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
 
       <h3 class="font-semibold text-sm mb-1.5">Stage history</h3>
       <ul class="text-xs mb-3">{hist.map((h) => <li key={h.id} class="py-1 border-t border-line">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>

@@ -8,6 +8,8 @@
 import { signal } from "@preact/signals";
 import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import { sessionSig, usersSig, type Role } from "./auth";
+import { storeMedia, uploadPending } from "./media";
+import { billsSig, photosSig } from "./ledger";
 import { allRecords, applyRemote, localGet, localSet, setSyncSink, type Change } from "./store";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -123,6 +125,23 @@ async function start(userId: string) {
   sessionSig.value = { userId, at: Date.now() };
   memberChannel = c.channel("members:" + org).on("postgres_changes", { event: "*", schema: "public", table: "members", filter: `org=eq.${org}` }, () => loadMembers()).subscribe();
   listen(); push(); heartbeat();
+  moveInlineFiles(); uploadPending();
+}
+
+/** One-time move of files saved inside records (older versions) out to Drive; the records keep only a reference. */
+function moveInlineFiles() {
+  if (photosSig.value.some((p) => p.data?.startsWith("data:"))) photosSig.value = photosSig.value.map((p) => (p.data?.startsWith("data:") ? { ...p, data: storeMedia(p.data, p.name) } : p));
+  if (billsSig.value.some((b) => b.file?.startsWith("data:"))) billsSig.value = billsSig.value.map((b) => (b.file?.startsWith("data:") ? { ...b, file: storeMedia(b.file, b.vendor || "bill") } : b));
+}
+/** Drive file id on success, null when offline or failing (the caller retries later). */
+export async function mediaUpload(body: { id: string; name: string; mime: string; data: string }): Promise<string | null> {
+  const { data, error } = await (await client()).functions.invoke("drive-media", { body });
+  return error || !(data as any)?.drive ? null : (data as any).drive;
+}
+export async function mediaDownload(driveId: string): Promise<Blob | null> {
+  const { data: s } = await (await client()).auth.getSession(); if (!s.session) return null;
+  const r = await fetch(`${URL_}/functions/v1/drive-media?drive=${encodeURIComponent(driveId)}`, { headers: { Authorization: "Bearer " + s.session.access_token, apikey: KEY! } }).catch(() => null);
+  return r?.ok ? r.blob() : null;
 }
 
 export async function initSync() {

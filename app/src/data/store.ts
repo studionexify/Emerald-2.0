@@ -3,7 +3,7 @@ import { effect, signal, type Signal } from "@preact/signals";
 
 const PREFIX = "emerald:";
 /** Keys that belong to this device only and never leave it. */
-const LOCAL_ONLY = new Set(["session", "loginAttempts", "seedv", "sync:outbox", "sync:last"]);
+const LOCAL_ONLY = new Set(["session", "media:queue", "loginAttempts", "seedv", "sync:outbox", "sync:last"]);
 
 export type Change = { kind: string; id: string; data: unknown; deleted: boolean };
 type Sink = (changes: Change[]) => void;

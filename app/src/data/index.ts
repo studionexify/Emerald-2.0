@@ -45,6 +45,7 @@ export * from "./store";
 export * from "./ledger";
 export * from "./auth";
 export * from "./image";
+export * from "./media";
 import { me } from "./auth";
 import { setLogger, historySig } from "./ledger";
 import { rate } from "./rates";
