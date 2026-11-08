@@ -52,7 +52,7 @@ export function log(action: string, target: string, kind: LogKind = "order") {
   logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
 setLogger(log);
-import { applyMove } from "./inventory";
+import { applyMove, registerBin } from "./inventory";
 import { setStockSink } from "./ledger";
 /** Filament on a bill arrives as sealed 1 kg spools (material and colour read from the line); other stock tops up its item. */
 setStockSink((m) => {
@@ -132,3 +132,4 @@ export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
 
 import { purgeSample } from "./store";
 purgeSample();
+registerBin("Order", ordersSig);
