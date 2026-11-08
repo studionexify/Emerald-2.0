@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
-import { Card, KV, Page, Section, Status } from "../ui";
+import type { ComponentChildren } from "preact";
+import { Card, Icon, KV, Page, Section, Status } from "../ui";
 import { Initials, StageStrip } from "../ui/stage-strip";
 import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
 
@@ -11,6 +12,12 @@ export default function Dashboard() {
   const al = attn(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value);
   const fm = financeSummary(windowFor("mtd", "2026-27"), ordersSig.value);
   const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: moneySig.value.filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
+  const money = can("mauny");
+  const today = new Date().toISOString().slice(0, 10);
+  const late = open.filter((o) => o.due && o.due < today);
+  const machines = printersSig.value.filter((p) => p.active !== false);
+  const busy = machines.filter((p) => p.status === "printing");
+  const down = machines.filter((p) => p.status === "down").length;
   const todo = tasksSig.value.filter((t) => !t.done);
   const dueSoon = [...open].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
   const all = Object.entries(al).flatMap(([g, list]) => list.map((a) => ({ ...a, g })));
@@ -22,6 +29,15 @@ export default function Dashboard() {
   const spark = week.map((d, i) => `${(i / 6) * 100},${20 - (d.v / mx) * 18}`).join(" ");
   return (
     <Page title="Hi, Studio Nexify" sub={new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <Tile href="/work/orders" icon="box" label="Open orders" value={open.length} caption={money ? `${inr(pipeline)} in the pipeline · ${margin}% margin` : `${open.length - paid.length} in-house`} />
+        <Tile href="/work/production" icon="printer" label="Printing now" value={busy.length} caption={`${machines.length - busy.length - down} idle · ${down} down · ${machines.length} machines`} live={busy.length > 0} />
+        <Tile href="/work/orders" icon="alert" label="Past due" value={late.length} caption={late.length ? `Oldest ${shortDate([...late].sort((a, b) => a.due.localeCompare(b.due))[0].due)}` : "Everything on time"} />
+        {money
+          ? <Tile href="/mauny/finance" icon="trend" label="Net profit · month" value={inr(fm.earned - fm.spent)} caption="Earned less spent, month to date" />
+          : <Tile href="/todo" icon="check" label="To-do" value={todo.length} caption="Open tasks" />}
+      </div>
+
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] items-start">
         <Section title="Action center" note={`${all.length} items`} action={<a href="/alerts" class="t-meta whitespace-nowrap">All →</a>}>
           <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
@@ -41,6 +57,19 @@ export default function Dashboard() {
             {feed.length > 8 && <a href="/alerts" class="block h-9 leading-9 px-3 border-t border-line t-meta">+{feed.length - 8} more</a>}
           </div>
         </Section>
+        <div class="flex flex-col gap-4 min-w-0">
+        <Section title="Machines" action={<a href="/workshop/printers" class="t-meta">Printers →</a>}>
+          <Card>
+            {machines.length ? <div class="flex flex-col gap-3">{machines.map((p) => (
+              <div key={p.id} class="flex items-center gap-3 min-w-0">
+                <span class={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${p.status === "printing" ? "bg-lime text-black" : "bg-c1 text-c2"}`}><Icon name={p.status === "down" ? "wrench" : "printer"} size={16} /></span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-baseline justify-between gap-2"><span class="font-semibold truncate">{p.name}</span><Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status></div>
+                  <div class="t-meta truncate num">{p.model}{p.job ? ` · ${p.job}` : ""} · {p.hours}h</div>
+                </div>
+              </div>))}</div> : <p class="t-meta">No printers yet.</p>}
+          </Card>
+        </Section>
         <Section title="Money flow" action={<a href="/mauny/finance" class="t-meta">Finance →</a>}>
           <Card>
             <div class="flex items-end justify-between gap-3">
@@ -48,29 +77,24 @@ export default function Dashboard() {
               <svg viewBox="0 0 100 22" class="w-28 h-8 text-c4" preserveAspectRatio="none" aria-hidden="true"><polyline points={spark} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" /></svg>
             </div>
             <div class="mt-2">
-              <KV label="Earned · month" value={inr(fm.earned)} />
-              <KV label="Spent · month" value={inr(fm.spent)} />
-              <KV label="Net profit" value={inr(fm.earned - fm.spent)} strong />
-              <KV label="Pipeline" value={inr(pipeline)} />
-              <KV label="Pipeline margin" value={`${margin}%`} />
+              <KV label={<span class="inline-flex items-center gap-1.5"><Icon name="cash" size={13} />Earned · month</span>} value={inr(fm.earned)} />
+              <KV label={<span class="inline-flex items-center gap-1.5"><Icon name="wallet" size={13} />Spent · month</span>} value={inr(fm.spent)} />
             </div>
           </Card>
         </Section>
+        </div>
       </div>
 
-      <Section title="Pipeline" note={`${open.length} open`} action={<a href="/work" class="t-meta">Production →</a>}>
+      <Section title="Pipeline" action={<a href="/work" class="t-meta">Production →</a>}>
         <StageStrip orders={ordersSig.value} showValue={can("mauny")} />
       </Section>
 
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
+      <div class="grid gap-4 md:grid-cols-2 items-start">
         <Section title="Due soonest" action={<a href="/work/orders" class="t-meta">All →</a>}>
           <Card class="!py-1">{dueSoon.map((o) => <KV key={o.id} label={<span class="flex items-center gap-2.5 min-w-0"><Initials name={o.customer} /><span class="min-w-0"><span class="block truncate font-semibold text-c4">{o.customer}</span><span class="block font-mono text-[11px] text-c2">{o.no}</span></span></span>} value={shortDate(o.due)} />)}</Card>
         </Section>
-        <Section title="To-do" note={String(todo.length)} action={<a href="/todo" class="t-meta">All →</a>}>
+        <Section title="To-do" note={money ? String(todo.length) : undefined} action={<a href="/todo" class="t-meta">All →</a>}>
           <Card class="!py-1">{todo.slice(0, 5).map((t) => <KV key={t.id} label={t.title} value={<span class="t-meta">{t.who} · {shortDate(t.due)}</span>} />)}</Card>
-        </Section>
-        <Section title="Floor" note={`${printersSig.value.filter((p) => p.active !== false && p.status === "printing").length} busy`} action={<a href="/work/production" class="t-meta">Jobs →</a>}>
-          <Card class="!py-1">{printersSig.value.filter((p) => p.active !== false).map((p) => <KV key={p.id} label={<span><span class="font-mono text-[12px] font-bold text-c4 mr-1.5">{p.name}</span>{p.job ?? ""}</span>} value={<Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>} />)}</Card>
         </Section>
       </div>
 
@@ -78,5 +102,21 @@ export default function Dashboard() {
         <Card class="!py-1">{logsSig.value.slice(0, 5).map((l) => <KV key={l.id} label={<span><b class="text-c4">{l.who}</b> {l.action.toLowerCase()} · {l.target}</span>} value={<span class="t-meta">{l.at.slice(11)}</span>} />)}</Card>
       </Section>
     </Page>
+  );
+}
+
+function Tile({ href, icon, label, value, caption, live }: { href: string; icon: string; label: string; value: ComponentChildren; caption: string; live?: boolean }) {
+  return (
+    <a href={href} class="flex flex-col justify-between gap-4 rounded-[var(--radius-card)] bg-c0 p-3 md:p-4 min-w-0 hover:ring-1 hover:ring-line">
+      <span class="inline-flex w-max max-w-full items-center gap-2 rounded-full bg-c1 py-1 pl-1 pr-3 text-[12px] font-semibold text-c3">
+        <span class="w-6 h-6 shrink-0 rounded-full bg-black text-lime flex items-center justify-center"><Icon name={icon} size={13} /></span>
+        {live && <span aria-hidden="true" class="w-2 h-2 shrink-0 rounded-full bg-lime animate-pulse" />}
+        <span class="truncate">{label}</span>
+      </span>
+      <span>
+        <span class="num block text-[26px] md:text-[32px] leading-none font-semibold tracking-[-0.03em]">{value}</span>
+        <span class="num t-meta block mt-1.5 truncate">{caption}</span>
+      </span>
+    </a>
   );
 }

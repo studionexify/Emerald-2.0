@@ -36,6 +36,10 @@ const P: Record<string, string> = {
   alert: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8v5M12 16v.01",
   hourglass: "M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9",
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  wallet: "M4 7h15v13H4zM4 7l11-3v3M15 13h4",
+  trend: "M3 17l6-6 4 4 8-8M15 7h6v6",
+  cash: "M3 7h18v10H3zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4",
+  wrench: "M14 6a4 4 0 0 0 5 5l-9 9a2 2 0 0 1-3-3l9-9a4 4 0 0 0-2-2",
   settings: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2",
 };
 
