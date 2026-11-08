@@ -162,6 +162,12 @@ const MAT_C: [RegExp, string][] = [
 const hashC = (m: string) => { let h = 0; for (const c of m) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 70% 65%)`; };
 const matC = (m: string) => MAT_C.find(([r]) => r.test(m))?.[1] ?? hashC(m);
 const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+/** Waterfall: each card goes to the currently shortest column (height ≈ header + spool rows), so reading order stays left→right. */
+function Masonry({ cols, items }: { cols: number; items: Spool[][] }) {
+  const c: Spool[][][] = Array.from({ length: cols }, () => []); const h = Array(cols).fill(0);
+  for (const g of items) { const i = h.indexOf(Math.min(...h)); c[i].push(g); h[i] += 1.4 + g.length; }
+  return <div class="flex gap-2 mt-2 items-start">{c.map((col, i) => <div key={i} class="flex-1 min-w-0 flex flex-col gap-2">{col.map((gs) => <SpoolCard key={gs[0].id} list={gs} open={() => {}} />)}</div>)}</div>;
+}
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
   const mc = matC(h.material);
@@ -234,6 +240,8 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
 }
 
 export function Filament() {
+  const [vw, setVw] = useState(innerWidth); useLayoutEffect(() => { const f = () => setVw(innerWidth); addEventListener("resize", f); return () => removeEventListener("resize", f); }, []);
+  const cols = vw >= 1536 ? 4 : vw >= 1024 ? 3 : vw >= 640 ? 2 : 1;
   const chipRef = useRef<HTMLElement>(null); const [chipH, setChipH] = useState(0); const [pad, setPad] = useState(12);
   useLayoutEffect(() => {
     const el = chipRef.current; const sc = el?.closest(".overflow-y-auto") as HTMLElement | null;
@@ -307,9 +315,7 @@ export function Filament() {
               {g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}
               <span class="ml-auto t-meta num whitespace-nowrap">{(g / 1000).toFixed(2)} kg net · {inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}</span>
             </div>
-            <div class="columns-1 sm:columns-2 lg:columns-3 2xl:columns-4 gap-2 mt-2 [&>*]:break-inside-avoid [&>*]:mb-2">
-              {groupSpools(sp).map((gs) => <SpoolCard key={gs[0].id} list={gs} open={r.open} />)}
-            </div>
+            <Masonry cols={cols} items={groupSpools(sp)} />
           </section>
         );
       })}
