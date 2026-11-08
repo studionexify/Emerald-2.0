@@ -9,12 +9,10 @@ Files go to the owner's Google Drive through the `drive-media` Edge Function. Th
 3. **Credentials → OAuth client ID** → type *Web application*, redirect URI `https://developers.google.com/oauthplayground`.
 4. **Refresh token**: open developers.google.com/oauthplayground → ⚙ → "Use your own OAuth credentials" (paste client ID/secret) →
    scope `https://www.googleapis.com/auth/drive.file` → Authorize → "Exchange authorization code for tokens" → copy the **refresh token**.
-5. **Drive folder**: create a folder (e.g. *Emerald files*) in that same Google account. Its ID is the last part of the folder URL.
-   With `drive.file`, the app can only see files it created plus this folder once you upload through it — create the folder **via the app**
-   is not required; any folder you own works because uploads name it as parent.
+5. **Drive folder**: nothing to do — the function creates an *Emerald files* folder in that Google account on the first upload and reuses it.
 6. **Supabase secrets** (Dashboard → Edge Functions → Secrets, or CLI):
    ```
-   supabase secrets set GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REFRESH_TOKEN=… DRIVE_FOLDER_ID=…
+   supabase secrets set GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REFRESH_TOKEN=…
    supabase functions deploy drive-media
    ```
 7. Open Emerald and sign in. Photos already saved inside records are moved to Drive automatically on first sign-in.

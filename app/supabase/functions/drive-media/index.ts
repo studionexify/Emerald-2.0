@@ -1,7 +1,7 @@
 // Photos & bill files live in the owner's Google Drive (15 GB free), not in the database.
 // POST {id, name, mime, data(base64)} → uploads once (idempotent on id) → {drive}
 // GET ?drive=<fileId>                 → streams the file back to signed-in members of the same business.
-// Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, DRIVE_FOLDER_ID.
+// Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN. Files go in an "Emerald files" folder the function creates once.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
@@ -20,6 +20,17 @@ async function google() {
   token = j.access_token; tokenUntil = Date.now() + (j.expires_in - 120) * 1000; return token;
 }
 const drive = async (path: string, init: RequestInit = {}) => fetch("https://www.googleapis.com" + path, { ...init, headers: { ...(init.headers ?? {}), Authorization: "Bearer " + (await google()) } });
+
+let folder = "";
+async function folderId() {
+  if (folder) return folder;
+  const q = encodeURIComponent("name='Emerald files' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const hit = await (await drive(`/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`)).json();
+  if (hit?.files?.[0]?.id) return (folder = hit.files[0].id);
+  const mk = await (await drive("/drive/v3/files?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Emerald files", mimeType: "application/vnd.google-apps.folder" }) })).json();
+  if (!mk?.id) throw new Error("Could not create the Drive folder");
+  return (folder = mk.id);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -52,7 +63,7 @@ Deno.serve(async (req) => {
     const found = await (await drive(`/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`)).json();
     if (found?.files?.[0]?.id) return json({ drive: found.files[0].id });
 
-    const meta = { name, parents: [env("DRIVE_FOLDER_ID")], appProperties: { org: me.org, mid: id } };
+    const meta = { name, parents: [await folderId()], appProperties: { org: me.org, mid: id } };
     const boundary = "emerald" + crypto.randomUUID();
     const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
