@@ -7,10 +7,11 @@ import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empt
 import { fyWindow, inWin, quotesSig, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate, moduleOf } from "../data";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaFile } from "../ui/media";
+import { books, csv, download, GOAL_HINT, GOAL_LABEL, goalProgress, gstMonths, parties, setGst, tallyXml } from "../data/books";
 import {
-  accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, books, can, confirmBill, confirmLine, consSig, csv, daySummary, download, expensesSig,
-  financeSummary, fyOf, GOAL_HINT, GOAL_LABEL, goalProgress, goalsSig, gstMonths, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
-  parseStatementCsv, parties, rejectLine, setGst, shortDate, statementSig, suggest, tallyXml, today, transfer, uid, windowFor,
+  accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, can, confirmBill, confirmLine, consSig, daySummary, expensesSig,
+  financeSummary, fyOf, goalsSig, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
+  parseStatementCsv, rejectLine, shortDate, statementSig, suggest, today, transfer, uid, windowFor,
   type Bill, type Goal, type GoalMetric, type MoneyKind,
 } from "../data";
 
