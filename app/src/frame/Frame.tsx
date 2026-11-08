@@ -8,6 +8,9 @@ import { searchQ } from "../data/search";
 import { attention, batchesSig, can, isExternal, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
 
+/** Module key for the themed accent: first path segment; home-like pages share the brand emerald. */
+export const modOf = (path: string) => { const k = path.split("/")[1] || "home"; return ["search", "more"].includes(k) ? "home" : k; };
+
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
 
 /* Breakpoints: phone < 768 (dock), tablet 768–1023 (icon rail, expandable), desktop ≥ 1024 (full sidebar, collapsible).
@@ -36,9 +39,9 @@ function Sidebar() {
         {ALL.filter((n) => (isExternal() ? n.href === "/settings" : can(moduleOf(n.href)))).concat(isExternal() ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }] : []).map((n) => {
           const on = isActive(path, n.href);
           return (
-            <a key={n.href} href={n.href} aria-current={on ? "page" : undefined} title={n.label}
-              class={`flex items-center rounded-full ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 min-h-[52px] py-2 px-1 text-[10px] leading-tight text-center rounded-2xl" : "gap-2.5 h-9 px-3 text-[13px]"} ${on ? "bg-c4 text-c0 font-semibold" : "text-c3 font-medium hover:bg-c1 hover:text-c4"}`}>
-              <Icon name={n.icon} size={c ? 18 : 16} />
+            <a key={n.href} href={n.href} data-mod={modOf(n.href)} aria-current={on ? "page" : undefined} title={n.label}
+              class={`flex items-center rounded-full ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 min-h-[52px] py-2 px-1 text-[10px] leading-tight text-center rounded-2xl" : "gap-2.5 h-9 px-3 text-[13px]"} ${on ? "bg-acc text-on-acc font-semibold" : "text-c3 font-medium hover:bg-c1 hover:text-c4"}`}>
+              <span class={on ? "" : "text-acc"}><Icon name={n.icon} size={c ? 18 : 16} /></span>
               <span class="min-w-0">{c ? n.label.split(" ")[0] : n.label}</span>
             </a>
           );
@@ -76,7 +79,7 @@ function TopBar() {
           <Icon name="menu" size={16} />
         </button>
         <a href="/" aria-label="Emerald home" class="flex items-center gap-2 shrink-0 md:w-[148px] pl-1.5 md:pl-0">
-          <span class="w-6 h-6 rounded-md bg-c4 text-c0 flex items-center justify-center text-[12px] font-bold">E</span>
+          <span data-mod="home" class="w-6 h-6 rounded-md bg-acc text-on-acc flex items-center justify-center text-[12px] font-bold">E</span>
           <span class="hidden md:inline text-[15px] font-semibold tracking-tight">Emerald</span>
         </a>
         <div class="md:hidden flex-1 min-w-0 flex items-center gap-2 pl-1">
@@ -120,9 +123,9 @@ function Dock() {
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
         return (
-          <a key={n.href} href={n.href} aria-current={on ? "page" : undefined}
+          <a key={n.href} href={n.href} data-mod={n.href === "/more" ? undefined : modOf(n.href)} aria-current={on ? "page" : undefined}
             class={`flex-1 relative flex flex-col items-center justify-center h-14 gap-0.5 text-[10px] min-w-0 ${on ? "text-c4 font-semibold" : "text-c2 font-medium"}`}>
-            <span class={`relative inline-flex items-center justify-center h-8 w-12 rounded-full ${on ? "bg-c4 text-c0" : ""}`}><Icon name={n.icon} size={20} />
+            <span class={`relative inline-flex items-center justify-center h-8 w-12 rounded-full ${on ? "bg-acc text-on-acc" : ""}`}><Icon name={n.icon} size={20} />
               {n.href === "/more" && urgent > 0 && <span class="absolute -top-1.5 -right-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-warn text-black text-[9px] leading-[14px] text-center num">{urgent}</span>}
             </span>
             <span class="truncate max-w-full">{n.label.split(" ")[0]}</span>
@@ -134,6 +137,8 @@ function Dock() {
 }
 
 export function Frame({ children }: { children: ComponentChildren }) {
+  const mod = modOf(useLocation().path);
+  if (document.documentElement.dataset.mod !== mod) document.documentElement.dataset.mod = mod;
   return (
     <div class="h-full flex flex-col overflow-hidden bg-canvas">
       <TopBar />
