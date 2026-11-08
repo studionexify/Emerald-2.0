@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
 import {
   accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, ordersSig, photosSig, quotesSig, raiseInvoice,
-  rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, X, log, patchOrder, nowS, consume,
+  rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, log, patchOrder, nowS, consume,
   type InvLine, type Invoice, type Order, type Quote, type Shipment,
 } from "../../data";
 import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
@@ -11,7 +11,7 @@ import { clientsSig, shrinkImage, storeMedia, type Client } from "../../data";
 import { DocSheet, fromInvoice, fromQuote, type DocData } from "./Doc";
 import { WorkShell } from "./shared";
 
-const linesOf = (o: Order): InvLine[] => o.items.map((i) => ({ desc: `${i.name} (${i.material} ${i.colour})`, hsn: "3926", qty: i.qty, rate: i.price }));
+const linesOf = (o: Order): InvLine[] => o.items.map((i) => ({ desc: `${i.name} (${i.material} ${i.colour})`, hsn: "491199", qty: i.qty, rate: i.price }));
 
 /** Editable line items for invoices and quotations. */
 function LinesEditor({ lines, on, locked }: { lines: InvLine[]; on: (l: InvLine[]) => void; locked?: boolean }) {
@@ -28,7 +28,7 @@ function LinesEditor({ lines, on, locked }: { lines: InvLine[]; on: (l: InvLine[
           {!locked && <button class="text-xs cursor-pointer" aria-label="Remove line" onClick={() => on(lines.filter((_, i) => i !== k))}>✕</button>}
         </div>
       ))}
-      {!locked && <button class="text-xs underline self-start cursor-pointer" onClick={() => on([...lines, { desc: "", hsn: "3926", qty: 1, rate: 0 }])}>+ Line</button>}
+      {!locked && <button class="text-xs underline self-start cursor-pointer" onClick={() => on([...lines, { desc: "", hsn: "491199", qty: 1, rate: 0 }])}>+ Line</button>}
     </div>
   );
 }
@@ -45,15 +45,15 @@ export function Invoice() {
   const reg = [...invoicesSig.value].filter((i) => f === "all" || (f === "paid" ? !!i.paidOn : f === "credit" ? i.kind === "credit" : f === "cancelled" ? i.status === "cancelled" : !i.paidOn && i.kind === "invoice" && i.status === "issued")).sort((a, b) => b.no.localeCompare(a.no));
   const locked = !!cur && (monthLocked(cur.date) || cur.status === "cancelled");
   const raise = (o: Order, batch?: { name: string; units: number; id: string }) => {
-    const lines = batch ? [{ desc: `${o.items[0].name} — ${batch.name}`, hsn: "3926", qty: batch.units, rate: o.items[0].price }] : linesOf(o);
-    const client = X.clients.find((c) => c.name === o.customer);
-    const inv = raiseInvoice({ customer: o.customer, gstin: client?.gstin || undefined, orderNo: o.no, batch: batch?.name, lines });
+    const lines = batch ? [{ desc: `${o.items[0].name} — ${batch.name}`, hsn: "491199", qty: batch.units, rate: o.items[0].price }] : linesOf(o);
+    const client = clientsSig.value.find((c) => c.name === o.customer);
+    let inv; try { inv = raiseInvoice({ customer: o.customer, gstin: client?.gstin || undefined, orderNo: o.no, batch: batch?.name, lines }); } catch (e) { alert((e as Error).message); return; }
     if (batch) batchesSig.value = batchesSig.value.map((b) => (b.id === batch.id ? { ...b, invoiceNo: inv.no } : b)); else patchOrder(o, { invoiced: true });
     setOpen(inv); setView("doc");
   };
   return (
     <WorkShell stage="invoice" title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
-      actions={<><Button variant="outline" onClick={() => ask("Renumber this FY's series in date order?").then((ok) => ok && resequence(fyOf(today())))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
+      actions={<><Button variant="outline" onClick={() => ask("Renumber this FY's series in date order?").then((ok) => ok && resequence(fyOf(today())))}>Resequence</Button><Button icon="plus" onClick={() => { let inv; try { inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "491199", qty: 1, rate: 0 }] }); } catch (e) { alert((e as Error).message); return; } setOpen(inv); setView("edit"); }}>New invoice</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
       detail={cur && (
         <div>
@@ -132,7 +132,7 @@ export function Quotes() {
   const upd = (q: Quote, p: Partial<Quote>) => { quotesSig.value = quotesSig.value.map((x) => (x.id === q.id ? { ...x, ...p } : x)); if (p.outcome) log(`Quote ${p.outcome}`, q.no); };
   const rows = [...quotesSig.value].filter((q) => f === "all" || q.outcome === f).sort((a, b) => b.no.localeCompare(a.no));
   const make = (o?: Order) => { const valid = new Date(Date.now() + rate("quoteValid") * 864e5).toISOString().slice(0, 10);
-    const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: o?.customer ?? "", orderNo: o?.no, lines: o ? linesOf(o) : [{ desc: "", hsn: "3926", qty: 1, rate: 0 }], gstRate: rate("gst"), valid, outcome: "open" };
+    const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: o?.customer ?? "", orderNo: o?.no, lines: o ? linesOf(o) : [{ desc: "", hsn: "491199", qty: 1, rate: 0 }], gstRate: rate("gst"), valid, outcome: "open" };
     quotesSig.value = [...quotesSig.value, q]; log("Created quotation", q.no); setOpen(q); setView("edit"); };
   const pending = ordersSig.value.filter((o) => o.stage === "quotation" && !quotesSig.value.some((q) => q.orderNo === o.no));
   const cnt = (s: string) => quotesSig.value.filter((q) => q.outcome === s);
@@ -183,7 +183,7 @@ export function Documents() {
     ...quotesSig.value.map((q) => ({ id: q.id, kind: "Quotation", no: q.no, party: q.customer, date: q.date, d: () => fromQuote(q) })),
     ...invoicesSig.value.map((i) => ({ id: i.id, kind: i.kind === "credit" ? "Credit note" : "Tax invoice", no: i.no, party: i.customer, date: i.date, d: () => fromInvoice(i) })),
     ...shipmentsSig.value.map((s) => ({ id: s.id, kind: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? s.orderNo, date: s.date,
-      d: (): DocData => ({ title: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, date: s.date, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? "", lines: s.lines.map((l) => ({ desc: l.name, hsn: "3926", qty: l.qty, rate: 0 })), gstRate: 0, interstate: false, extra: [["Order", s.orderNo], ["Courier", `${s.courier} ${s.tracking}`]], note: "Not a tax invoice — goods sent for delivery." }) })),
+      d: (): DocData => ({ title: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, date: s.date, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? "", lines: s.lines.map((l) => ({ desc: l.name, hsn: "491199", qty: l.qty, rate: 0 })), gstRate: 0, interstate: false, extra: [["Order", s.orderNo], ["Courier", `${s.courier} ${s.tracking}`]], note: "Not a tax invoice — goods sent for delivery." }) })),
   ].filter((d) => kind === "all" || d.kind === kind).sort((a, b) => b.date.localeCompare(a.date));
   return (
     <WorkShell title="Documents" sub="The generator — every quotation, invoice, credit note and challan, printable"

@@ -2,7 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fact, Page, Status } from "../../ui";
-import { storeMedia, shrinkImage, can, ordersSig, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, X, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { storeMedia, shrinkImage, can, ordersSig, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { MediaImg } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -34,7 +34,7 @@ export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void;
   );
 }
 
-/** Inline order detail (no overlay, no gates). Render via the page's `detail` prop. */
+/** Inline order detail (no overlay; forward moves honour the stage gate). Render via the page's `detail` prop. */
 export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose: () => void; onOpen: (o: Order) => void }) {
   const [msg, setMsg] = useState("");
   const next = nextOf(order), prev = prevOf(order);
@@ -44,10 +44,25 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
   const used = cons.reduce((s, c) => s + c.cost, 0);
   const total = orderTotal(order);
   /** Re-slice rule: moving back needs a reason; every move lands in stage history. */
-  const go = (to: Stage) => { const back = STAGE_ORDER.indexOf(to) < STAGE_ORDER.indexOf(order.stage); const reason = back ? prompt(`Reason for sending ${order.no} back to ${STAGE_LABEL[to]}?`) : ""; if (back && !reason) return; onOpen(moveTo(order, to, reason ?? "")); };
+  /** Forward moves pass the stage gate; an owner/manager may override with a reason, which is logged. */
+  const gate = gateReason(order, batchesSig.value);
+  const go = (to: Stage) => {
+    if (to === order.stage) return;
+    const back = STAGE_ORDER.indexOf(to) < STAGE_ORDER.indexOf(order.stage);
+    let reason = "";
+    if (back) { reason = prompt(`Reason for sending ${order.no} back to ${STAGE_LABEL[to]}?`) ?? ""; if (!reason.trim()) return; }
+    const passing = STAGE_ORDER.slice(STAGE_ORDER.indexOf(order.stage), STAGE_ORDER.indexOf(to)).filter((s) => s === order.stage || SUGGESTED[order.type].includes(s));
+    const block = back ? null : passing.map((s) => gateReason({ ...order, stage: s }, batchesSig.value)).find(Boolean) ?? null;
+    if (block) {
+      if (!can("work") || !["owner", "manager"].includes(me.value?.role ?? "")) { setMsg(block); return; }
+      reason = prompt(`${block}\n\nOverride and move anyway? Give a reason:`) ?? ""; if (!reason.trim()) { setMsg(block); return; }
+      reason = `override: ${reason}`;
+    }
+    onOpen(moveTo(order, to, reason));
+  };
   const hist = historySig.value.filter((h) => h.orderNo === order.no);
   const photos = photosSig.value.filter((p) => p.ref === order.no);
-  const lowAcc = X.accessories.filter((a) => a.cat === "Accessory" && a.qty <= a.reorderAt);
+  const lowAcc = itemsSig.value.filter((a) => a.cat === "Accessory" && a.qty <= a.reorderAt);
   return (
     <div>
       <DetailHead title={`${order.no} · ${order.customer}`} onClose={() => { setMsg(""); onClose(); }} />
@@ -64,6 +79,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
         {next && <Button onClick={() => go(next)}>{STAGE_LABEL[next]} →</Button>}
         <Button variant="outline" icon="copy" onClick={() => { const c = duplicateOrder(order); setMsg(`Created ${c.no}`); onOpen(c); }}>Duplicate</Button>
       </div>
+      {gate && order.stage !== "archived" && <p class="text-xs mb-2 rounded-xl bg-c1 p-2" role="note"><b>Blocked:</b> {gate}</p>}
       {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
 
       {order.stage === "production" && lowAcc.length > 0 && <div class="rounded-xl bg-c1 p-2 text-xs mb-3"><b>Stock check (advisory):</b> {lowAcc.map((a) => a.name).join(", ")} at or below reorder.</div>}

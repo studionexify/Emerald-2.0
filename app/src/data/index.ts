@@ -47,7 +47,7 @@ export * from "./auth";
 export * from "./image";
 export * from "./media";
 import { me } from "./auth";
-import { setLogger, historySig } from "./ledger";
+import { setLogger, historySig, raiseInvoice } from "./ledger";
 import { rate } from "./rates";
 
 const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -114,6 +114,6 @@ export function createOrder(d: { type: OrderType; customer: string; item: string
 
 export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
   if (what === "print") batchSet(b, { done: b.units }, "Batch printed");
-  if (what === "invoice") batchSet(b, { invoiceNo: `B/26-27/${String(Math.floor(Math.random() * 900 + 63)).padStart(4, "0")}` }, "Raised dispatch invoice");
+  if (what === "invoice") batchSet(b, { invoiceNo: raiseInvoice({ customer: b.customer, orderNo: b.orderNo, batch: b.name, lines: [{ desc: b.name, hsn: "491199", qty: b.done || b.units, rate: ordersSig.value.find((o) => o.no === b.orderNo)?.items.find((i) => i.name === b.name)?.price ?? ordersSig.value.find((o) => o.no === b.orderNo)?.items[0]?.price ?? 0 }] }).no }, "Raised dispatch invoice");
   if (what === "tracking") batchSet(b, { tracking: `TRK${Math.floor(Math.random() * 1e8)}` }, "Added tracking");
 }

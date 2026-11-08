@@ -8,10 +8,12 @@ import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spo
 /** Persisted list that fills new fields from the seed (by id) so old saved rows gain them. */
 const SEED_V = "3";
 let fresh = false;
-try { fresh = localStorage.getItem("emerald:seedv") !== SEED_V; } catch {}
+let real = false;
+try { fresh = localStorage.getItem("emerald:seedv") !== SEED_V; real = !!localStorage.getItem("emerald:e1"); } catch {}
 /** Persisted list. On a new sample-data version, sample rows are refreshed; rows you added are kept. */
 function list<T extends { id: string }>(key: string, seed: T[], fill: Partial<T> = {}): Signal<T[]> {
-  const s = persisted<T[]>(key, seed);
+  const s = persisted<T[]>(key, real ? [] : seed);
+  if (real) return s; // migrated studio data: sample rows never come back
   s.value = fresh ? [...seed.map((r) => ({ ...fill, ...r })), ...s.value.filter((r) => !seed.some((x) => x.id === r.id))]
     : s.value.map((r) => ({ ...fill, ...(seed.find((x) => x.id === r.id) ?? {}), ...r }));
   return s;
