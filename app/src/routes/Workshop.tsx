@@ -167,7 +167,7 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const mc = matC(h.material);
   return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col" style={{ borderLeft: `3px solid ${mc}` }}>
     <div class="flex items-center gap-2.5">
-      <button class="w-5 h-5 !min-h-0 rounded-full border border-line shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
+      <button class="w-7 h-7 !min-h-0 rounded-full border border-line shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
       <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="t-meta truncate">{h.brand || "—"}</div></div>
       <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md" style={{ color: mc, background: `color-mix(in srgb, ${mc} 14%, transparent)` }}>{h.material}</span>
     </div>
@@ -181,7 +181,7 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
         <div class="flex items-center gap-3 py-2">
           <span class="text-[20px] font-extrabold num leading-none w-7 shrink-0">{s.spoolNo}</span>
           <div class="flex-1 min-w-0">
-            <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class={`h-full rounded-full ${s.grams < 250 ? "bg-warn" : "bg-c4"}`} style={{ width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
+            <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class={`h-full rounded-full bg-c4`} style={{ width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
             <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net</span><b class="num">{s.grams.toLocaleString("en-IN")} g</b></div>
           </div>
           <button class={`h-7 !min-h-0 px-2.5 rounded-lg border text-[11px] font-semibold ${ed === s.id ? "bg-c4 text-c0 border-c4" : "border-line"}`} onClick={() => setEd(ed === s.id ? null : s.id)}>{ed === s.id ? "Done" : "Edit"}</button>
