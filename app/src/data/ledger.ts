@@ -2,8 +2,7 @@
 import { computed } from "@preact/signals";
 import { persisted, uid, today, nowStamp } from "./store";
 import { rate } from "./rates";
-import * as M from "../mock/data";
-import * as X from "../mock/extra";
+import { itemsSig, jobsSig, qcSig, machineStats, printersSig } from "./inventory";
 import type { Order, Stage } from "../mock/types";
 
 /* ---------------------------------------------------------------- types */
@@ -30,79 +29,23 @@ export type LineDesign = { file: string; profile: string; grams: number; minutes
 export type StatementLine = { id: string; account: string; date: string; text: string; amount: number; state: "review" | "confirmed" | "rejected"; match?: string; hash: string };
 export type GstMonth = { r1: boolean; r3b: boolean; locked: boolean };
 
-/* ---------------------------------------------------------------- seeds */
-const L = (desc: string, qty: number, r: number, hsn = "491199"): InvLine => ({ desc, hsn, qty, rate: r });
-const seedInvoices: Invoice[] = [
-  { id: "i4", kind: "invoice", no: "B-058", date: "2026-08-14", customer: "Paper Lane Stationery", gstin: "24AAKFP1234M1Z2", orderNo: "EM-1022", lines: [L("Desk organiser", 100, 500)], gstRate: 18, interstate: false, status: "issued" },
-  { id: "i3", kind: "invoice", no: "B-059", date: "2026-09-22", customer: "Gift Box Co.", gstin: "24AAGCG5678K1Z9", orderNo: "EM-1029", lines: [L("Logo coaster", 250, 109.32)], gstRate: 18, interstate: true, status: "issued" },
-  { id: "i2", kind: "invoice", no: "B-060", date: "2026-10-18", customer: "Kabir Joshi", orderNo: "EM-1036", lines: [L("Cosplay helmet", 1, 5508)], gstRate: 18, interstate: false, status: "issued", paidOn: "2026-10-20", paidAccount: "ba1" },
-  { id: "i1", kind: "invoice", no: "B-061", date: "2026-11-01", customer: "Neha Patel", orderNo: "EM-1037", lines: [L("Planter set", 3, 592.33)], gstRate: 18, interstate: false, status: "issued", paidOn: "2026-11-01", paidAccount: "ba1" },
-];
-const seedQuotes: Quote[] = X.quotes.map((q) => ({ id: q.id, no: q.no, date: q.date, customer: q.customer, lines: [L("As quoted", 1, Math.round(q.value / 1.18))], gstRate: 18, valid: q.valid, outcome: q.outcome as Quote["outcome"] }));
-const seedExpenses: Expense[] = [
-  { id: "e1", date: "2026-10-30", head: "Filament", vendor: "Bambu Store India", amount: 11250, tax: 1716, billId: "bl2", paid: true, account: "ba1" },
-  { id: "e2", date: "2026-10-31", head: "Electricity", vendor: "MGVCL", amount: 2860, tax: 0, paid: true, account: "ba1" },
-  { id: "e3", date: "2026-10-28", head: "Utilities", vendor: "Jio Fiber", amount: 1179, tax: 180, billId: "bl3", paid: true, account: "ba1" },
-  { id: "e4", date: "2026-10-25", head: "Courier", vendor: "Delhivery", amount: 1840, tax: 0, paid: true, account: "ba2" },
-  { id: "e5", date: "2026-10-20", head: "Packing", vendor: "Sharma Traders", amount: 2100, tax: 320, paid: false, msme: "Micro", dueDate: "2026-12-04" },
-  { id: "e6", date: "2026-09-15", head: "Filament", vendor: "Polymaker Distributor", amount: 8200, tax: 1250, paid: false, dueDate: "2026-11-30" },
-];
-const seedBills: Bill[] = X.bills.map((b) => ({ id: b.id, vendor: b.vendor, no: b.no, date: b.date, subtotal: b.total - b.tax, tax: b.tax, total: b.total, cat: b.cat, status: b.status as Bill["status"], note: b.note, fy: "FY 2026-27",
-  lines: b.id === "bl1" ? [{ desc: "Box 15×15×10 ×100", amount: 1800 }, { desc: "Bubble wrap 50 m", amount: 1624 }, { desc: "Tape ×20", amount: 756 }] : undefined }));
-const seedAccounts: Account[] = [{ id: "ba1", name: "HDFC Current ··4421", opening: 150000 }, { id: "ba2", name: "Cash in hand", opening: 12000 }, { id: "ba3", name: "Razorpay settlements", opening: 4000 }];
-const seedMoney: MoneyEntry[] = [
-  { id: "m1", date: "2026-04-01", account: "ba1", kind: "capital_in", amount: 50000, note: "Capital introduced" },
-  { id: "m2", date: "2026-07-10", account: "ba1", kind: "drawings", amount: -40000, note: "Drawings" },
-  { id: "m3", date: "2026-10-20", account: "ba1", kind: "receipt", amount: 6499, note: "Kabir Joshi", ref: "B-060" },
-  { id: "m4", date: "2026-10-30", account: "ba1", kind: "expense", amount: -11250, note: "Bambu Store India", ref: "e1" },
-  { id: "m5", date: "2026-10-31", account: "ba1", kind: "expense", amount: -2860, note: "MGVCL", ref: "e2" },
-  { id: "m6", date: "2026-10-28", account: "ba1", kind: "expense", amount: -1179, note: "Jio Fiber", ref: "e3" },
-  { id: "m7", date: "2026-10-25", account: "ba2", kind: "expense", amount: -1840, note: "Delhivery", ref: "e4" },
-  { id: "m8", date: "2026-10-31", account: "ba1", kind: "advance", amount: 25000, note: "Advance · Paper Lane", ref: "EM-1041" },
-  { id: "m9", date: "2026-11-01", account: "ba1", kind: "receipt", amount: 2097, note: "Neha Patel", ref: "B-061" },
-  { id: "m10", date: "2026-10-29", account: "ba1", kind: "transfer_out", amount: -5000, note: "To cash", pair: "t1" },
-  { id: "m11", date: "2026-10-29", account: "ba2", kind: "transfer_in", amount: 5000, note: "From HDFC", pair: "t1" },
-  { id: "m12", date: "2026-05-02", account: "ba1", kind: "asset_purchase", amount: -84999, note: "Bambu P1S Combo", ref: "fa1" },
-];
-const seedGoals: Goal[] = [
-  { id: "g1", title: "₹5L this quarter", metric: "revenue", start: "2026-10-01", end: "2026-12-31", period: "Q3 · Oct–Dec", target: 500000, note: "Diwali corporate push", archived: false },
-  { id: "g2", title: "Cash in by month end", metric: "collection", start: "2026-11-01", end: "2026-11-30", period: "November", target: 120000, note: "", archived: false },
-  { id: "g3", title: "Keep spend under ₹60k", metric: "expense_cap", start: "2026-11-01", end: "2026-11-30", period: "November", target: 60000, note: "A ceiling — met by staying under", archived: false },
-  { id: "g4", title: "40 orders this year", metric: "orders", start: "2026-04-01", end: "2027-03-31", period: "FY 2026-27", target: 40, note: "", archived: false },
-  { id: "g5", title: "Margin above 55%", metric: "margin_pct", start: "2026-04-01", end: "2027-03-31", period: "FY 2026-27", target: 55, note: "", archived: false },
-  { id: "g6", title: "Instagram reels", metric: "custom", start: "2026-11-01", end: "2026-11-30", period: "November", target: 12, manual: 4, note: "Moved by hand", archived: false },
-];
-const seedShipments: Shipment[] = [
-  { id: "sh2", orderNo: "EM-1033", date: "2026-10-29", courier: "DTDC", service: "Express", tracking: "D84719201", lines: [{ name: "Notebook stand", qty: 60 }], freightPaid: 640, freightRecovered: 600, eta: "2026-11-01" },
-  { id: "sh3", orderNo: "EM-1036", date: "2026-10-18", courier: "India Post", service: "Speed Post", tracking: "EV221903IN", lines: [{ name: "Cosplay helmet", qty: 1 }], freightPaid: 90, freightRecovered: 0, eta: "2026-10-21" },
-];
-const seedAssets: Asset[] = [
-  { id: "fa1", name: "Bambu P1S Combo", machine: "P1S-01", block: "Plant & machinery", blockRate: 15, cost: 84999, date: "2026-05-02" },
-  { id: "fa2", name: "Bambu A1 Combo", machine: "A1-01", block: "Plant & machinery", blockRate: 15, cost: 49999, date: "2025-11-12" },
-  { id: "fa3", name: "Laptop", machine: "—", block: "Computers", blockRate: 40, cost: 72000, date: "2025-06-01" },
-];
-const seedStatement: StatementLine[] = [
-  { id: "sl1", account: "ba1", date: "2026-11-02", text: "NEFT GIFT BOX CO PART PMT", amount: 31605, state: "review", hash: "a1" },
-  { id: "sl2", account: "ba1", date: "2026-11-02", text: "UPI/RIYA SHAH/KEYCHAIN", amount: 500, state: "review", hash: "a2" },
-];
-
 /* ---------------------------------------------------------------- stores */
-export const invoicesSig = persisted<Invoice[]>("invoices", seedInvoices);
-export const quotesSig = persisted<Quote[]>("quotes", seedQuotes);
-export const expensesSig = persisted<Expense[]>("expenses", seedExpenses);
-export const billsSig = persisted<Bill[]>("bills", seedBills);
-export const accountsSig = persisted<Account[]>("accounts", seedAccounts);
-export const moneySig = persisted<MoneyEntry[]>("money", seedMoney);
-export const goalsSig = persisted<Goal[]>("goals", seedGoals);
-export const shipmentsSig = persisted<Shipment[]>("shipments", seedShipments);
+export const invoicesSig = persisted<Invoice[]>("invoices", []);
+export const quotesSig = persisted<Quote[]>("quotes", []);
+export const expensesSig = persisted<Expense[]>("expenses", []);
+export const billsSig = persisted<Bill[]>("bills", []);
+export const accountsSig = persisted<Account[]>("accounts", []);
+export const moneySig = persisted<MoneyEntry[]>("money", []);
+export const goalsSig = persisted<Goal[]>("goals", []);
+export const shipmentsSig = persisted<Shipment[]>("shipments", []);
 export const historySig = persisted<StageMove[]>("stageHistory", []);
-export const assetsSig = persisted<Asset[]>("assets", seedAssets);
+export const assetsSig = persisted<Asset[]>("assets", []);
 export const loansSig = persisted<Loan[]>("loans", []);
 export const designSig = persisted<Record<string, LineDesign>>("lineDesign", {});
-export const statementSig = persisted<StatementLine[]>("statement", seedStatement);
-export const gstSig = persisted<Record<string, GstMonth>>("gstFiled", { "2026-04": { r1: true, r3b: true, locked: true }, "2026-05": { r1: true, r3b: true, locked: true }, "2026-06": { r1: true, r3b: true, locked: true }, "2026-07": { r1: true, r3b: true, locked: true }, "2026-08": { r1: true, r3b: true, locked: true }, "2026-09": { r1: true, r3b: true, locked: false } });
+export const statementSig = persisted<StatementLine[]>("statement", []);
+export const gstSig = persisted<Record<string, GstMonth>>("gstFiled", {});
 export const photosSig = persisted<{ id: string; ref: string; stage: string; name: string; data: string; at: string }[]>("photos", []);
-export const openingSig = persisted<{ capital: number; stock: number; closingStock: number }>("opening", { capital: 300000, stock: 22000, closingStock: 64848 });
+export const openingSig = persisted<{ capital: number; stock: number; closingStock: number }>("opening", { capital: 0, stock: 0, closingStock: 0 });
 
 /* ---------------------------------------------------------------- helpers */
 export const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -328,11 +271,13 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   if (rev || bad) money.push({ t: "info", text: `${rev} bill(s) waiting for review · ${bad} unreadable`, href: "/mauny/purchases" });
   batches.filter((b) => b.stage === "invoice" && !b.invoiceNo).forEach((b) => money.push({ t: "warn", text: `${b.orderNo} ${b.name} — dispatch invoice not raised`, href: "/work/bulk" }));
   const quality: Alert[] = [];
-  M.jobs.filter((j) => j.status === "failed").forEach((j) => quality.push({ t: "danger", text: `${j.orderNo} ${j.item} failed — no reprint queued`, href: "/work/production" }));
-  const floor = X.machineLog.reduce((s, m) => s + m.fail, 0) / X.machineLog.length;
+  const failed = new Set(jobsSig.value.filter((j) => j.status === "failed").map((j) => j.id));
+  jobsSig.value.filter((j) => j.status === "failed" && !jobsSig.value.some((r) => r.id !== j.id && r.orderNo === j.orderNo && r.item === j.item && !failed.has(r.id))).forEach((j) => quality.push({ t: "danger", text: `${j.orderNo} ${j.item} failed — no reprint queued`, href: "/work/production" }));
+  const logs = printersSig.value.filter((p) => p.active !== false).map((p) => ({ printer: p.name, ...machineStats(p.name) })).filter((m) => m.jobs);
+  const floor = logs.length ? logs.reduce((s, m) => s + m.fail, 0) / logs.length : 0;
   if (floor > rate("failRate")) quality.push({ t: "warn", text: `Floor failure rate ${Math.round(floor)}% (alert at ${rate("failRate")}%)`, href: "/mauny/reports" });
-  X.machineLog.filter((m) => m.fail > floor * 2).forEach((m) => quality.push({ t: "warn", text: `${m.printer} failing ${m.fail}% vs floor ${Math.round(floor)}%`, href: "/workshop/printers" }));
-  M.qc.filter((q) => q.result === "scrap").forEach((q) => quality.push({ t: "info", text: `${q.orderNo} QC ended in scrap (${q.grams} g)`, href: "/work/qc" }));
+  logs.filter((m) => m.fail > Math.max(5, floor * 2)).forEach((m) => quality.push({ t: "warn", text: `${m.printer} failing ${m.fail}% vs floor ${Math.round(floor)}%`, href: "/workshop/printers" }));
+  qcSig.value.filter((q) => q.result === "scrap").forEach((q) => quality.push({ t: "info", text: `${q.orderNo} QC ended in scrap (${q.grams} g)`, href: "/work/qc" }));
   const flow: Alert[] = [];
   orders.filter((o) => o.stage !== "archived" && o.due < t).forEach((o) => flow.push({ t: "danger", text: `${o.no} missed target date (${o.due})`, href: "/work/orders" }));
   orders.filter((o) => o.stage !== "archived" && daysBetween(o.created, t) > 21).forEach((o) => flow.push({ t: "warn", text: `${o.no} open more than three weeks`, href: "/work/orders" }));
@@ -342,7 +287,7 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   const stock: Alert[] = [];
   spools.forEach((s) => { if (s.grams === 0) stock.push({ t: "danger", text: `${s.material} ${s.colour} — out of stock`, href: "/workshop" }); else if (s.grams < rate("reorderFilament")) stock.push({ t: "warn", text: `${s.material} ${s.colour} ${s.grams} g — below reorder`, href: "/workshop" }); });
   pack.filter((p) => p.qty <= p.reorderAt).forEach((p) => stock.push({ t: "warn", text: `${p.name} ${p.qty} ${p.unit} — at reorder point`, href: "/workshop/packing" }));
-  X.accessories.filter((a) => a.qty <= a.reorderAt).forEach((a) => stock.push({ t: "warn", text: `${a.name} — below reorder`, href: "/workshop/parts" }));
+  itemsSig.value.filter((a) => a.active !== false && a.qty <= a.reorderAt).forEach((a) => stock.push({ t: "warn", text: `${a.name} — below reorder`, href: "/workshop/parts" }));
   const order = (l: Alert[]) => l.sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t));
   return { Money: order(money), Quality: order(quality), Flow: order(flow), Stock: order(stock) };
 }

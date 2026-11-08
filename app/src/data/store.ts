@@ -43,6 +43,7 @@ function diff(kind: string, prev: unknown, next: unknown): Change[] {
 
 /** Apply changes that came from another device or tab, without echoing them back out. */
 export function applyRemote(changes: Change[]) {
+  changes = changes.filter((c) => c.deleted || !isSample(c.kind, c.id));
   const byKind = new Map<string, Change[]>();
   for (const c of changes) if (registry.has(c.kind)) (byKind.get(c.kind) ?? byKind.set(c.kind, []).get(c.kind)!).push(c);
   applying = true;
@@ -92,3 +93,15 @@ export function resetAll() {
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
 export const today = () => new Date().toISOString().slice(0, 10);
 export const nowStamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+
+/** Sample rows from the original mock data all have short ids like "o1", "ba2" or "m12"; real and user-made records never do. */
+export const isSample = (kind: string, id: string) => !KEEP.has(kind) && /^[a-z]{1,3}\d{1,3}$/.test(id);
+const KEEP = new Set(["users", "session", "rates", "business", "nexcalSettings", "nexresSettings", "media:queue", "loginAttempts", "seedv", "sync:outbox", "sync:last"]);
+/** Remove every sample row from every list. Runs on each load; removals sync as deletions, so the cloud copy is cleaned too. */
+export function purgeSample() {
+  registry.forEach((s, k) => {
+    if (KEEP.has(k) || !isList(s.value)) return;
+    const kept = (s.value as { id: string }[]).filter((r) => !isSample(k, r.id));
+    if (kept.length !== (s.value as unknown[]).length) s.value = kept;
+  });
+}

@@ -1,6 +1,6 @@
 /**
  * Cloud sync (Supabase). Local-first: the UI never waits on the network.
- * - Outgoing: changed records queue in an outbox and go up as one batched upsert.
+ * - Outgoing: changed records queue in an outbox and go up as batched upserts of 300.
  * - Incoming: one Realtime channel per business pushes other devices' edits in < 1 s.
  * - Reconnect: fetch only rows changed since the last sync. No polling anywhere.
  * Loaded lazily after first paint; does nothing when VITE_SUPABASE_URL is unset.
@@ -41,11 +41,16 @@ async function push() {
   sending = (async () => {
     syncState.value = "sending";
     const batch = [...outbox.values()];
-    const rows = batch.map((c) => ({ org, kind: c.kind, id: c.id, data: c.data ?? null, deleted: c.deleted }));
-    const { error } = await (await client()).from("records").upsert(rows, { onConflict: "org,kind,id" });
-    if (error) { syncState.value = navigator.onLine ? "error" : "offline"; return; }
-    for (const c of batch) if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c));
-    localSet("sync:outbox", [...outbox]);
+    // Sent in chunks so a big change (an Emerald 1 import is ~2,700 rows) never exceeds one request's size; each chunk that lands leaves the outbox.
+    const c0 = await client();
+    for (let i = 0; i < batch.length; i += 300) {
+      const part = batch.slice(i, i + 300);
+      const rows = part.map((c) => ({ org, kind: c.kind, id: c.id, data: c.data ?? null, deleted: c.deleted }));
+      const { error } = await c0.from("records").upsert(rows, { onConflict: "org,kind,id" });
+      if (error) { localSet("sync:outbox", [...outbox]); syncState.value = navigator.onLine ? "error" : "offline"; return; }
+      for (const c of part) if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c));
+      localSet("sync:outbox", [...outbox]);
+    }
     syncState.value = "synced";
   })().finally(() => { sending = null; if (again) { again = false; push(); } });
   return sending;

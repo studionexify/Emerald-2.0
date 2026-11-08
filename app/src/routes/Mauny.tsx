@@ -41,7 +41,7 @@ const KINDS: [MoneyKind, string, 1 | -1][] = [["receipt", "Customer receipt", 1]
   ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1], ["tax_payment", "GST / tax paid", -1]];
 export function MaunyHome() {
   const accs = accountsSig.value;
-  const [acc, setAcc] = useState(accs[0].id);
+  const [acc, setAcc] = useState(accs[0]?.id ?? "");
   const [day, setDay] = useState(today());
   const [form, setForm] = useState<null | "in" | "out" | "transfer">(null);
   const [f, setF] = useState({ kind: "receipt" as MoneyKind, amount: 0, note: "", to: accs[1]?.id ?? "" });
@@ -297,7 +297,7 @@ export function Goals() {
 
 /* ======================================================= Accounts & statements */
 export function Accounts() {
-  const [acc, setAcc] = useState(accountsSig.value[0].id);
+  const [acc, setAcc] = useState(accountsSig.value[0]?.id ?? "");
   const [msg, setMsg] = useState("");
   const [f, setF] = useState("review");
   const lines = statementSig.value.filter((l) => l.account === acc && (f === "all" || l.state === f));
@@ -330,7 +330,7 @@ const BOOK_TABS: [string, string][] = [["sales", "Sales Book"], ["purchase", "Pu
 export function Books() {
   const [t, setT] = useState("sales");
   const [fy, setFy] = useState(fyOf(today()));
-  const [acc, setAcc] = useState(accountsSig.value[0].id);
+  const [acc, setAcc] = useState(accountsSig.value[0]?.id ?? "");
   const B = books(fy);
   const tax = [{ key: "n", label: "No.", render: (r: any) => <b>{r.no}{r.status === "cancelled" ? " (cancelled)" : ""}</b> }, { key: "d", label: "Date", render: (r: any) => shortDate(r.date) }, { key: "p", label: "Party", render: (r: any) => r.party },
     { key: "t", label: "Taxable", align: "right" as const, render: (r: any) => inr(r.taxable) }, { key: "c", label: "CGST", align: "right" as const, render: (r: any) => inr(r.cgst), hideTablet: true },

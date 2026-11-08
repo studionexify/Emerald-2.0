@@ -1,16 +1,14 @@
 /** Data access. Phase 1 reads in-memory mock; phase 2 swaps in the API. */
 import { persisted as P } from "./store";
-import * as M from "../mock/data";
 import type { Batch, BatchStage, ConKind, Consumption, Log, LogKind, Order, OrderType, Stage } from "../mock/types";
 import { STAGE_LABEL, STAGE_ORDER } from "./flows";
 
 export * from "../mock/types";
-export const db = M;
 
-export const ordersSig = P<Order[]>("orders", M.orders);
-export const batchesSig = P<Batch[]>("batches", M.batches);
-export const logsSig = P<Log[]>("logs", M.logs);
-export const consSig = P<Consumption[]>("consumption", M.consumption);
+export const ordersSig = P<Order[]>("orders", []);
+export const batchesSig = P<Batch[]>("batches", []);
+export const logsSig = P<Log[]>("logs", []);
+export const consSig = P<Consumption[]>("consumption", []);
 import { spoolsSig, packSig } from "./inventory";
 export * from "./inventory";
 
@@ -26,7 +24,7 @@ export const inr = (n: number) => (n < 0 ? "−" : "") + "₹" + Math.abs(Math.r
 export const shortDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 
 export function duplicateOrder(o: Order): Order {
-  const max = Math.max(...ordersSig.value.map((x) => Number(x.no.split("-")[1])));
+  const max = nextOrderBase();
   const today = new Date().toISOString().slice(0, 10);
   const copy: Order = {
     ...o, id: crypto.randomUUID(), no: `EM-${max + 1}`, stage: o.type === "inhouse" ? "production" : "quotation",
@@ -38,7 +36,6 @@ export function duplicateOrder(o: Order): Order {
   return copy;
 }
 
-export * as X from "../mock/extra";
 export * from "./flows";
 export * from "./rates";
 export * from "./store";
@@ -68,6 +65,8 @@ setStockSink((m) => {
     tare: 250, gross: 1250, costKg: Math.round(m.unitCost * 1000), vendor: m.vendor, bought: m.date, status: "sealed" as const, active: true, notes: m.notes })), ...spoolsSig.value];
   applyMove({ ...m, item: `${mat} ${colour}` }, true);
 });
+/** Highest EM-number in use (bulk orders carry other ids), at least 1000. */
+const nextOrderBase = () => Math.max(1000, ...ordersSig.value.map((x) => Number(/^EM-(\d+)$/.exec(x.no)?.[1] ?? 0)));
 const putOrder = (o: Order) => (ordersSig.value = ordersSig.value.map((x) => (x.id === o.id ? o : x)));
 const putBatch = (b: Batch) => (batchesSig.value = batchesSig.value.map((x) => (x.id === b.id ? b : x)));
 
@@ -116,7 +115,7 @@ export function addBatch(o: Order) {
 }
 
 export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string; delivery?: Order["delivery"]; supports?: boolean; material?: string; colour?: string }): Order {
-  const max = Math.max(...ordersSig.value.map((x) => Number(x.no.split("-")[1])));
+  const max = nextOrderBase();
   const today = new Date().toISOString().slice(0, 10);
   const o: Order = { id: crypto.randomUUID(), no: `EM-${max + 1}`, type: d.type, customer: d.type === "inhouse" ? "Studio Nexify" : d.customer || "New client",
     medium: d.type === "inhouse" ? "Internal" : d.medium, stage: d.type === "inhouse" ? "production" : "quotation", created: today, due: d.due || today,
@@ -130,3 +129,6 @@ export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
   if (what === "invoice") batchSet(b, { invoiceNo: raiseInvoice({ customer: b.customer, orderNo: b.orderNo, batch: b.name, lines: [{ desc: b.name, hsn: "491199", qty: b.done || b.units, rate: ordersSig.value.find((o) => o.no === b.orderNo)?.items.find((i) => i.name === b.name)?.price ?? ordersSig.value.find((o) => o.no === b.orderNo)?.items[0]?.price ?? 0 }] }).no }, "Raised dispatch invoice");
   if (what === "tracking") batchSet(b, { tracking: `TRK${Math.floor(Math.random() * 1e8)}` }, "Added tracking");
 }
+
+import { purgeSample } from "./store";
+purgeSample();

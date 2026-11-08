@@ -6,7 +6,7 @@ import { Pick, Button, Card, Disclosure, Icon, isPhone, Meter, Field, inputCls, 
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
-  applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, X,
+  applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
 import { ConsumeForm } from "./work/shared";
@@ -46,7 +46,7 @@ const pFields: FDef<Printer>[] = [
   { k: "lastService", group: "Service & specs", label: "Last service", type: "date" }, { k: "serviceEvery", group: "Service & specs", label: "Service every", type: "number", suffix: "h" },
   { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
 ];
-const mlog = (p: Printer) => X.machineLog.find((m) => m.printer === p.name) ?? { util: 0, uptime: 100, fail: 0, lost: 0, blocks: 0 };
+const mlog = (p: Printer) => machineStats(p.name);
 const pTone = (s: string) => (s === "printing" ? "active" : s === "down" ? "blocked" : "idle") as "active";
 
 const serviceDue = (p: Printer) => !!p.serviceEvery && p.serviceEvery - (p.hours % p.serviceEvery) <= 20;

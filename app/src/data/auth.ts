@@ -19,9 +19,6 @@ export const ROLE_LABEL: Record<Role, string> = { owner: "Owner", manager: "Mana
 const hash = (s: string) => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) | 0; return "h" + (h >>> 0).toString(36); };
 export const usersSig = persisted<User[]>("users", [
   { id: "u1", name: "Owner", email: "owner@studionexify.com", role: "owner", pass: hash("emerald"), active: true, login: true, job: "Owner" },
-  { id: "u2", name: "Chintan", email: "chintan@studionexify.com", role: "manager", pass: hash("emerald"), active: true, login: true, job: "Co-founder" },
-  { id: "u3", name: "Meet", email: "meet@studionexify.com", role: "operator", pass: hash("emerald"), active: true, login: true, job: "Operator" },
-  { id: "u4", name: "CA desk", email: "ca@studionexify.com", role: "ca", pass: hash("emerald"), active: true, login: true, job: "Chartered accountant" },
 ]);
 if (usersSig.value.some((u) => u.login === undefined)) usersSig.value = usersSig.value.map((u) => ({ ...u, login: u.login ?? true, job: u.job ?? "" }));
 /** The floor roster: everyone active except external roles — fills every "who did this?" picker. */

@@ -45,7 +45,7 @@ export function Invoice() {
   const reg = [...invoicesSig.value].filter((i) => f === "all" || (f === "paid" ? !!i.paidOn : f === "credit" ? i.kind === "credit" : f === "cancelled" ? i.status === "cancelled" : !i.paidOn && i.kind === "invoice" && i.status === "issued")).sort((a, b) => b.no.localeCompare(a.no));
   const locked = !!cur && (monthLocked(cur.date) || cur.status === "cancelled");
   const raise = (o: Order, batch?: { name: string; units: number; id: string }) => {
-    const lines = batch ? [{ desc: `${o.items[0].name} — ${batch.name}`, hsn: "491199", qty: batch.units, rate: o.items[0].price }] : linesOf(o);
+    const lines = batch ? [{ desc: `${o.items[0]?.name ?? "Item"} — ${batch.name}`, hsn: "491199", qty: batch.units, rate: o.items[0]?.price }] : linesOf(o);
     const client = clientsSig.value.find((c) => c.name === o.customer);
     let inv; try { inv = raiseInvoice({ customer: o.customer, gstin: client?.gstin || undefined, orderNo: o.no, batch: batch?.name, lines }); } catch (e) { alert((e as Error).message); return; }
     if (batch) batchesSig.value = batchesSig.value.map((b) => (b.id === batch.id ? { ...b, invoiceNo: inv.no } : b)); else patchOrder(o, { invoiced: true });
