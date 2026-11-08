@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Disclosure, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
@@ -155,13 +155,17 @@ function SpoolEdit({ s, done }: { s: Spool; done: () => void }) {
     </div>
   </div>;
 }
+const MAT_C: [RegExp, string][] = [[/cf|carbon|gf|glass/i, "#a1a1aa"], [/petg/i, "#60a5fa"], [/pla/i, "#4ade80"], [/abs/i, "#fb923c"], [/asa/i, "#f87171"], [/tpu|tpe|flex/i, "#c084fc"], [/pa|nylon/i, "#facc15"], [/pc|polycarb/i, "#2dd4bf"]];
+const matC = (m: string) => MAT_C.find(([r]) => r.test(m))?.[1] ?? "#8e8e93";
+const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
-  return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col">
+  const mc = matC(h.material);
+  return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col" style={{ borderLeft: `3px solid ${mc}` }}>
     <div class="flex items-center gap-2.5">
       <button class="w-5 h-5 !min-h-0 rounded-full border border-line shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
       <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="t-meta truncate">{h.brand || "—"}</div></div>
-      <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md bg-c1 text-c2">{h.material}</span>
+      <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md" style={{ color: mc, background: `color-mix(in srgb, ${mc} 14%, transparent)` }}>{h.material}</span>
     </div>
     {hexOpen && <div class="flex items-center gap-2 mt-2 pop-in">
       <input type="color" class="w-6 h-6 !min-h-0 p-0 border-0 bg-transparent cursor-pointer" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#888888"} onChange={(e) => setHex(list, (e.target as HTMLInputElement).value)} aria-label="Pick colour" />
@@ -276,17 +280,26 @@ export function Filament() {
         <Stat value={tot.filter((s) => s.grams > 0).length} label="spools in stock" />
         <Stat value={tot.filter((s) => s.grams < 250).length} label="low or out" />
       </div>
+      {(() => { const ms = (mat === "all" ? mats : [mat]).filter((m) => shown.some((s) => s.material === m)); return ms.length > 1 && <nav class="sticky top-0 z-20 bg-canvas -mx-1 px-1 py-2 flex gap-1.5 overflow-x-auto border-b border-line">
+        {ms.map((m) => <button key={m} class="shrink-0 inline-flex items-center gap-1.5 h-7 !min-h-0 px-2.5 rounded-full border border-line bg-c0 text-[12px] font-semibold" onClick={() => document.getElementById(matId(m))?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+          <i class="w-2 h-2 rounded-full" style={{ background: matC(m) }} />{m}<span class="text-c2 font-medium">{shown.filter((s) => s.material === m).length}</span></button>)}
+      </nav>; })()}
       {(mat === "all" ? mats : [mat]).map((m) => {
         const sp = shown.filter((s) => s.material === m);
         if (!sp.length) return null;
-        const g = tot.filter((s) => s.material === m).reduce((s, x) => s + x.grams, 0);
+        const g = tot.filter((s) => s.material === m).reduce((s, x) => s + x.grams, 0); const mc = matC(m);
         return (
-          <Disclosure key={m} open title={<span class="inline-flex items-center gap-2">{m}<span class="t-meta font-normal">{sp.length} spools</span>{g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}</span>}
-            meta={`${(g / 1000).toFixed(2)} kg · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}>
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
-                {groupSpools(sp).map((gs) => <SpoolCard key={gs[0].id} list={gs} open={r.open} />)}
-              </div>
-          </Disclosure>
+          <section key={m} id={matId(m)} class="scroll-mt-12">
+            <div class="sticky top-11 z-10 bg-canvas flex items-center gap-2 py-2" style={{ borderBottom: `2px solid ${mc}` }}>
+              <b class="text-[14px] tracking-[0.04em]" style={{ color: mc }}>{m}</b>
+              <span class="t-meta">{sp.length} spools</span>
+              {g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}
+              <span class="ml-auto t-meta num whitespace-nowrap">{(g / 1000).toFixed(2)} kg net · {inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 mt-2">
+              {groupSpools(sp).map((gs) => <SpoolCard key={gs[0].id} list={gs} open={r.open} />)}
+            </div>
+          </section>
         );
       })}
       {!shown.length && <Card><p class="text-sm text-c3 text-center py-6">No spools match these filters.</p></Card>}
