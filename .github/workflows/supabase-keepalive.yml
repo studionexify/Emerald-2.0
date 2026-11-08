@@ -15,6 +15,7 @@ jobs:
           URL: ${{ secrets.SUPABASE_URL }}
           KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          curl -fsS -X POST "$URL/rest/v1/rpc/beat" \
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "::error::Add SUPABASE_URL and SUPABASE_ANON_KEY under Settings → Secrets and variables → Actions"; exit 1; fi
+          curl -fsS --retry 3 --retry-delay 20 -X POST "$URL/rest/v1/rpc/beat" \
             -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" -d '{}' -o /dev/null -w "HTTP %{http_code}\n"
