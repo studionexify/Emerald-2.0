@@ -4,6 +4,7 @@ import { Button, Card, CardTitle, Field, Icon, inputCls, isPhone, KV, Page, Shee
 import { navigate } from "../router";
 import { Reveal } from "../ui/disclose";
 import { createOrder, type Delivery, inr, spoolsSig, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
+import { ladder, machineRate, nexcal, nexcalSig, nexres, nexresSig, NEXCAL_DEFAULTS, NEXRES_DEFAULTS, type NexcalSettings, type NexResSettings } from "../data/pricing";
 
 type Fields = Record<string, number>;
 function useFields(init: Fields) {
@@ -141,22 +142,6 @@ function DeliveryFields({ q, setQ }: { q: Quote; setQ: (q: Quote) => void }) {
   );
 }
 
-/** Machine/power/GST change rarely: kept off the form, edited in a sheet. */
-function RatesSheet({ children, summary }: { children: preact.ComponentChildren; summary: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button type="button" onClick={() => setOpen(true)} class="w-full min-h-11 md:min-h-8 flex items-center justify-between gap-2 text-[13px] cursor-pointer">
-        <span class="font-semibold">Adjust machine rates</span><span class="t-meta num whitespace-nowrap inline-flex items-center gap-1">{summary}<Icon name="right" size={11} /></span>
-      </button>
-      <Sheet open={open} onClose={() => setOpen(false)} title="Machine rates · this quote" footer={<Button onClick={() => setOpen(false)}>Done</Button>}>
-        <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div>
-        <p class="t-meta mt-3">Changes here apply to this quote only. <a class="underline" href="/calculator/settings">Edit studio defaults</a></p>
-      </Sheet>
-    </>
-  );
-}
-
 function Shell({ children, bar }: { children: preact.ComponentChildren; bar: preact.ComponentChildren }) {
   return (
     <Page title="Calculator" sub="Price a job before you quote it" tabs={CALC_TABS} actions={isPhone.value ? bar : undefined}>
@@ -168,14 +153,13 @@ function Shell({ children, bar }: { children: preact.ComponentChildren; bar: pre
 export function Nexcal() {
   const [mode, setMode] = useState<"direct" | "upload">("direct");
   const [q, setQ] = useState<Quote>(blankQ);
-  const [v, b, setV] = useFields({ grams: 120, perKg: rate("pla"), hours: 5, machine: rate("machine"), power: rate("power"), labour: rate("labour") / 2, packing: rate("packingDefault"), margin: rate("margin"), gst: rate("gst"), qty: 1, support: 15 });
-  const g = v.grams * (q.supports ? 1 + v.support / 100 : 1);
-  const material = (g / 1000) * v.perKg, machine = v.hours * (v.machine + v.power);
-  const cost = material + machine + v.labour + v.packing;
-  const pre = cost * (1 + v.margin / 100), price = pre * (1 + v.gst / 100);
+  const ns = nexcalSig.value;
+  const [v, b, setV] = useFields({ grams: 120, perKg: rate("pla"), hours: 5, finishing: 15, packing: rate("packingDefault"), margin: ns.defaultMarginPercent, qty: 1, support: 15 });
+  const r = nexcal(ns, { grams: v.grams, hours: v.hours, qty: v.qty, perKg: v.perKg, finishingMin: v.finishing, extras: v.packing, marginPct: v.margin, supportPct: q.supports ? v.support : 0 });
   const freight = q.delivery.method === "courier" ? q.delivery.freight ?? 0 : 0;
-  const total = price * v.qty + freight;
-  const rows: Rows = [[q.supports ? `Material (incl. ${v.support}% supports)` : "Material", material], ["Machine + power", machine], ["Labour & finishing", v.labour], ["Packaging", v.packing], ["Cost per unit", cost], [`Margin ${v.margin}%`, pre - cost], [`GST ${v.gst}%`, price - pre], ...(freight ? [["Freight", freight] as [string, number]] : []), [`Total ×${v.qty}`, total]];
+  const total = r.withGst + freight, price = r.unitPrice * (1 + ns.gstPercent / 100);
+  const rows: Rows = [[`Material ×${ns.materialEfficiencyFactor} efficiency${q.supports ? ` +${v.support}% supports` : ""}`, r.material], [`Machine ₹${machineRate(ns)}/h`, r.machine], [`Finishing ${v.finishing} min`, r.labour], ["Packaging & extras", r.extras], ["Cost per unit", r.unitCost],
+    ...(r.discountPct ? [[`Bulk tier −${r.discountPct}%`, -r.totalCost / (1 - v.margin / 100) * r.discountPct / 100] as [string, number]] : []), [`Margin ${r.actualMargin}%${r.actualMargin < r.floor ? " ⚠ below floor" : ""}`, r.price - r.totalCost], [`GST ${ns.gstPercent}%`, r.gst], ...(freight ? [["Freight", freight] as [string, number]] : []), [`Total ×${v.qty}`, total]];
   const create = useQuote(price, v.qty);
   return (
     <Shell bar={<PhoneTotal rows={rows} price={total} q={q} create={create} />}>
@@ -205,17 +189,11 @@ export function Nexcal() {
           ["Delivery & price", `${({ pickup: "Pickup", hand: "Hand delivery", courier: "Courier" })[q.delivery.method]} · ${v.margin}% margin`, <>
             <DeliveryFields q={q} setQ={setQ} />
             <div class="grid grid-cols-3 gap-x-3 gap-y-2.5">
-              <U label="Labour" unit="₹" b={b("labour")} />
-              <U label="Packaging" unit="₹" b={b("packing")} />
-              <U label="Margin" unit="%" b={b("margin")} />
+              <U label="Finishing" unit="min" b={b("finishing")} />
+              <U label="Packaging/extras" unit="₹" b={b("packing")} />
+              <U label="Margin (of price)" unit="%" b={b("margin")} />
             </div>
-            <div class="mt-2 border-t border-line">
-              <RatesSheet summary={`₹${v.machine + v.power}/h · GST ${v.gst}%`}>
-                <U label="Machine depreciation" unit="₹/h" b={b("machine")} />
-                <U label="Electricity" unit="₹/h" b={b("power")} />
-                <U label="GST" unit="%" b={b("gst")} />
-              </RatesSheet>
-            </div>
+            <p class="t-meta mt-2">Machine ₹{machineRate(ns)}/h ({ns.printTimeRateMode}) · labour ₹{ns.labourHourlyRate}/h · GST {ns.gstPercent}% — edit in Pricing settings.</p>
           </>],
         ]} />
       </Card>
@@ -226,43 +204,45 @@ export function Nexcal() {
 
 export function NexRes() {
   const [q, setQ] = useState<Quote>(blankQ);
-  const [v, b] = useFields({ ml: 180, perL: rate("resin"), parts: 6, hours: 4, machine: rate("resinMachine"), ipa: rate("ipa"), labour: rate("labour") * 0.8, margin: rate("resinMargin"), gst: rate("gst") });
-  const plate = (v.ml / 1000) * v.perL + v.hours * v.machine + v.ipa + v.labour;
-  const perPart = plate / Math.max(1, v.parts);
-  const pre = perPart * (1 + v.margin / 100), price = pre * (1 + v.gst / 100);
-  const rows: Rows = [["Plate cost", plate], ["Cost per part", perPart], ["Price per part (ex-GST)", pre]];
-  const create = useQuote(price, 1);
+  const rs = nexresSig.value;
+  const [v, b] = useFields({ ml: 150, perL: rs.resins[0]?.priceL ?? rate("resin"), upp: 12, hours: 6, qty: 12, margin: rs.defaultMarginPercent });
+  const inp = { ml: v.ml, hrs: v.hours, resinPriceL: v.perL, unitsPerPlate: v.upp, qty: v.qty, marginPct: v.margin };
+  const r = nexres(rs, inp);
+  const atCap = r.wastedSlots > 0 ? nexres(rs, { ...inp, qty: r.capacity }) : null;
+  const rows: Rows = [["Resin + waste", r.lines.resin * r.plates], ["Labour", r.lines.labour * r.plates], ["Machine, LCD, FEP, station, IPA, power, misc", (r.plateDirect - r.lines.resin - r.lines.labour) * r.plates],
+    ["Packaging", r.packaging], [`Failure allowance ${rs.failPct}% (estimated)`, r.failure], [`Overhead ${rs.overheadPct}%`, r.overhead], ["Total cost", r.totalCost],
+    ...(r.discountPct ? [[`Tier discount −${r.discountPct}%`, r.price - r.listPrice] as [string, number]] : []), [`Margin ${r.actualMargin}%${r.actualMargin < r.floor ? " ⚠ below floor" : ""}`, r.price - r.totalCost], [`Total ×${v.qty} incl. GST`, r.withGst]];
+  const create = useQuote(r.withGst / Math.max(1, v.qty), v.qty);
   return (
-    <Shell bar={<PhoneTotal rows={rows} price={price} q={q} create={create} />}>
+    <Shell bar={<PhoneTotal rows={rows} price={r.withGst} q={q} create={create} />}>
       <Card>
-        <CardTitle>NexRes · Resin price per plate</CardTitle>
+        <CardTitle>NexRes · Resin</CardTitle>
         <Steps steps={[
-          ["Client & specs", `${q.customer || "New client"} · ${v.ml} ml`, <>
+          ["Client & plate", `${q.customer || "New client"} · ${v.ml} ml · ${v.hours} h`, <>
             <ClientFields q={q} setQ={setQ} />
             <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
               <U label="Resin per plate" unit="ml" b={b("ml")} />
+              <U label="Plate print time" unit="h" b={b("hours")} />
+              <Field label="Resin"><select class={inputCls} onChange={(e) => b("perL").onInput({ target: { value: (e.target as HTMLSelectElement).value } } as any)}>{rs.resins.map((x) => <option key={x.name} value={x.priceL} selected={x.priceL === v.perL}>{x.name} · ₹{x.priceL}/L</option>)}</select></Field>
               <U label="Resin price" unit="₹/L" b={b("perL")} />
             </div>
           </>],
-          ["Print parameters", `${v.parts} parts · ${v.hours} h`, (
-            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
-              <U label="Parts per plate" unit="pcs" b={b("parts", "numeric")} />
-              <U label="Plate time" unit="h" b={b("hours")} />
-              <U label="Machine depreciation" unit="₹/h" b={b("machine")} />
+          ["Quantity", `${v.qty} pcs · ${v.upp}/plate · ${r.plates} plate${r.plates > 1 ? "s" : ""}`, <>
+            <div class="grid grid-cols-3 gap-x-3 gap-y-2.5">
+              <U label="Units per plate" unit="pcs" b={b("upp", "numeric")} />
+              <U label="Quantity" unit="pcs" b={b("qty", "numeric")} />
+              <U label="Margin (of price)" unit="%" b={b("margin")} />
             </div>
-          )],
-          ["Pricing & commercials", `${v.margin}% margin · ${v.gst}% GST`, <>
-            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
-              <U label="IPA & gloves" unit="₹" b={b("ipa")} />
-              <U label="Labour & curing" unit="₹" b={b("labour")} />
-              <U label="Margin" unit="%" b={b("margin")} />
-              <U label="GST" unit="%" b={b("gst")} />
-            </div>
-            <div class="md:hidden mt-3"><Breakdown rows={rows} /></div>
+            {atCap && <p class="mt-2 text-xs rounded-xl bg-c1 p-2"><b>{r.wastedSlots} empty plate slot{r.wastedSlots > 1 ? "s" : ""}.</b> At {r.capacity} pcs the price per item drops from {inr(r.pricePerItem)} to {inr(atCap.pricePerItem)} — free, not a discount.</p>}
           </>],
+          ["Quantity ladder", `cost/item ${inr(r.costPerItem)} · price/item ${inr(r.pricePerItem)}`, (
+            <table class="w-full text-xs num"><thead><tr class="text-left t-meta"><th>Qty</th><th class="text-right">Cost/item</th><th class="text-right">Price/item</th><th class="text-right">Margin</th></tr></thead>
+              <tbody>{ladder(rs, inp).map((l) => <tr key={l.qty}><td>{l.qty}</td><td class="text-right">{inr(l.costPerItem)}</td><td class="text-right">{inr(l.pricePerItem)}</td><td class="text-right">{l.actualMargin}%</td></tr>)}</tbody></table>
+          )],
         ]} />
+        <p class="t-meta mt-2">Failure {rs.failPct}% and finishing {rs.minPerMl} min/ml are estimates, not measurements — edit in Pricing settings.</p>
       </Card>
-      <Result price={price} rows={rows} q={q} create={create} />
+      <Result price={r.withGst} rows={rows} q={q} create={create} />
     </Shell>
   );
 }
@@ -289,8 +269,28 @@ export function RatesEditor() {
   );
 }
 
+function NumGrid<T extends Record<string, any>>({ sig, defaults, title }: { sig: { value: T }; defaults: T; title: string }) {
+  const keys = Object.keys(defaults).filter((k) => typeof defaults[k] === "number");
+  return (
+    <Card>
+      <CardTitle>{title}</CardTitle>
+      <div class="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+        {keys.map((k) => <Field key={k} label={k.replace(/([A-Z])/g, " $1").toLowerCase()}><input class={inputCls} type="number" inputMode="decimal" value={sig.value[k] ?? defaults[k]} onInput={(e) => (sig.value = { ...sig.value, [k]: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>)}
+      </div>
+      <Button class="mt-3" variant="outline" onClick={() => (sig.value = defaults)}>Reset {title}</Button>
+    </Card>
+  );
+}
 export function PricingSettings() {
-  return <Page title="Calculator" sub="Rates every quote uses — same list as Settings → Rates & prices" tabs={CALC_TABS}><RatesEditor /></Page>;
+  const ns = nexcalSig.value;
+  return (
+    <Page title="Calculator" sub="Engine settings, then the rates every quote and consumption cost uses" tabs={CALC_TABS}>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" checked={ns.printTimeRateMode === "manual"} onChange={() => (nexcalSig.value = { ...ns, printTimeRateMode: ns.printTimeRateMode === "manual" ? "auto" : "manual" })} /> Type the FDM machine rate by hand (otherwise derived: ₹{machineRate(ns)}/h)</label>
+      <NumGrid<NexcalSettings> sig={nexcalSig} defaults={NEXCAL_DEFAULTS} title="Nexcal · FDM" />
+      <NumGrid<NexResSettings> sig={nexresSig} defaults={NEXRES_DEFAULTS} title="NexRes · Resin" />
+      <RatesEditor />
+    </Page>
+  );
 }
 
 /* ---- Geometry estimation: STL (binary/ASCII) volume via signed tetrahedra; OBJ via faces. STEP needs the server-side kernel. */

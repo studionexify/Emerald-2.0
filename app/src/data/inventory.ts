@@ -8,10 +8,12 @@ import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spo
 /** Persisted list that fills new fields from the seed (by id) so old saved rows gain them. */
 const SEED_V = "3";
 let fresh = false;
-try { fresh = localStorage.getItem("emerald:seedv") !== SEED_V; } catch {}
+let real = false;
+try { fresh = localStorage.getItem("emerald:seedv") !== SEED_V; real = !!localStorage.getItem("emerald:e1"); } catch {}
 /** Persisted list. On a new sample-data version, sample rows are refreshed; rows you added are kept. */
 function list<T extends { id: string }>(key: string, seed: T[], fill: Partial<T> = {}): Signal<T[]> {
-  const s = persisted<T[]>(key, seed);
+  const s = persisted<T[]>(key, real ? [] : seed);
+  if (real) return s; // migrated studio data: sample rows never come back
   s.value = fresh ? [...seed.map((r) => ({ ...fill, ...r })), ...s.value.filter((r) => !seed.some((x) => x.id === r.id))]
     : s.value.map((r) => ({ ...fill, ...(seed.find((x) => x.id === r.id) ?? {}), ...r }));
   return s;
@@ -26,6 +28,9 @@ export const qcSig = list<QcEntry>("qc", M.qc);
 export const packRecSig = list<PackRecord>("packRecords", XX.packRecords as PackRecord[]);
 export const tasksSig = list<Task>("tasks", M.tasks);
 export const binSig = persisted<Binned[]>("bin", M.bin);
+/** The Bin keeps a deletion for 7 days, then it is gone for good (blueprint 18). */
+export const BIN_DAYS = 7;
+{ const cut = new Date(Date.now() - BIN_DAYS * 864e5).toISOString().slice(0, 10); if (binSig.value.some((b) => b.deletedAt < cut)) binSig.value = binSig.value.filter((b) => b.deletedAt >= cut); }
 export type Client = { id: string; name: string; kind: string; phone: string; email?: string; city: string; address?: string; gstin: string; medium: string; notes?: string; active?: boolean };
 export const clientsSig = list<Client>("clients", XX.clients.map(({ orders: _o, value: _v, ...c }) => ({ ...c, active: true })));
 

@@ -12,12 +12,13 @@ export type Invoice = {
   id: string; kind: "invoice" | "credit"; no: string; date: string; customer: string; gstin?: string; address?: string;
   orderNo?: string; batch?: string; lines: InvLine[]; gstRate: number; interstate: boolean;
   status: "issued" | "cancelled"; paidOn?: string; paidAccount?: string; against?: string; note?: string;
+  shipTo?: string; contact?: string; pos?: string; shipping?: number;
 };
-export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded" };
+export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string };
 export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string };
-export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number }[] };
+export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number; qty?: number; unit?: string }[]; stockApplied?: string };
 export type Account = { id: string; name: string; opening: number };
-export type MoneyKind = "receipt" | "expense" | "transfer_out" | "transfer_in" | "capital_in" | "drawings" | "loan_taken" | "loan_repayment" | "asset_purchase" | "other_income" | "advance";
+export type MoneyKind = "receipt" | "expense" | "transfer_out" | "transfer_in" | "capital_in" | "drawings" | "loan_taken" | "loan_repayment" | "asset_purchase" | "other_income" | "advance" | "tax_payment";
 export type MoneyEntry = { id: string; date: string; account: string; kind: MoneyKind; amount: number; note: string; ref?: string; pair?: string; source?: string };
 export type Goal = { id: string; title: string; metric: GoalMetric; start: string; end: string; period: string; target: number; manual?: number; note: string; archived: boolean };
 export type GoalMetric = "revenue" | "collection" | "profit" | "expense_cap" | "orders" | "margin_pct" | "custom";
@@ -30,12 +31,12 @@ export type StatementLine = { id: string; account: string; date: string; text: s
 export type GstMonth = { r1: boolean; r3b: boolean; locked: boolean };
 
 /* ---------------------------------------------------------------- seeds */
-const L = (desc: string, qty: number, r: number, hsn = "3926"): InvLine => ({ desc, hsn, qty, rate: r });
+const L = (desc: string, qty: number, r: number, hsn = "491199"): InvLine => ({ desc, hsn, qty, rate: r });
 const seedInvoices: Invoice[] = [
-  { id: "i4", kind: "invoice", no: "B/26-27/0058", date: "2026-08-14", customer: "Paper Lane Stationery", gstin: "24AAKFP1234M1Z2", orderNo: "EM-1022", lines: [L("Desk organiser", 100, 500)], gstRate: 18, interstate: false, status: "issued" },
-  { id: "i3", kind: "invoice", no: "B/26-27/0059", date: "2026-09-22", customer: "Gift Box Co.", gstin: "24AAGCG5678K1Z9", orderNo: "EM-1029", lines: [L("Logo coaster", 250, 109.32)], gstRate: 18, interstate: true, status: "issued" },
-  { id: "i2", kind: "invoice", no: "B/26-27/0060", date: "2026-10-18", customer: "Kabir Joshi", orderNo: "EM-1036", lines: [L("Cosplay helmet", 1, 5508)], gstRate: 18, interstate: false, status: "issued", paidOn: "2026-10-20", paidAccount: "ba1" },
-  { id: "i1", kind: "invoice", no: "B/26-27/0061", date: "2026-11-01", customer: "Neha Patel", orderNo: "EM-1037", lines: [L("Planter set", 3, 592.33)], gstRate: 18, interstate: false, status: "issued", paidOn: "2026-11-01", paidAccount: "ba1" },
+  { id: "i4", kind: "invoice", no: "B-058", date: "2026-08-14", customer: "Paper Lane Stationery", gstin: "24AAKFP1234M1Z2", orderNo: "EM-1022", lines: [L("Desk organiser", 100, 500)], gstRate: 18, interstate: false, status: "issued" },
+  { id: "i3", kind: "invoice", no: "B-059", date: "2026-09-22", customer: "Gift Box Co.", gstin: "24AAGCG5678K1Z9", orderNo: "EM-1029", lines: [L("Logo coaster", 250, 109.32)], gstRate: 18, interstate: true, status: "issued" },
+  { id: "i2", kind: "invoice", no: "B-060", date: "2026-10-18", customer: "Kabir Joshi", orderNo: "EM-1036", lines: [L("Cosplay helmet", 1, 5508)], gstRate: 18, interstate: false, status: "issued", paidOn: "2026-10-20", paidAccount: "ba1" },
+  { id: "i1", kind: "invoice", no: "B-061", date: "2026-11-01", customer: "Neha Patel", orderNo: "EM-1037", lines: [L("Planter set", 3, 592.33)], gstRate: 18, interstate: false, status: "issued", paidOn: "2026-11-01", paidAccount: "ba1" },
 ];
 const seedQuotes: Quote[] = X.quotes.map((q) => ({ id: q.id, no: q.no, date: q.date, customer: q.customer, lines: [L("As quoted", 1, Math.round(q.value / 1.18))], gstRate: 18, valid: q.valid, outcome: q.outcome as Quote["outcome"] }));
 const seedExpenses: Expense[] = [
@@ -52,13 +53,13 @@ const seedAccounts: Account[] = [{ id: "ba1", name: "HDFC Current ··4421", ope
 const seedMoney: MoneyEntry[] = [
   { id: "m1", date: "2026-04-01", account: "ba1", kind: "capital_in", amount: 50000, note: "Capital introduced" },
   { id: "m2", date: "2026-07-10", account: "ba1", kind: "drawings", amount: -40000, note: "Drawings" },
-  { id: "m3", date: "2026-10-20", account: "ba1", kind: "receipt", amount: 6499, note: "Kabir Joshi", ref: "B/26-27/0060" },
+  { id: "m3", date: "2026-10-20", account: "ba1", kind: "receipt", amount: 6499, note: "Kabir Joshi", ref: "B-060" },
   { id: "m4", date: "2026-10-30", account: "ba1", kind: "expense", amount: -11250, note: "Bambu Store India", ref: "e1" },
   { id: "m5", date: "2026-10-31", account: "ba1", kind: "expense", amount: -2860, note: "MGVCL", ref: "e2" },
   { id: "m6", date: "2026-10-28", account: "ba1", kind: "expense", amount: -1179, note: "Jio Fiber", ref: "e3" },
   { id: "m7", date: "2026-10-25", account: "ba2", kind: "expense", amount: -1840, note: "Delhivery", ref: "e4" },
   { id: "m8", date: "2026-10-31", account: "ba1", kind: "advance", amount: 25000, note: "Advance · Paper Lane", ref: "EM-1041" },
-  { id: "m9", date: "2026-11-01", account: "ba1", kind: "receipt", amount: 2097, note: "Neha Patel", ref: "B/26-27/0061" },
+  { id: "m9", date: "2026-11-01", account: "ba1", kind: "receipt", amount: 2097, note: "Neha Patel", ref: "B-061" },
   { id: "m10", date: "2026-10-29", account: "ba1", kind: "transfer_out", amount: -5000, note: "To cash", pair: "t1" },
   { id: "m11", date: "2026-10-29", account: "ba2", kind: "transfer_in", amount: 5000, note: "From HDFC", pair: "t1" },
   { id: "m12", date: "2026-05-02", account: "ba1", kind: "asset_purchase", amount: -84999, note: "Bambu P1S Combo", ref: "fa1" },
@@ -109,21 +110,38 @@ export const fyOf = (d: string) => { const [y, m] = d.split("-").map(Number); co
 export const fyWindow = (fy: string): [string, string] => { const s = Number(fy.slice(0, 4)); return [`${s}-04-01`, `${s + 1}-03-31`]; };
 export const inWin = (d: string, [a, b]: [string, string]) => d >= a && d <= b;
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+/** Invoice arithmetic as printed: half-GST per head rounded to paise, shipping added, total rounded to the rupee (round-off shown). */
 export function invTax(i: Invoice) {
   const taxable = r2(i.lines.reduce((s, l) => s + l.qty * l.rate, 0));
-  const gst = r2((taxable * i.gstRate) / 100);
-  const sign = i.kind === "credit" ? -1 : 1;
-  const live = i.status === "issued" ? 1 : 0;
-  return { taxable: sign * live * taxable, cgst: sign * live * (i.interstate ? 0 : r2(gst / 2)), sgst: sign * live * (i.interstate ? 0 : r2(gst / 2)), igst: sign * live * (i.interstate ? gst : 0), total: sign * live * r2(taxable + gst) };
+  const half = r2((taxable * i.gstRate) / 200);
+  const gst = i.interstate ? r2((taxable * i.gstRate) / 100) : r2(half * 2);
+  const ship = r2(i.shipping ?? 0);
+  const exact = r2(taxable + gst + ship), total = Math.round(exact);
+  const k = (i.kind === "credit" ? -1 : 1) * (i.status === "issued" ? 1 : 0);
+  return { taxable: k * taxable, cgst: k * (i.interstate ? 0 : half), sgst: k * (i.interstate ? 0 : half), igst: k * (i.interstate ? gst : 0), shipping: k * ship, roundOff: k * r2(total - exact), total: k * total };
 }
 
-/** Gapless series per FY: next number = highest issued + 1 (cancelled invoices keep their number). */
+/** Financial-year letter: Apr 2025–Mar 2026 = A, Apr 2026–Mar 2027 = B (the studio's existing series). */
+export function fyLetter(d: string) {
+  const i = Number(fyOf(d).slice(0, 4)) - 2025;
+  if (i < 0 || i > 25) throw new Error(`No series letter for the financial year of ${d}`);
+  return String.fromCharCode(65 + i);
+}
+export const seriesPrefix = (kind: "invoice" | "credit", date = today()) => (kind === "credit" ? `CN-${fyLetter(date)}-` : `${fyLetter(date)}-`);
+const seqOf = (no: string, prefix: string) => (no.startsWith(prefix) && /^\d+$/.test(no.slice(prefix.length)) ? Number(no.slice(prefix.length)) : 0);
+/** Invoices: A-001… per FY, gapless, cancelled numbers kept. Quotes: Q-B-08-001…, restarting each month. */
 export function nextNo(kind: "invoice" | "credit" | "quote", date = today()) {
-  const fy = fyOf(date), short = `${fy.slice(2, 4)}-${fy.slice(5)}`;
-  if (kind === "quote") { const n = Math.max(0, ...quotesSig.value.map((q) => Number(q.no.split("-").pop()))) + 1; return `Q-B-${String(n).padStart(4, "0")}`; }
-  const prefix = kind === "credit" ? `CN/${short}/` : `B/${short}/`;
-  const n = Math.max(0, ...invoicesSig.value.filter((i) => i.no.startsWith(prefix)).map((i) => Number(i.no.slice(prefix.length)))) + 1;
-  return prefix + String(n).padStart(4, "0");
+  if (kind === "quote") {
+    const prefix = `Q-${fyLetter(date)}-${date.slice(5, 7)}-`;
+    return prefix + String(Math.max(0, ...quotesSig.value.map((q) => seqOf(q.no, prefix))) + 1).padStart(3, "0");
+  }
+  const prefix = seriesPrefix(kind, date);
+  return prefix + String(Math.max(0, ...invoicesSig.value.map((i) => seqOf(i.no, prefix))) + 1).padStart(3, "0");
+}
+/** A new invoice may not be dated before the latest one in its series (B-017 cannot predate B-016). */
+export function seriesLatest(kind: "invoice" | "credit", date = today()) {
+  const prefix = seriesPrefix(kind, date);
+  return invoicesSig.value.filter((i) => seqOf(i.no, prefix)).reduce((m, i) => (i.date > m ? i.date : m), "");
 }
 
 let logFn: (a: string, t: string, k?: "order" | "stock" | "consumption" | "money") => void = () => {};
@@ -132,7 +150,9 @@ export const setLogger = (f: typeof logFn) => (logFn = f);
 /* ---------------------------------------------------------------- invoice actions */
 export function raiseInvoice(d: { customer: string; gstin?: string; orderNo?: string; batch?: string; lines: InvLine[]; interstate?: boolean; date?: string }) {
   const date = d.date ?? today();
-  const inv: Invoice = { id: uid(), kind: "invoice", no: nextNo("invoice", date), date, customer: d.customer, gstin: d.gstin, orderNo: d.orderNo, batch: d.batch, lines: d.lines, gstRate: rate("gst"), interstate: !!d.interstate, status: "issued" };
+  const latest = seriesLatest("invoice", date);
+  if (latest && date < latest) throw new Error(`An invoice in this series is already dated ${latest} — a new one cannot be dated earlier.`);
+  const inv: Invoice = { id: uid(), kind: "invoice", no: nextNo("invoice", date), date, customer: d.customer, gstin: d.gstin, orderNo: d.orderNo, batch: d.batch, lines: d.lines, gstRate: rate("gst"), interstate: d.interstate ?? (!!d.gstin && /^\d{2}/.test(d.gstin) && d.gstin.slice(0, 2) !== "24"), status: "issued" };
   invoicesSig.value = [...invoicesSig.value, inv]; logFn("Raised invoice", `${inv.no} · ${inv.customer}`, "money"); return inv;
 }
 export function updateInvoice(i: Invoice, p: Partial<Invoice>, what = "Edited invoice") { invoicesSig.value = invoicesSig.value.map((x) => (x.id === i.id ? { ...x, ...p } : x)); logFn(what, i.no, "money"); }
@@ -152,9 +172,9 @@ export function markUnpaid(i: Invoice) {
 }
 /** Renumber unpaid, uncancelled invoices of a series in date order (used to close an accidental gap). */
 export function resequence(fy: string) {
-  const short = `${fy.slice(2, 4)}-${fy.slice(5)}`, prefix = `B/${short}/`;
-  const list = invoicesSig.value.filter((i) => i.no.startsWith(prefix)).sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
-  const map = new Map(list.map((i, k) => [i.id, prefix + String(k + 1).padStart(4, "0")]));
+  const prefix = seriesPrefix("invoice", `${fy.slice(0, 4)}-04-01`);
+  const list = invoicesSig.value.filter((i) => seqOf(i.no, prefix)).sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
+  const map = new Map(list.map((i, k) => [i.id, prefix + String(k + 1).padStart(3, "0")]));
   invoicesSig.value = invoicesSig.value.map((i) => (map.has(i.id) ? { ...i, no: map.get(i.id)! } : i));
   logFn("Resequenced invoice series", prefix, "money");
 }
@@ -175,6 +195,22 @@ export function confirmBill(b: Bill, paidFrom: string | "") {
   expensesSig.value = [...expensesSig.value, e];
   if (paidFrom) moneySig.value = [...moneySig.value, { id: uid(), date: b.date, account: paidFrom, kind: "expense", amount: -b.total, note: b.vendor, ref: e.id, source: "purchases" }];
   logFn("Logged bill as expense", `${b.vendor} ${b.no}`, "money");
+  receiveStock(b);
+}
+/** Bill → stock: filament and packing lines with a quantity come into the stock ledger once (blueprint 12, receiving). */
+let applyMoveFn: ((m: import("../mock/types").Movement) => void) | null = null;
+export const setStockSink = (f: typeof applyMoveFn) => (applyMoveFn = f);
+export function receiveStock(b: Bill) {
+  if (b.stockApplied || !applyMoveFn || !/filament|packing/i.test(b.cat)) return 0;
+  const cat = /filament/i.test(b.cat) ? "filament" : "packing";
+  const rows = (b.lines ?? []).filter((l) => l.qty && l.qty > 0);
+  for (const l of rows) {
+    const kg = /kg/i.test(l.unit ?? "") || (cat === "filament" && !l.unit);
+    const qty = cat === "filament" ? (kg ? l.qty! * 1000 : l.qty!) : l.qty!;
+    applyMoveFn({ id: uid(), date: b.date, cat, item: l.desc, dir: "in", qty, unit: cat === "filament" ? "g" : l.unit || "pcs", unitCost: r2(l.amount / qty), vendor: b.vendor, notes: `Bill ${b.no}`, by: "Purchases" });
+  }
+  if (rows.length) billsSig.value = billsSig.value.map((x) => (x.id === b.id ? { ...x, stockApplied: today() } : x));
+  return rows.length;
 }
 export function addBill(file: { name: string; data?: string }) {
   const b: Bill = { id: uid(), vendor: "", no: "", date: today(), subtotal: 0, tax: 0, total: 0, cat: "Other", status: "needs_review", note: "Not read — type the figures (AI reader connects with the backend)", file: file.data, fy: `FY ${fyOf(today())}` };
@@ -312,7 +348,7 @@ export function books(fy: string) {
   const capital = op.capital + capitalIn - drawings + net;
   const suspense = r2(assetsSide - (capital + creditorsTot + loansOut));
   const cf = (kinds: string[]) => moneySig.value.filter((m) => kinds.includes(m.kind) && inWin(m.date, win)).reduce((s, m) => s + m.amount, 0);
-  const cashflow = { operating: cf(["receipt", "expense", "advance", "other_income"]), investing: cf(["asset_purchase"]), financing: cf(["capital_in", "drawings", "loan_taken", "loan_repayment"]) };
+  const cashflow = { operating: cf(["receipt", "expense", "advance", "other_income", "tax_payment"]), investing: cf(["asset_purchase"]), financing: cf(["capital_in", "drawings", "loan_taken", "loan_repayment"]) };
   const wastage = M.consumption.filter((c) => c.kind === "scrap").reduce((s, c) => s + c.cost, 0);
   return { sales, purchase, debtors, creditors, heads: [...heads].map(([head, amount], k) => ({ id: String(k), head, amount })), wastage, deps,
     pl: { salesTot, opening: op.stock, direct, closing: op.closingStock, gross, indirect, depTot, interest, net },

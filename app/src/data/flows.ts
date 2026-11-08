@@ -1,4 +1,4 @@
-/** Order types suggest a path; nothing is gated. Any order may move to any stage, forward or back. */
+/** Order types suggest a path. Forward moves pass each stage gate (see gateReason); backward moves need a reason. */
 import type { Batch, BatchStage, Order, OrderType, Stage } from "../mock/types";
 
 export const STAGE_ORDER: Stage[] = ["quotation", "po", "production", "qc", "packing", "invoice", "shipping", "archived"];
@@ -14,9 +14,9 @@ export const SUGGESTED: Record<OrderType, Stage[]> = {
   bulk: ["quotation", "po", "production", "qc", "packing", "invoice", "shipping", "archived"],
 };
 export const FLOW_NOTE: Record<OrderType, string> = {
-  inhouse: "Usually Production → QC → Packing → Archive · every stage still available",
-  client: "Pay on delivery · usually Quotation → … → Shipping → Archive · every stage available",
-  bulk: "Usually PO first, then batches each with their own QC, packing, invoice and dispatch · every stage available",
+  inhouse: "Usually Production → QC → Packing → Archive · gated stage by stage",
+  client: "Pay on delivery · usually Quotation → … → Shipping → Archive · gated stage by stage",
+  bulk: "Usually PO first, then batches each with their own QC, packing, invoice and dispatch · gated stage by stage",
 };
 
 export const BATCH_STAGES: BatchStage[] = ["production", "qc", "packing", "invoice", "shipping", "done"];
@@ -44,4 +44,26 @@ export function checks(o: Order, _b: Batch[]): Check[] {
     { label: "Tracking added", done: !!o.tracking, field: "tracking", action: "Record" },
     { label: "Paid", done: !!o.paid, field: "paid", action: "Record" },
   ];
+}
+
+/** Why an order may not leave its current stage going forward (Emerald 1 canAdvance), or null when it may.
+ *  Invoicing is ungated on purpose: the invoice is required, but only to archive. */
+export function gateReason(o: Order, batches: Batch[] = []): string | null {
+  const mine = batches.filter((b) => b.orderNo === o.no);
+  switch (o.stage) {
+    case "quotation": return o.approved ? null : o.type === "inhouse" ? "Approve the job card first — approval is where the production details get filled in." : "Approve the quotation first — approval is where the production details get filled in.";
+    case "po": return o.po ? null : "Record the customer's PO before production starts.";
+    case "production": return o.jobsDone || (mine.length > 0 && mine.every((b) => b.done >= b.units)) ? null : "Jobs are still on the floor — mark every print off before QC.";
+    case "qc": return o.qcLogged ? null : "Log at least one QC entry before packing.";
+    case "packing": return o.packed || o.skipPacking ? null : "Log the packing materials used before moving to invoicing.";
+    case "invoice": return null;
+    case "shipping": {
+      const handed = o.delivery && o.delivery.method !== "courier";
+      if (!o.tracking && !handed) return "Log the courier handover — tracking number and cost — before archiving.";
+      if (mine.length && mine.some((b) => b.stage !== "done")) return "Part of this order hasn't gone yet. Dispatch the rest before archiving.";
+      if (o.type !== "inhouse" && !o.invoiced) return "Raise the invoice before archiving — the rollup is finalised here.";
+      return null;
+    }
+    case "archived": return "Order is archived.";
+  }
 }
