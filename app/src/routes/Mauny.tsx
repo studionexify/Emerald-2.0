@@ -4,7 +4,7 @@ import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
 import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
-import { fyWindow, inWin, quotesSig, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate } from "../data";
+import { fyWindow, inWin, quotesSig, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate, moduleOf } from "../data";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaFile } from "../ui/media";
 import {
@@ -17,7 +17,7 @@ import {
 const FYS = ["2026-27", "2025-26"];
 function Shell({ title, sub, actions, toolbar, detail, children }: { title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
   useEffect(() => () => { inspectSig.value = null; }, []);
-  return <Page title={title} sub={sub} actions={actions} toolbar={toolbar} detail={detail || (inspectSig.value ? <Peeked /> : null)} tabs={isExternal() ? undefined : MAUNY_TABS}>{children}</Page>;
+  return <Page title={title} sub={sub} actions={actions} toolbar={toolbar} detail={detail || (inspectSig.value ? <Peeked /> : null)} tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))}>{children}</Page>;
 }
 const sm = "h-7 px-2.5 rounded-md bg-c0 border border-line text-xs font-medium";
 const FY = ({ v, on }: { v: string; on: (v: string) => void }) => <select aria-label="Financial year" class={sm} value={v} onChange={(e) => on((e.target as HTMLSelectElement).value)}>{FYS.map((f) => <option key={f} value={f}>FY {f}</option>)}</select>;
