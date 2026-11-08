@@ -116,7 +116,7 @@ function Dock() {
     : [NAV[0], NAV[1], NAV[2], NAV[4], { href: "/more", label: "More", icon: "grid" }].filter((n) => n.href === "/more" || can(moduleOf(n.href)));
   const moreOn = !items.filter((n) => n.href !== "/more").some((n) => isActive(path, n.href));
   return (
-    <nav class="md:hidden shrink-0 bg-c0 rounded-t-[22px] flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
+    <nav class="md:hidden relative z-30 isolate shrink-0 bg-c0 rounded-t-[22px] shadow-[0_-1px_0_var(--line)] [transform:translateZ(0)] flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
         return (
@@ -139,7 +139,7 @@ export function Frame({ children }: { children: ComponentChildren }) {
       <TopBar />
       <div class="flex-1 min-h-0 flex">
         <Sidebar />
-        <main class="flex-1 min-w-0 min-h-0 pr-[env(safe-area-inset-right)] md:pl-0 pl-[env(safe-area-inset-left)]">{children}</main>
+        <main class="overflow-hidden flex-1 min-w-0 min-h-0 pr-[env(safe-area-inset-right)] md:pl-0 pl-[env(safe-area-inset-left)]">{children}</main>
       </div>
       <Dock />
       <AskHost />

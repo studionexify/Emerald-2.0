@@ -102,15 +102,15 @@ export function Production() {
       </Section>
       <Section title="Machines" note={`${printersSig.value.filter((p) => p.active !== false).length} printers`}>
         <div class="listbox">
-          <div class="hidden md:grid grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 px-3 h-7 items-center t-meta uppercase tracking-[0.06em]"><span>Printer</span><span>Status</span><span class="text-right">Util</span><span class="text-right">Uptime</span><span class="text-right">Blocked</span><span class="text-right">Fail</span><span>Now</span></div>
+          <div class="hidden lg:grid grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 px-3 h-7 items-center t-meta uppercase tracking-[0.06em]"><span>Printer</span><span>Status</span><span class="text-right">Util</span><span class="text-right">Uptime</span><span class="text-right">Blocked</span><span class="text-right">Fail</span><span>Now</span></div>
           {printersSig.value.filter((p) => p.active !== false).map((p) => {
             const m = X.machineLog.find((x) => x.printer === p.name) ?? { util: 0, uptime: 100, lost: 0, fail: 0 };
             return (
-              <a key={p.id} href="#workshop" class="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 items-center px-3 py-2 md:py-0 md:h-9 hover:bg-c1/60 text-[13px]">
+              <a key={p.id} href="#workshop" class="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 items-center px-3 py-2 lg:py-1.5 lg:min-h-9 hover:bg-c1/60 text-[13px]">
                 <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{p.name}</span><span class="text-c3">{p.model}</span></span>
-                <Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>
-                <span class="hidden md:block num text-right">{m.util}%</span><span class="hidden md:block num text-right">{m.uptime}%</span><span class="hidden md:block num text-right">{m.lost}h</span><span class="hidden md:block num text-right">{m.fail}%</span>
-                <span class="hidden md:block t-meta truncate">{p.job ? `Printing ${p.job}` : `${p.hours} lifetime h`}</span>
+                <span><Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status></span>
+                <span class="hidden lg:block num text-right">{m.util}%</span><span class="hidden lg:block num text-right">{m.uptime}%</span><span class="hidden lg:block num text-right">{m.lost}h</span><span class="hidden lg:block num text-right">{m.fail}%</span>
+                <span class="hidden lg:block t-meta truncate">{p.job ? `Printing ${p.job}` : `${p.hours} lifetime h`}</span>
               </a>
             );
           })}

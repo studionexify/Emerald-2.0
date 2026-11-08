@@ -97,7 +97,7 @@ export function Alerts() {
           <Disclosure key={g} open={list.length > 0} title={<span class="inline-flex items-center gap-2">{g}{list.some((a) => a.t === "danger") && <span class="w-1.5 h-1.5 rounded-full bg-warn" />}</span>} meta={`${list.length} · ${list.filter((a) => a.t === "danger").length} critical`}>
             <ul class="-mx-3 border-t border-line">
               {[...list].sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t)).map((a, i) => (
-                <li key={i} class="border-t border-line first:border-0"><a href={a.href} class="flex items-center gap-3 h-9 px-3 hover:bg-c1/60 min-w-0"><span class={`w-1.5 h-1.5 rounded-full shrink-0 ${a.t === "danger" ? "bg-warn" : a.t === "warn" ? "bg-c4" : "bg-c2"}`} /><span class="text-[13px] min-w-0 truncate flex-1">{a.text}</span><span class="t-meta whitespace-nowrap">{tone[a.t] === "blocked" ? "Critical" : tone[a.t] === "waiting" ? "Action" : "Upcoming"}</span></a></li>
+                <li key={i} class="border-t border-line first:border-0"><a href={a.href} class="flex items-center gap-3 min-h-9 py-1.5 px-3 hover:bg-c1/60 min-w-0"><span class={`w-1.5 h-1.5 rounded-full shrink-0 ${a.t === "danger" ? "bg-warn" : a.t === "warn" ? "bg-c4" : "bg-c2"}`} /><span class="text-[13px] min-w-0 truncate flex-1">{a.text}</span><span class="t-meta whitespace-nowrap">{tone[a.t] === "blocked" ? "Critical" : tone[a.t] === "waiting" ? "Action" : "Upcoming"}</span></a></li>
               ))}
               {!list.length && <li class="t-meta px-3 py-2">All clear.</li>}
             </ul>
@@ -216,13 +216,13 @@ export function Users() {
         )}
         <Card class="!py-1">
           <Table rows={usersSig.value} rowKey={(m) => m.id} onRow={owner ? setEdit : undefined} cols={[
-            { key: "n", label: "Name", render: (m) => <b>{m.name}</b> },
+            { key: "n", label: "Name", render: (m) => <b class="whitespace-nowrap">{m.name}</b> },
             { key: "j", label: "Job", render: (m) => m.job || "—" },
             { key: "r", label: "Access", render: (m) => ROLE_LABEL[m.role] },
             { key: "l", label: "Login", render: (m) => <Status tone={m.login ? "done" : "idle"}>{m.login ? "Yes" : "No"}</Status> },
             { key: "e", label: "Email", render: (m) => m.email || "—", hideTablet: true },
             { key: "s", label: "Status", render: (m) => <Status tone={m.active ? "done" : "idle"}>{m.active ? "Active" : "Retired"}</Status> },
-            { key: "x", label: "", align: "right", render: (m) => owner && <span class="inline-flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
+            { key: "x", label: "", align: "right", render: (m) => owner && <span class="inline-flex justify-end gap-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
           ]} />
         </Card>
       </Section>
@@ -290,7 +290,7 @@ export function Search() {
         <div class="flex flex-col gap-2">
           {groups.filter(([, l]) => l.length).map(([g, l]) => (
             <Disclosure key={g} open title={g} meta={String(l.length)}>
-              <ul class="-mx-3 border-t border-line">{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-line first:border-0"><a href={r.href} class="flex items-center gap-3 h-9 px-3 hover:bg-c1/60 min-w-0"><span class="text-[13px] font-medium truncate">{r.t}</span><span class="t-meta ml-auto whitespace-nowrap capitalize">{r.d}</span></a></li>)}</ul>
+              <ul class="-mx-3 border-t border-line">{l.slice(0, 12).map((r) => <li key={r.k} class="border-t border-line first:border-0"><a href={r.href} class="flex items-center gap-3 min-h-9 py-1.5 px-3 hover:bg-c1/60 min-w-0"><span class="text-[13px] font-medium truncate">{r.t}</span><span class="t-meta ml-auto whitespace-nowrap capitalize">{r.d}</span></a></li>)}</ul>
             </Disclosure>
           ))}
         </div>

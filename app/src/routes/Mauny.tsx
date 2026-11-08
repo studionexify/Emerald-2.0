@@ -99,7 +99,7 @@ function Ledger({ acc, upto }: { acc: string; upto: string }) {
       {withBal.map(({ m, bal }) => {
         const div = m.date !== last ? (last = m.date, <div key={`d${m.date}`} class="px-3 h-6 flex items-center bg-c1/50 border-t border-line t-meta font-semibold">{new Date(m.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</div>) : null;
         return [div, (
-          <button key={m.id} onClick={() => peek(m)} class={`${cols} w-full text-left h-9 border-t border-line hover:bg-c1/60 cursor-pointer`}>
+          <button key={m.id} onClick={() => peek(m)} class={`${cols} w-full text-left min-h-9 py-1.5 border-t border-line hover:bg-c1/60 cursor-pointer`}>
             <span class="min-w-0 truncate font-medium">{m.note || "—"}{m.ref && <span class="t-meta ml-1.5">{m.ref}</span>}</span>
             <span class="hidden md:block t-meta truncate capitalize">{m.kind.replace("_", " ")}</span>
             <span class="num text-right">{m.amount < 0 ? inr(-m.amount) : ""}</span>
@@ -212,7 +212,7 @@ export function Finance() {
       </div>
       <SubTabs value={tab} onChange={setTab} items={[["today", `Do today (${doToday.length})`], ["expenses", "Expenses"], ["outstanding", "Outstanding by age"], ["receipts", "Receipts"]]} />
       <Card>
-        {tab === "today" && (doToday.length ? <ul class="text-[13px] -my-1">{doToday.map((t) => <li key={t} class="h-9 flex items-center border-t border-line first:border-0 truncate">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
+        {tab === "today" && (doToday.length ? <ul class="text-[13px] -my-1">{doToday.map((t) => <li key={t} class="min-h-9 py-1.5 flex items-center border-t border-line first:border-0 truncate">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
         {tab === "expenses" && <Table rows={[...expensesSig.value].filter((x) => x.date >= win[0] && x.date <= win[1]).sort((a, b) => b.date.localeCompare(a.date))} rowKey={(x) => x.id} onRow={peek} cols={[
           { key: "h", label: "Head", render: (x) => <b>{x.head}</b> }, { key: "d", label: "Date", render: (x) => shortDate(x.date) }, { key: "v", label: "Vendor", render: (x) => x.vendor },
           { key: "p", label: "Paid", card: "status", render: (x) => <Status tone={x.paid ? "done" : "waiting"}>{x.paid ? "Paid" : "Unpaid"}</Status> },
@@ -260,15 +260,15 @@ export function Goals() {
             const p = goalProgress(g, ordersSig.value);
             const fmt = (n: number) => (money(g.metric) ? inr(n) : g.metric === "margin_pct" ? `${n}%` : String(n));
             return (
-              <div key={g.id} class="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_minmax(0,170px)_110px_auto] gap-x-4 gap-y-1 items-center px-3 py-2 text-[13px]">
+              <div key={g.id} class="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_minmax(0,170px)_110px_auto] gap-x-4 gap-y-1 items-center px-3 py-2 text-[13px]">
                 <span class="min-w-0"><span class="block font-medium truncate">{g.title}</span><span class="block t-meta truncate">{GOAL_LABEL[g.metric]} · {g.period}{g.metric === "custom" ? " · by hand" : ""}{g.note ? ` · “${g.note}”` : ""}</span></span>
-                <span class="relative block col-span-2 md:col-span-1 order-last md:order-none">
+                <span class="relative block col-span-2 lg:col-span-1 order-last lg:order-none">
                   <span class="block h-1 rounded-full bg-c1 overflow-hidden"><span class={`block h-full rounded-full ${p.behind ? "bg-warn" : "bg-c4"}`} style={{ width: `${Math.min(100, p.pct)}%` }} /></span>
                   <span class="absolute -top-1 h-3 w-px bg-c3" style={{ left: `${Math.min(100, p.pace)}%` }} title="Where today sits in the window" />
                 </span>
-                <span class="hidden md:block num text-right whitespace-nowrap truncate">{fmt(p.value)} <span class="t-meta">of {fmt(g.target)} · {p.pct}%</span></span>
+                <span class="hidden lg:block num text-right">{fmt(p.value)} <span class="t-meta">of {fmt(g.target)} · {p.pct}%</span></span>
                 <span class="text-[11px] font-semibold whitespace-nowrap">{p.behind ? <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-warn" />{g.metric === "expense_cap" ? "Over pace" : "Behind pace"}</span> : <span class="text-c3">On track</span>}</span>
-                <span class="hidden md:flex gap-1 justify-end"><Button variant="ghost" class="!h-7 !px-2" onClick={() => setEdit(g)}>Edit</Button><Button variant="ghost" class="!h-7 !px-2" onClick={() => save({ ...g, archived: !g.archived })}>{g.archived ? "Restore" : "Archive"}</Button></span>
+                <span class="hidden lg:flex gap-1 justify-end"><Button variant="ghost" class="!h-7 !px-2" onClick={() => setEdit(g)}>Edit</Button><Button variant="ghost" class="!h-7 !px-2" onClick={() => save({ ...g, archived: !g.archived })}>{g.archived ? "Restore" : "Archive"}</Button></span>
               </div>
             );
           })}

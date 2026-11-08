@@ -48,7 +48,7 @@ export default function Dashboard() {
                 </button>); })}
             </div>
             {feed.length ? feed.slice(0, 8).map((x, i) => (
-              <a key={i} href={x.href} class="flex items-center gap-3 h-9 px-3 border-t border-line hover:bg-c1/60 min-w-0">
+              <a key={i} href={x.href} class="flex items-center gap-3 min-h-9 py-1.5 px-3 border-t border-line hover:bg-c1/60 min-w-0">
                 <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${x.t === "danger" ? "bg-warn" : x.t === "warn" ? "bg-c4" : "bg-c2"}`} />
                 <span class="text-[13px] min-w-0 truncate flex-1">{x.text}</span>
                 <span class="t-meta whitespace-nowrap">{x.g}</span>
