@@ -124,6 +124,31 @@ export function Printers() {
 }
 
 /* ================================================================ Filament */
+/** Similar spools (same material, colour, brand) share one card. */
+const groupSpools = (sp: Spool[]) => { const m = new Map<string, Spool[]>(); for (const s of sp) { const k = `${s.colour}|${s.brand}`.toLowerCase(); m.set(k, [...(m.get(k) ?? []), s]); } return [...m.values()].map((l) => l.sort((a, b) => a.spoolNo.localeCompare(b.spoolNo, undefined, { numeric: true }))); };
+const setHex = (list: Spool[], hex: string) => { const ids = new Set(list.map((x) => x.id)); spoolsSig.value = spoolsSig.value.map((x) => ids.has(x.id) ? { ...x, hex } : x); };
+function SpoolCard({ list, open }: { list: Spool[]; open: (s: Spool) => void }) {
+  const h = list[0]; const hex = spHex(h); const g = list.reduce((t, x) => t + x.grams, 0);
+  return <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-3 flex flex-col gap-2">
+    <div class="flex items-center gap-3">
+      <label class="relative w-9 h-9 rounded-full border-2 border-line shrink-0 cursor-pointer" style={{ background: hex }} title="Change colour">
+        <input type="color" class="absolute inset-0 opacity-0 cursor-pointer" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#888888"} onChange={(e) => setHex(list, (e.target as HTMLInputElement).value)} aria-label={`Colour for ${h.colour}`} />
+      </label>
+      <div class="min-w-0 flex-1"><div class="font-semibold text-[15px] leading-tight">{h.colour || h.material}</div><div class="t-meta">{[h.brand, `${list.length} spool${list.length > 1 ? "s" : ""}`, `${g.toLocaleString("en-IN")} g`].filter(Boolean).join(" · ")}</div></div>
+      <input class="w-24 h-8 rounded-lg border border-line bg-c1 px-2 text-xs font-mono uppercase" value={h.hex ?? ""} placeholder={hex} onChange={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (/^#?[0-9a-f]{6}$/i.test(v)) setHex(list, v.startsWith("#") ? v : `#${v}`); }} aria-label="Hex colour" />
+    </div>
+    <div class="flex flex-col divide-y divide-line">
+      {list.map((s) => <div key={s.id} class="flex items-center gap-3 py-1.5">
+        <button class="text-[30px] font-extrabold num leading-none min-w-[52px] text-left hover:text-acc" onClick={() => open(s)} aria-label={`Open spool ${s.spoolNo}`}>{s.spoolNo}</button>
+        <div class="flex-1 min-w-0"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /><div class="mt-1 flex items-center gap-2">{spTone(s)}{(s.status === "loaded" ? s.printer : s.location) && <span class="t-meta">{s.status === "loaded" ? s.printer : s.location}</span>}</div></div>
+        <SpoolAct s={s} open={open} />
+      </div>)}
+    </div>
+  </div>;
+}
+const NAMED: [RegExp, string][] = [[/black/, "#1a1a1a"], [/white|natural|ivory/, "#f4f2ec"], [/ash|grey|gray|silver/, "#9a9a9a"], [/red/, "#d22f2f"], [/orange/, "#f07c1a"], [/yellow|gold/, "#f2c418"], [/green/, "#2e9a4b"], [/blue|navy/, "#2a5cc9"], [/purple|violet/, "#7a3fc0"], [/pink|magenta/, "#e05a9c"], [/brown|wood/, "#7a4e2a"], [/beige|skin|cream/, "#e3c9a0"], [/transparent|clear/, "#d9e6ea"]];
+/** Swatch colour: the saved hex, else a guess from the colour name. */
+const spHex = (s: { hex?: string; colour?: string }) => (s.hex && s.hex !== "#000000" ? s.hex : NAMED.find(([r]) => r.test((s.colour ?? "").toLowerCase()))?.[1] ?? s.hex ?? "#888888");
 const Swatch = ({ hex }: { hex?: string }) => <span class="inline-block w-3.5 h-3.5 rounded-full border border-c3 shrink-0" style={{ background: hex || "transparent" }} aria-hidden="true" />;
 const MATS = ["PLA", "PETG", "TPU", "ABS", "ASA", "PA-CF", "Resin"];
 const SP_STATUS = ["sealed", "open", "loaded", "empty"];
@@ -149,7 +174,7 @@ function SpoolAct({ s, open }: { s: Spool; open: (s: Spool) => void }) {
   return <>
     <Button variant="outline" disabled={s.grams <= 0} onClick={() => use(50)} aria-label={`Deduct 50 g from ${s.spoolNo}`}>−50 g</Button>
     <Menu label={`Actions for ${s.spoolNo}`} items={[
-      { label: "Weigh in (exact)", on: () => open(s) },
+      { label: "Edit spool / colour", on: () => open(s) }, { label: "Weigh in (exact)", on: () => open(s) },
       { label: "Deduct 10 g", on: () => use(10) }, { label: "Deduct 100 g", on: () => use(100) }, { label: "Deduct 250 g", on: () => use(250) },
     ]} />
   </>;
@@ -232,17 +257,9 @@ export function Filament() {
         return (
           <Disclosure key={m} open title={<span class="inline-flex items-center gap-2">{m}<span class="t-meta font-normal">{sp.length} spools</span>{g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}</span>}
             meta={`${(g / 1000).toFixed(2)} kg · ${inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}`}>
-              <Table rows={sp} rowKey={(s) => s.id} onRow={r.open} act={(s) => <SpoolAct s={s} open={r.open} />} cols={[
-                { key: "c", label: "Spool", render: (s) => <span class="flex items-center gap-2 min-w-0"><Swatch hex={s.hex} /><span class="flex flex-col min-w-0"><span class="font-semibold">{s.material} {s.colour}</span><MetaRow items={[s.spoolNo, s.brand, (s.status === "loaded" ? s.printer : s.location)]} /></span></span> },
-                { key: "s", label: "State", card: "status", render: (s) => spTone(s) },
-                { key: "p", label: "Weight left", render: (s) => <span class="block min-w-[120px]"><Meter value={spoolPct(s)} label={`${s.grams.toLocaleString("en-IN")} g`} /></span> },
-                { key: "a", label: "After queue", level: 2, render: (s) => committed(s) ? `${(s.grams - committed(s)).toLocaleString("en-IN")} g` : "No jobs queued" },
-                { key: "lot", label: "Batch / lot", level: 2, render: (s) => s.lot || "—" },
-                { key: "b", label: "Bought", level: 2, render: (s) => s.bought ? shortDate(s.bought) : "—" },
-                { key: "k", label: "Cost / kg", level: 2, render: (s) => s.costKg ? inr(s.costKg) : "—" },
-                { key: "vd", label: "Supplier", level: 2, render: (s) => s.vendor || "—" },
-                { key: "v", label: "Value", level: 2, render: (s) => inr(spoolValue(s)) },
-              ]} />
+              <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                {groupSpools(sp).map((gs) => <SpoolCard key={gs[0].id} list={gs} open={r.open} />)}
+              </div>
           </Disclosure>
         );
       })}
