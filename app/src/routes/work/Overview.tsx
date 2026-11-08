@@ -31,7 +31,7 @@ function StageStrip({ list }: { list: Order[] }) {
 function OrderRow({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
   const late = o.due && o.due < today();
   return (
-    <button onClick={() => onOpen(o)} class="w-full text-left grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_170px_96px] items-center gap-x-4 gap-y-0.5 h-auto md:h-10 py-2 md:py-0 px-3 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer min-w-0">
+    <button onClick={() => onOpen(o)} class="w-full text-left grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_170px_96px] items-start gap-x-4 gap-y-0.5 min-h-10 py-2 px-3 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer min-w-0">
       <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{o.no}</span><span class="text-[13px] font-medium">{o.customer}</span></span>
       <span class="hidden md:block min-w-0 truncate text-[13px] text-c3">{o.items.map((i) => `${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}`).join(", ")}</span>
       <span class="flex items-center gap-2 justify-end whitespace-nowrap text-[11px]">
