@@ -31,13 +31,13 @@ function Sidebar() {
   const c = collapsed.value;
   return (
     <aside aria-label="Main navigation"
-      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-canvas border-r border-line pl-[env(safe-area-inset-left)] ${c ? "w-[84px]" : "w-52 2xl:w-56"}`}>
+      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-c0 rounded-[22px] my-2 ml-[max(8px,env(safe-area-inset-left))] mr-2 py-1 ${c ? "w-[84px]" : "w-52 2xl:w-56"}`}>
       <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col gap-0.5 p-2">
         {ALL.filter((n) => (isExternal() ? n.href === "/settings" : can(moduleOf(n.href)))).concat(isExternal() ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }] : []).map((n) => {
           const on = isActive(path, n.href);
           return (
             <a key={n.href} href={n.href} aria-current={on ? "page" : undefined} title={n.label}
-              class={`flex items-center rounded-lg ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 min-h-[52px] py-2 px-1 text-[10px] leading-tight text-center" : "gap-2.5 h-9 lg:h-8 px-2.5 text-[13px]"} ${on ? "bg-c1 text-c4 font-semibold" : "text-c3 font-medium hover:bg-c1/60 hover:text-c4"}`}>
+              class={`flex items-center rounded-full ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 min-h-[52px] py-2 px-1 text-[10px] leading-tight text-center rounded-2xl" : "gap-2.5 h-9 px-3 text-[13px]"} ${on ? "bg-c4 text-c0 font-semibold" : "text-c3 font-medium hover:bg-c1 hover:text-c4"}`}>
               <Icon name={n.icon} size={c ? 18 : 16} />
               <span class="min-w-0">{c ? n.label.split(" ")[0] : n.label}</span>
             </a>
@@ -69,7 +69,7 @@ function SyncDot() {
 function TopBar() {
   const { path, route } = useLocation();
   return (
-    <header class="shrink-0 bg-c0/80 backdrop-blur-md border-b border-line relative z-10 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <header class="shrink-0 bg-canvas relative z-10 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       <div class="h-12 flex items-center gap-1 md:gap-2 px-1.5 md:px-3">
         <button onClick={toggleNav} aria-label={collapsed.value ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed.value}
           class="hidden md:flex w-8 h-8 rounded-lg hover:bg-c1 items-center justify-center cursor-pointer shrink-0">
@@ -83,7 +83,7 @@ function TopBar() {
           <span class="text-[15px] font-semibold tracking-tight truncate">{titleOf(path)}</span>
           <SyncDot />
         </div>
-        <label class="hidden md:flex flex-1 min-w-0 max-w-[320px] h-8 bg-c1 rounded-md items-center gap-1.5 px-2 text-c2">
+        <label class="hidden md:flex flex-1 min-w-0 max-w-[320px] h-8 bg-c0 rounded-full items-center gap-1.5 px-3 text-c2">
           <Icon name="search" size={13} />
           <input id="global-search" type="search" enterKeyHint="search" value={searchQ.value} onInput={(e) => { searchQ.value = (e.target as HTMLInputElement).value; if (path !== "/search") route("/search"); }} class="flex-1 bg-transparent outline-none text-c4 placeholder:text-c2 text-[13px] min-w-0" placeholder="Search" aria-label="Search" />
           <kbd class="hidden lg:inline text-[10px] text-c2 border border-line rounded px-1 font-sans">⌘K</kbd>
@@ -91,7 +91,7 @@ function TopBar() {
         <div class="ml-auto flex items-center gap-0 md:gap-1 shrink-0">
           <span class="hidden md:inline-flex mr-1"><SyncDot /></span>
           <a href="/search" aria-label="Search" class="md:hidden w-11 h-11 rounded-lg flex items-center justify-center"><Icon name="search" size={18} /></a>
-          <a href="/work/orders" class="h-8 px-2.5 mr-1 rounded-md bg-c4 text-c0 hidden md:inline-flex items-center gap-1 text-[13px] font-semibold">
+          <a href="/work/orders" class="h-8 px-3.5 mr-1 rounded-full bg-c4 text-c0 hidden md:inline-flex items-center gap-1 text-[13px] font-semibold">
             <Icon name="plus" size={13} /> New
           </a>
           <button onClick={toggleTheme} aria-label="Toggle theme" class="w-8 h-8 shrink-0 rounded-lg hover:bg-c1 hidden md:flex items-center justify-center cursor-pointer">
@@ -116,13 +116,13 @@ function Dock() {
     : [NAV[0], NAV[1], NAV[2], NAV[4], { href: "/more", label: "More", icon: "grid" }].filter((n) => n.href === "/more" || can(moduleOf(n.href)));
   const moreOn = !items.filter((n) => n.href !== "/more").some((n) => isActive(path, n.href));
   return (
-    <nav class="md:hidden shrink-0 bg-c0/85 backdrop-blur-md border-t border-line flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
+    <nav class="md:hidden shrink-0 bg-c0 rounded-t-[22px] flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
         return (
           <a key={n.href} href={n.href} aria-current={on ? "page" : undefined}
             class={`flex-1 relative flex flex-col items-center justify-center h-14 gap-0.5 text-[10px] min-w-0 ${on ? "text-c4 font-semibold" : "text-c2 font-medium"}`}>
-            <span class="relative inline-flex"><Icon name={n.icon} size={22} />
+            <span class={`relative inline-flex items-center justify-center h-8 w-12 rounded-full ${on ? "bg-c4 text-c0" : ""}`}><Icon name={n.icon} size={20} />
               {n.href === "/more" && urgent > 0 && <span class="absolute -top-1.5 -right-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-warn text-black text-[9px] leading-[14px] text-center num">{urgent}</span>}
             </span>
             <span class="truncate max-w-full">{n.label.split(" ")[0]}</span>

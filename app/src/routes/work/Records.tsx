@@ -51,7 +51,7 @@ export function Invoice() {
     setOpen(inv); setView("doc");
   };
   return (
-    <WorkShell title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
+    <WorkShell stage="invoice" title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
       actions={<><Button variant="outline" onClick={() => ask("Renumber this FY's series in date order?").then((ok) => ok && resequence(fyOf(today())))}>Resequence</Button><Button icon="plus" onClick={() => { const inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "3926", qty: 1, rate: 0 }] }); setOpen(inv); setView("edit"); }}>New invoice</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
       detail={cur && (
@@ -218,7 +218,7 @@ export function Shipping() {
     setD({ ...d, tracking: "", qty: {}, photo: "" });
   };
   return (
-    <WorkShell title="Shipping" sub="Courier, tracking, freight paid vs recovered · many dispatches per order, part quantities allowed"
+    <WorkShell stage="shipping" title="Shipping" sub="Courier, tracking, freight paid vs recovered · many dispatches per order, part quantities allowed"
       detail={sel && <Inspect title={`${sel.orderNo} · ${sel.courier}`} row={{ order: sel.orderNo, sent: shortDate(sel.date), eta: shortDate(sel.eta), courier: sel.courier, service: sel.service, tracking: sel.tracking || "Missing", contents: sel.lines.map((l) => `${l.qty}× ${l.name}`).join(", "), freightPaid: inr(sel.freightPaid), recovered: inr(sel.freightRecovered), net: inr(sel.freightPaid - sel.freightRecovered) }} onClose={() => setSel(null)}>
         <div class="flex flex-wrap items-end gap-2"><input class={`${inputCls} flex-1 min-w-0`} placeholder="Tracking no." defaultValue={sel.tracking} id="trk" /><Button onClick={() => { const v = (document.getElementById("trk") as HTMLInputElement).value; shipmentsSig.value = shipmentsSig.value.map((x) => (x.id === sel.id ? { ...x, tracking: v } : x)); setSel({ ...sel, tracking: v }); log("Updated tracking", sel.orderNo); }}>Save tracking</Button></div>
         {sel.photo && <img src={sel.photo} alt="Handover" class="mt-3 rounded-xl max-h-48" />}</Inspect>}>

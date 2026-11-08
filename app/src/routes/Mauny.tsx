@@ -50,7 +50,7 @@ export function MaunyHome() {
 >
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
         {accs.map((a) => (
-          <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-[10px] px-3 py-2 cursor-pointer border ${a.id === acc ? "bg-c0 border-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
+          <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer border ${a.id === acc ? "bg-c0 border-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
             <div class="flex items-baseline justify-between gap-2"><span class="t-meta">{a.name}</span><span class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} to review</span></div>
             <div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div>
           </button>
@@ -293,7 +293,7 @@ export function Accounts() {
       toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-        {accountsSig.value.map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-[10px] px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div><div class="t-meta num">Opening {inr(a.opening)}</div></button>)}
+        {accountsSig.value.map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div><div class="t-meta num">Opening {inr(a.opening)}</div></button>)}
       </div>
       <Disclosure title="CSV format & matching rules"><p class="t-meta">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p></Disclosure>
       <Card class="!py-1">

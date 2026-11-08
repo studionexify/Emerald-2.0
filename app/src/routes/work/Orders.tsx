@@ -1,7 +1,8 @@
 import { useState } from "preact/hooks";
 import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
 import { MetaRow } from "../../ui/disclose";
-import { batchesSig, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
+import { Initials, StagePill, StageStrip } from "../../ui/stage-strip";
+import { batchesSig, can, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 export default function Orders() {
@@ -31,6 +32,7 @@ export default function Orders() {
         <TypeChips value={f} onChange={setF} />
         {!isPhone.value && <div class="ml-auto">{viewToggle}</div>}
       </div>}>
+      <StageStrip orders={list} showValue={can("mauny")} active={isPhone.value && view === "board" ? stage : undefined} />
       {isPhone.value && (
         <div class="flex gap-2 items-center">
           {view === "board" ? (
@@ -47,7 +49,7 @@ export default function Orders() {
           <div class="md:hidden flex flex-col gap-2">
             {list.filter((o) => o.stage === stage).map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
             {batchesAt(stage).map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
-            {!count(stage) && <div class="rounded-[10px] border border-dashed border-line p-3 text-center t-meta">No orders at this stage</div>}
+            {!count(stage) && <div class="rounded-2xl border border-dashed border-line p-3 text-center t-meta">No orders at this stage</div>}
           </div>
           <div class={`hidden md:grid gap-2.5 ${open || creating ? "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "grid-cols-4 2xl:grid-cols-8"}`}>
             {STAGES.map((s) => {
@@ -61,7 +63,7 @@ export default function Orders() {
                   <div class="flex flex-col gap-1.5">
                     {col.map((o) => <OrderCard key={o.id} o={o} onOpen={setOpen} />)}
                     {bcol.map((b) => <BatchCard key={b.id} b={b} onOpen={() => setOpen(ordersSig.value.find((o) => o.no === b.orderNo)!)} />)}
-                    {!col.length && !bcol.length && <div class="rounded-[10px] border border-dashed border-line h-10 flex items-center justify-center t-meta">Empty</div>}
+                    {!col.length && !bcol.length && <div class="rounded-2xl border border-dashed border-line h-10 flex items-center justify-center t-meta">Empty</div>}
                   </div>
                 </div>
               );
@@ -71,9 +73,9 @@ export default function Orders() {
       ) : (
         <Card class="!py-1">
           <Table rows={list} rowKey={(o) => o.id} onRow={setOpen} cols={[
-            { key: "no", label: "Order", render: (o) => <span class="flex flex-col min-w-0"><span><b>{o.no}</b> <span class="font-medium">{o.customer}</span></span><MetaRow items={[o.items[0]?.name, o.items.length > 1 && `+${o.items.length - 1} more`]} /></span> },
-            { key: "s", label: "Stage", card: "status", render: (o) => <Status tone={o.blocked ? "blocked" : o.stage === "archived" ? "done" : "active"}>{stageLabel(o)}</Status> },
-            { key: "d", label: "Due", card: "foot", render: (o) => shortDate(o.due) },
+            { key: "no", label: "Order", render: (o) => <span class="flex items-center gap-2.5 min-w-0"><Initials name={o.customer} /><span class="flex flex-col min-w-0"><span class="truncate font-semibold">{o.customer}</span><MetaRow items={[o.no, o.items[0]?.name, o.items.length > 1 && `+${o.items.length - 1} more`]} /></span></span> },
+            { key: "s", label: "Stage", card: "status", render: (o) => o.blocked ? <Status tone="blocked">{stageLabel(o)}</Status> : <StagePill stage={o.stage} label={stageLabel(o)} /> },
+            { key: "d", label: "Due", card: "foot", render: (o) => <span class={`inline-flex items-center gap-1 whitespace-nowrap ${o.stage !== "archived" && o.due && o.due < new Date().toISOString().slice(0, 10) ? "text-late font-semibold" : ""}`}><Icon name="calendar" size={12} />{shortDate(o.due)}</span> },
             { key: "v", label: "Value", align: "right", render: (o) => (o.type === "inhouse" ? "—" : inr(orderTotal(o))) },
             { key: "t", label: "Type", level: 2, render: (o) => TYPE_LABEL[o.type] },
             { key: "m", label: "Medium", level: 2, render: (o) => o.medium },
@@ -89,7 +91,7 @@ export default function Orders() {
 
 function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} class="w-full text-left rounded-[10px] px-2.5 py-2 cursor-pointer bg-c0 text-[13px] border border-dashed border-c2">
+    <button onClick={onOpen} class="w-full text-left rounded-2xl px-2.5 py-2 cursor-pointer bg-c0 text-[13px] border border-dashed border-c2">
       <div class="flex justify-between gap-2"><span class="font-mono text-[11px] font-bold">{b.orderNo}</span><span class="t-meta">Batch</span></div>
       <div class="font-medium truncate mt-0.5">{b.name}</div>
       <div class="t-meta num">{b.customer} · {b.done}/{b.units}</div>
