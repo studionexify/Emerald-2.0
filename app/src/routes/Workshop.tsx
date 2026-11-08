@@ -284,17 +284,18 @@ export function Filament() {
         <Stat value={tot.filter((s) => s.grams > 0).length} label="spools in stock" />
         <Stat value={tot.filter((s) => s.grams < 250).length} label="low or out" />
       </div>
-      {(() => { const ms = (mat === "all" ? mats : [mat]).filter((m) => shown.some((s) => s.material === m)); return ms.length > 1 && <nav class="sticky top-0 z-20 bg-canvas -mx-1 px-1 py-2 flex gap-1.5 overflow-x-auto border-b border-line">
+      {(() => { const ms = (mat === "all" ? mats : [mat]).filter((m) => shown.some((s) => s.material === m)); return ms.length > 1 && <nav class="sticky -top-3 md:-top-4 z-20 bg-canvas -mx-1 px-1 pt-3 md:pt-4 pb-2 -mt-3 md:-mt-4 flex gap-1.5 overflow-x-auto border-b border-line">
         {ms.map((m) => <button key={m} class="shrink-0 inline-flex items-center gap-1.5 h-7 !min-h-0 px-2.5 rounded-full border border-line bg-c0 text-[12px] font-semibold" onClick={() => document.getElementById(matId(m))?.scrollIntoView({ behavior: "smooth", block: "start" })}>
           <i class="w-2 h-2 rounded-full" style={{ background: matC(m) }} />{m}<span class="text-c2 font-medium">{shown.filter((s) => s.material === m).length}</span></button>)}
       </nav>; })()}
-      {(mat === "all" ? mats : [mat]).map((m) => {
+      {(mat === "all" ? mats : [mat]).map((m, _i, all) => {
+        const chips = all.filter((x) => shown.some((s) => s.material === x)).length > 1;
         const sp = shown.filter((s) => s.material === m);
         if (!sp.length) return null;
         const g = tot.filter((s) => s.material === m).reduce((s, x) => s + x.grams, 0); const mc = matC(m);
         return (
-          <section key={m} id={matId(m)} class="scroll-mt-12">
-            <div class="sticky top-11 z-10 bg-canvas flex items-center gap-2 py-2" style={{ borderBottom: `2px solid ${mc}` }}>
+          <section key={m} id={matId(m)} class={chips ? "scroll-mt-[45px]" : ""}>
+            <div class={`sticky z-10 bg-canvas flex items-center gap-2 pb-2 ${chips ? "top-[45px] pt-2" : "-top-3 md:-top-4 pt-3 md:pt-4"}`} style={{ borderBottom: `2px solid ${mc}` }}>
               <b class="text-[14px] tracking-[0.04em]" style={{ color: mc }}>{m}</b>
               <span class="t-meta">{sp.length} spools</span>
               {g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}
