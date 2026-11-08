@@ -12,8 +12,9 @@ export type Invoice = {
   id: string; kind: "invoice" | "credit"; no: string; date: string; customer: string; gstin?: string; address?: string;
   orderNo?: string; batch?: string; lines: InvLine[]; gstRate: number; interstate: boolean;
   status: "issued" | "cancelled"; paidOn?: string; paidAccount?: string; against?: string; note?: string;
+  shipTo?: string; contact?: string; pos?: string; shipping?: number;
 };
-export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded" };
+export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string };
 export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string };
 export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number }[] };
 export type Account = { id: string; name: string; opening: number };
@@ -109,12 +110,15 @@ export const fyOf = (d: string) => { const [y, m] = d.split("-").map(Number); co
 export const fyWindow = (fy: string): [string, string] => { const s = Number(fy.slice(0, 4)); return [`${s}-04-01`, `${s + 1}-03-31`]; };
 export const inWin = (d: string, [a, b]: [string, string]) => d >= a && d <= b;
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+/** Invoice arithmetic as printed: half-GST per head rounded to paise, shipping added, total rounded to the rupee (round-off shown). */
 export function invTax(i: Invoice) {
   const taxable = r2(i.lines.reduce((s, l) => s + l.qty * l.rate, 0));
-  const gst = r2((taxable * i.gstRate) / 100);
-  const sign = i.kind === "credit" ? -1 : 1;
-  const live = i.status === "issued" ? 1 : 0;
-  return { taxable: sign * live * taxable, cgst: sign * live * (i.interstate ? 0 : r2(gst / 2)), sgst: sign * live * (i.interstate ? 0 : r2(gst / 2)), igst: sign * live * (i.interstate ? gst : 0), total: sign * live * r2(taxable + gst) };
+  const half = r2((taxable * i.gstRate) / 200);
+  const gst = i.interstate ? r2((taxable * i.gstRate) / 100) : r2(half * 2);
+  const ship = r2(i.shipping ?? 0);
+  const exact = r2(taxable + gst + ship), total = Math.round(exact);
+  const k = (i.kind === "credit" ? -1 : 1) * (i.status === "issued" ? 1 : 0);
+  return { taxable: k * taxable, cgst: k * (i.interstate ? 0 : half), sgst: k * (i.interstate ? 0 : half), igst: k * (i.interstate ? gst : 0), shipping: k * ship, roundOff: k * r2(total - exact), total: k * total };
 }
 
 /** Financial-year letter: Apr 2025–Mar 2026 = A, Apr 2026–Mar 2027 = B (the studio's existing series). */

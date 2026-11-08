@@ -68,6 +68,13 @@ export function Invoice() {
                 <Field label="Date"><input class={inputCls} disabled={locked} type="date" value={cur.date} onInput={(e) => updateInvoice(cur, { date: (e.target as HTMLInputElement).value })} /></Field>
                 <Field label="Number"><input class={inputCls} disabled={locked} value={cur.no} onInput={(e) => updateInvoice(cur, { no: (e.target as HTMLInputElement).value }, "Renamed invoice")} /></Field>
               </div>
+              <div class="grid grid-cols-2 gap-2">
+                <Field label="Bill-to address"><textarea class={inputCls} disabled={locked} value={cur.address ?? ""} onInput={(e) => updateInvoice(cur, { address: (e.target as HTMLTextAreaElement).value || undefined })} /></Field>
+                <Field label="Ship-to address (blank = same)"><textarea class={inputCls} disabled={locked} value={cur.shipTo ?? ""} onInput={(e) => updateInvoice(cur, { shipTo: (e.target as HTMLTextAreaElement).value || undefined })} /></Field>
+                <Field label="Contact"><input class={inputCls} disabled={locked} value={cur.contact ?? ""} onInput={(e) => updateInvoice(cur, { contact: (e.target as HTMLInputElement).value || undefined })} /></Field>
+                <Field label="Place of supply"><input class={inputCls} disabled={locked} value={cur.pos ?? ""} onInput={(e) => { const pos = (e.target as HTMLInputElement).value || undefined; updateInvoice(cur, { pos, interstate: !!pos && !/gujarat|vadodara/i.test(pos) }); }} /></Field>
+                <Field label="Shipping ₹"><input class={inputCls} disabled={locked} type="number" value={cur.shipping ?? ""} onInput={(e) => updateInvoice(cur, { shipping: Number((e.target as HTMLInputElement).value) || undefined })} /></Field>
+              </div>
               <label class="flex items-center gap-2 text-xs"><input type="checkbox" disabled={locked} checked={cur.interstate} onChange={() => updateInvoice(cur, { interstate: !cur.interstate })} /> Out-of-state (IGST)</label>
               <LinesEditor lines={cur.lines} locked={locked} on={(l) => updateInvoice(cur, { lines: l })} />
               <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(invTax(cur).total)}</span></div>
@@ -148,11 +155,13 @@ export function Quotes() {
               <div class="grid grid-cols-2 gap-2">
                 <Field label="Customer"><input class={inputCls} value={cur.customer} onInput={(e) => upd(cur, { customer: (e.target as HTMLInputElement).value })} /></Field>
                 <Field label="Valid until"><input class={inputCls} type="date" value={cur.valid} onInput={(e) => upd(cur, { valid: (e.target as HTMLInputElement).value })} /></Field>
+                <Field label="Address"><input class={inputCls} value={cur.address ?? ""} onInput={(e) => upd(cur, { address: (e.target as HTMLInputElement).value || undefined })} /></Field>
               </div>
+              <Field label="Technical data (one per line — print time, weight, finish, delivery)"><textarea class={inputCls} rows={3} value={cur.tech ?? ""} onInput={(e) => upd(cur, { tech: (e.target as HTMLTextAreaElement).value || undefined })} /></Field>
               <LinesEditor lines={cur.lines} on={(l) => upd(cur, { lines: l })} />
               <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
-              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => upd(cur, { outcome: o })}>{o}</Chip>)}</div>
-              {cur.orderNo && <p class="text-xs text-c3">Linked to {cur.orderNo}. Approving here doesn't move the order — stages are free.</p>}
+              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => { upd(cur, { outcome: o }); const ord = ordersSig.value.find((x) => x.no === cur.orderNo); if (ord && o === "approved" && !ord.approved) patchOrder(ord, { approved: true }); }}>{o}</Chip>)}</div>
+              {cur.orderNo && <p class="text-xs text-c3">Linked to {cur.orderNo}. Approving here records the order's approval (its quotation gate); it doesn't move the stage.</p>}
             </div>
           )}
         </div>
@@ -183,7 +192,7 @@ export function Documents() {
     ...quotesSig.value.map((q) => ({ id: q.id, kind: "Quotation", no: q.no, party: q.customer, date: q.date, d: () => fromQuote(q) })),
     ...invoicesSig.value.map((i) => ({ id: i.id, kind: i.kind === "credit" ? "Credit note" : "Tax invoice", no: i.no, party: i.customer, date: i.date, d: () => fromInvoice(i) })),
     ...shipmentsSig.value.map((s) => ({ id: s.id, kind: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? s.orderNo, date: s.date,
-      d: (): DocData => ({ title: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, date: s.date, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? "", lines: s.lines.map((l) => ({ desc: l.name, hsn: "491199", qty: l.qty, rate: 0 })), gstRate: 0, interstate: false, extra: [["Order", s.orderNo], ["Courier", `${s.courier} ${s.tracking}`]], note: "Not a tax invoice — goods sent for delivery." }) })),
+      d: (): DocData => ({ kind: "challan", title: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, date: s.date, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? "", lines: s.lines.map((l) => ({ desc: l.name, hsn: "491199", qty: l.qty, rate: 0 })), gstRate: 0, interstate: false, extra: [["Order", s.orderNo], ["Courier", `${s.courier} ${s.tracking}`]], note: "Not a tax invoice — goods sent for delivery." }) })),
   ].filter((d) => kind === "all" || d.kind === kind).sort((a, b) => b.date.localeCompare(a.date));
   return (
     <WorkShell title="Documents" sub="The generator — every quotation, invoice, credit note and challan, printable"

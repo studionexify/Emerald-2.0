@@ -233,12 +233,14 @@ export function Users() {
 
 export function Business() {
   const b = bizSig.value;
-  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={b[k]} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
+  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={b[k] ?? ""} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
   return (
     <SettingsShell>
       <Card class="grid sm:grid-cols-2 gap-3">
         {f("name", "Business name")}{f("gstin", "GSTIN")}{f("pan", "PAN")}{f("udyam", "Udyam (MSME) no.")}{f("phone", "Phone")}{f("email", "Email")}
-        {f("address", "Address", true)}{f("bank", "Bank (shown on invoices)", true)}{f("series", "Invoice series")}{f("terms", "Terms printed on documents", true)}
+        {f("address", "Address", true)}{f("addressShort", "Short address (footer)")}{f("website", "Website")}
+        {f("upi", "UPI ID")}{f("upiNumber", "UPI number")}{f("bankName", "Bank & branch")}{f("accName", "Account name")}{f("accNo", "Account no.")}{f("ifsc", "IFSC")}{f("jurisdiction", "Jurisdiction (terms)")}
+        {f("bank", "Bank (one line, if fields above are blank)", true)}{f("series", "Invoice series")}{f("terms", "Terms printed on documents", true)}
         <p class="sm:col-span-2 t-meta">Saved as you type · printed on every quotation, invoice and credit note.</p>
       </Card>
     </SettingsShell>

@@ -20,7 +20,7 @@ export type Migrated = {
   clients: Client[]; invoices: Invoice[]; quotes: Quote[]; orders: Order[]; batches: Batch[]; jobs: Job[]; qc: QcEntry[];
   packRecords: PackRecord[]; shipments: Shipment[]; printers: Printer[]; spools: Spool[]; packStock: PackItem[]; accessories: PackItem[];
   movements2: Movement[]; expenses: Expense[]; bills: Bill[]; accounts: Account[]; money: MoneyEntry[]; assets: Asset[]; goals: Goal[];
-  tasks: Task[]; logs: Log[]; bin: Binned[]; team: { id: string; name: string; job: string; active: boolean }[]; business?: Partial<Biz>;
+  tasks: Task[]; logs: Log[]; rates: Record<string, number>; nexcal?: Record<string, unknown>; nexres?: Record<string, unknown>; bin: Binned[]; team: { id: string; name: string; job: string; active: boolean }[]; business?: Partial<Biz>;
 };
 
 const STAGE: Record<string, Stage> = { quotation: "quotation", production: "production", qc: "qc", packing: "packing", invoice: "invoice", shipping: "shipping", archived: "archived", po: "po" };
@@ -48,12 +48,12 @@ export function mapEmerald1(t: Tables): Migrated {
       id: str(i.invoice_number), kind: "invoice", no: str(i.invoice_number), date: day(i.issued_date), customer: str(i.customer_name), gstin: str(i.bill_gstin) || undefined,
       address: str(i.bill_address) || undefined, orderNo: str(i.order_id) || undefined, lines, gstRate: GST, interstate: !!pos && !HOME.test(pos),
       status: i.cancelled_at ? "cancelled" : "issued", paidOn: i.status === "paid" ? day(i.paid_date || i.issued_date) : undefined,
-      paidAccount: i.status === "paid" ? accountOf(i.payment_mode) : undefined, note: str(i.cancel_reason) || undefined,
+      paidAccount: i.status === "paid" ? accountOf(i.payment_mode) : undefined, note: str(i.cancel_reason) || undefined, shipTo: str(i.ship_address) || undefined, contact: str(i.bill_contact) || undefined, pos: pos || undefined,
     };
   });
 
   const quotes: Quote[] = T("quotations").map((q) => ({
-    id: str(q.quote_number), no: str(q.quote_number), date: day(q.issued_date), customer: str(q.customer_name) || "—", orderNo: str(q.order_id) || undefined,
+    id: str(q.quote_number), no: str(q.quote_number), date: day(q.issued_date), customer: str(q.customer_name) || "—", address: str(q.address) || undefined, orderNo: str(q.order_id) || undefined,
     lines: [{ desc: "As quoted (Emerald 1)", hsn: "", qty: 1, rate: r2(num(q.amount) / (1 + GST / 100)) }], gstRate: GST, valid: day(q.valid_until_date) || day(q.issued_date),
     outcome: q.status === "approved" ? "approved" : q.status === "lost" || q.status === "rejected" ? "lost" : q.status === "sent" ? "open" : "unrecorded",
   }));
@@ -142,12 +142,30 @@ export function mapEmerald1(t: Tables): Migrated {
   const bin: Binned[] = T("deleted_records").map((b) => ({ id: str(b.id), kind: BINKIND[str(b.kind)] ?? str(b.kind), label: str(b.label), deletedAt: day(b.deleted_at), by: str(b.deleted_by), data: undefined }));
   const team = T("team_members").map((m) => ({ id: str(m.id), name: str(m.name), job: str(m.job_title), active: bool(m.active) }));
 
+  // Rates: material ₹/g → ₹/kg, Nexcal labour/margin/power/efficiency, machine ₹/h from the printer's cost spread over its uptime.
+  const setting = (k: string) => json<any>(T("app_settings").find((x) => x.key === k)?.value, null);
+  const nx = setting("nexcal_settings"), nr = setting("nexres_settings");
+  const rates: Record<string, number> = {};
+  for (const m of T("materials")) { const k = str(m.material_type).toLowerCase(); if (["pla", "petg", "abs", "tpu"].includes(k)) rates[k] = r2(num(m.cost_per_unit) * 1000); }
+  if (nx) {
+    const hrs = 8760 * (num(nx.estimatedUptimePct, 50) / 100);
+    rates.machine = r2(((num(nx.printerCost) + num(nx.additionalUpfrontCost) + num(nx.annualMaintenance) * num(nx.estimatedLifeYrs, 3)) / (num(nx.estimatedLifeYrs, 3) * hrs)) * num(nx.costBufferFactor, 1));
+    rates.labour = num(nx.labourHourlyRate, 200); rates.margin = num(nx.defaultMarginPercent, 65); rates.gst = num(nx.gstPercent, 18);
+    rates.power = r2((num(nx.powerConsumptionW, 200) / 1000) * num(nx.electricityCost, 8)); rates.efficiency = num(nx.materialEfficiencyFactor, 1.25);
+  }
+  if (nr?.settings) {
+    const st = nr.settings; rates.resinMargin = num(st.defaultMarginPercent, 65);
+    const std = (st.resins ?? []).find((r: any) => /standard/i.test(r.name)); if (std) rates.resin = num(std.priceL);
+    rates.resinMachine = r2(num(st.machineCost) / Math.max(1, num(st.machineLife, 4000)) + num(st.lcdCost) / Math.max(1, num(st.lcdLife, 2000)));
+  }
+
   const seller = [...T("invoices")].reverse().map((i) => json<any>(i.seller, null)).find(Boolean);
   const business: Partial<Biz> | undefined = seller ? { name: str(seller.companyName) || "Studio Nexify", gstin: str(seller.gstin), pan: str(seller.gstin).slice(2, 12), phone: str(seller.companyPhone), email: str(seller.companyEmail),
-    address: str(seller.companyAddressFull), bank: `${seller.bankName} · A/C ${seller.bankAccNo} · IFSC ${seller.ifsc} · UPI ${seller.upi}`, series: "A-### (FY 25-26) · B-### (FY 26-27)" } : undefined;
+    address: str(seller.companyAddressFull), bank: `${seller.bankName} · A/C ${seller.bankAccNo} · IFSC ${seller.ifsc} · UPI ${seller.upi}`, series: "A-### (FY 25-26) · B-### (FY 26-27)",
+    website: str(seller.companyWebsite), addressShort: str(seller.companyAddressShort), upi: str(seller.upi), upiNumber: str(seller.upiNumber), bankName: str(seller.bankName), accName: str(seller.bankAccName), accNo: str(seller.bankAccNo), ifsc: str(seller.ifsc), jurisdiction: "Vadodara, Gujarat" } : undefined;
 
   return { clients, invoices, quotes, orders, batches, jobs, qc, packRecords, shipments, printers, spools, packStock: piece(T("packing_materials")),
-    accessories: [...piece(T("accessories"), "Accessory"), ...piece(T("machine_parts"), "Part")], movements2, expenses, bills, accounts, money, assets, goals, tasks, logs, bin, team, business };
+    accessories: [...piece(T("accessories"), "Accessory"), ...piece(T("machine_parts"), "Part")], movements2, expenses, bills, accounts, money, assets, goals, tasks, logs, bin, team, business, rates, nexcal: nx ?? undefined, nexres: nr?.settings ?? undefined };
 }
 
 /** Counts per record type, for the confirm step. */
