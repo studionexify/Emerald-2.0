@@ -167,7 +167,7 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const mc = matC(h.material);
   return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col" style={{ borderLeft: `3px solid ${mc}` }}>
     <div class="flex items-center gap-2.5">
-      <button class="w-7 h-7 !min-h-0 rounded-full border border-line shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
+      <button class="w-9 h-5 !min-h-0 rounded-md border border-line shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
       <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="t-meta truncate">{h.brand || "—"}</div></div>
       <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md" style={{ color: mc, background: `color-mix(in srgb, ${mc} 14%, transparent)` }}>{h.material}</span>
     </div>
