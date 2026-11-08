@@ -155,8 +155,12 @@ function SpoolEdit({ s, done }: { s: Spool; done: () => void }) {
     </div>
   </div>;
 }
-const MAT_C: [RegExp, string][] = [[/cf|carbon|gf|glass/i, "#a1a1aa"], [/petg/i, "#60a5fa"], [/pla/i, "#4ade80"], [/abs/i, "#fb923c"], [/asa/i, "#f87171"], [/tpu|tpe|flex/i, "#c084fc"], [/pa|nylon/i, "#facc15"], [/pc|polycarb/i, "#2dd4bf"]];
-const matC = (m: string) => MAT_C.find(([r]) => r.test(m))?.[1] ?? "#8e8e93";
+const MAT_C: [RegExp, string][] = [
+  [/silk/i, "#e879f9"], [/matte/i, "#34d399"], [/marble|stone/i, "#d6d3d1"], [/wood/i, "#c08457"], [/glow/i, "#bef264"], [/sparkle|glitter|galaxy/i, "#f0abfc"],
+  [/rainbow|multi|dual|tri/i, "#fda4af"], [/high.?speed|hs\b|hyper/i, "#22d3ee"], [/pla\s*\+|pla.?plus|pla.?pro/i, "#86efac"],
+  [/cf|carbon|gf|glass/i, "#a1a1aa"], [/petg/i, "#60a5fa"], [/pla/i, "#4ade80"], [/abs/i, "#fb923c"], [/asa/i, "#f87171"], [/tpu|tpe|flex/i, "#c084fc"], [/pa|nylon/i, "#facc15"], [/pc|polycarb/i, "#2dd4bf"]];
+const hashC = (m: string) => { let h = 0; for (const c of m) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 70% 65%)`; };
+const matC = (m: string) => MAT_C.find(([r]) => r.test(m))?.[1] ?? hashC(m);
 const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
@@ -296,7 +300,7 @@ export function Filament() {
               {g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}
               <span class="ml-auto t-meta num whitespace-nowrap">{(g / 1000).toFixed(2)} kg net · {inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}</span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 mt-2">
+            <div class="columns-1 sm:columns-2 lg:columns-3 2xl:columns-4 gap-2 mt-2 [&>*]:break-inside-avoid [&>*]:mb-2">
               {groupSpools(sp).map((gs) => <SpoolCard key={gs[0].id} list={gs} open={r.open} />)}
             </div>
           </section>
