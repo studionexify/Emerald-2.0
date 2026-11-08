@@ -15,8 +15,8 @@ const who = () => me.value?.name ?? "You";
 const num = (e: Event) => Number((e.target as HTMLInputElement).value) || 0;
 const val = (e: Event) => (e.target as HTMLInputElement).value;
 
-function Shell({ sub, actions, toolbar, detail, children }: { sub: string; actions?: preact.ComponentChildren; toolbar?: preact.ComponentChildren; detail?: preact.ComponentChildren | null; children: preact.ComponentChildren }) {
-  return <Page title="Store" sub={sub} actions={actions} toolbar={toolbar} detail={detail ?? null} tabs={WORKSHOP_TABS}>{children}</Page>;
+function Shell({ sub, actions, toolbar, strip, detail, children }: { sub: string; actions?: preact.ComponentChildren; toolbar?: preact.ComponentChildren; strip?: preact.ComponentChildren; detail?: preact.ComponentChildren | null; children: preact.ComponentChildren }) {
+  return <Page title="Store" sub={sub} actions={actions} toolbar={toolbar} strip={strip} detail={detail ?? null} tabs={WORKSHOP_TABS}>{children}</Page>;
 }
 const ActiveChips = ({ v, on }: { v: string; on: (x: string) => void }) => (
   <div class="flex flex-wrap items-center gap-2"><Pick value={v} on={on} items={["active", "retired", "all"]} label={(x) => x[0].toUpperCase() + x.slice(1)} /></div>
@@ -242,12 +242,12 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
 export function Filament() {
   const [vw, setVw] = useState(innerWidth); useLayoutEffect(() => { const f = () => setVw(innerWidth); addEventListener("resize", f); return () => removeEventListener("resize", f); }, []);
   const cols = vw >= 1536 ? 4 : vw >= 1024 ? 3 : vw >= 640 ? 2 : 1;
-  const chipRef = useRef<HTMLElement>(null); const [chipH, setChipH] = useState(0); const [pad, setPad] = useState(12);
+  const stripRef = useRef<HTMLDivElement>(null); const [cur, setCur] = useState<string | null>(null);
   useLayoutEffect(() => {
-    const el = chipRef.current; const sc = el?.closest(".overflow-y-auto") as HTMLElement | null;
-    if (sc) setPad(parseFloat(getComputedStyle(sc).paddingTop) || 0);
-    if (!el) { setChipH(0); return; }
-    const ro = new ResizeObserver(() => setChipH(el.getBoundingClientRect().height)); ro.observe(el); return () => ro.disconnect();
+    const f = () => { const secs = document.querySelectorAll<HTMLElement>("section[data-mat]"); const sc = secs[0]?.closest(".overflow-y-auto");
+      const b = sc ? sc.getBoundingClientRect().top : 0; let c: string | null = null;
+      secs.forEach((el) => { if (el.getBoundingClientRect().top <= b + 1) c = el.dataset.mat!; }); setCur(c); };
+    f(); addEventListener("scroll", f, true); addEventListener("resize", f); return () => { removeEventListener("scroll", f, true); removeEventListener("resize", f); };
   });
   const [mat, setMat] = useState("all");
   const [st, setSt] = useState("in stock");
@@ -287,6 +287,13 @@ export function Filament() {
   const tot = spoolsSig.value.filter((s) => s.active !== false);
   return (
     <Shell sub="Every spool — weight, colour, brand, cost, storage · tap a spool for weigh-in and history" actions={<><Button variant="outline" icon="in" onClick={() => navigate("/workshop/movements")}>Log movement</Button><Button icon="plus" onClick={() => r.add()}>Add spool</Button></>}
+      strip={(() => { const ms = (mat === "all" ? mats : [mat]).filter((m) => shown.some((s) => s.material === m)); const c = cur && ms.includes(cur) ? cur : null; return <div ref={stripRef} class="min-w-0 relative">
+        {ms.length > 1 && <nav class="flex gap-1.5 overflow-x-auto pt-1">{ms.map((m) => <button key={m} class={`shrink-0 inline-flex items-center gap-1.5 h-7 !min-h-0 px-2.5 rounded-full border text-[12px] font-semibold ${m === c ? "bg-c1 border-c3" : "bg-c0 border-line"}`} onClick={() => document.getElementById(matId(m))?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+          <i class="w-2 h-2 rounded-full" style={{ background: matC(m) }} />{m}<span class="text-c2 font-medium">{shown.filter((s) => s.material === m).length}</span></button>)}</nav>}
+        {c && (() => { const k = c; const g = tot.filter((s) => s.material === k).reduce((s, x) => s + x.grams, 0); return <div class="absolute left-0 right-0 top-full mt-2.5 z-20 bg-canvas flex items-center gap-2 pb-2 shadow-[0_6px_8px_-4px_rgba(0,0,0,.6)]" style={{ borderBottom: `2px solid ${matC(k)}` }}>
+          <b class="text-[14px] tracking-[0.04em]" style={{ color: matC(k) }}>{k}</b><span class="t-meta">{shown.filter((s) => s.material === k).length} spools</span>
+          <span class="ml-auto t-meta num whitespace-nowrap">{(g / 1000).toFixed(2)} kg net · {inr(tot.filter((s) => s.material === k).reduce((s, x) => s + spoolValue(x), 0))}</span></div>; })()}
+      </div>; })()}
       toolbar={<div class="flex flex-wrap items-center gap-2">
         {!isPhone.value && <SearchBar q={q} setQ={setQ} ph="Search colour, brand…" />}
         <Pick title="Material" value={mat} on={setMat} items={["all", ...mats]} label={(m) => m === "all" ? "All materials" : m} />
@@ -299,17 +306,13 @@ export function Filament() {
         <Stat value={tot.filter((s) => s.grams > 0).length} label="spools in stock" />
         <Stat value={tot.filter((s) => s.grams < 250).length} label="low or out" />
       </div>
-      {(() => { const ms = (mat === "all" ? mats : [mat]).filter((m) => shown.some((s) => s.material === m)); return ms.length > 1 && <nav ref={chipRef} style={{ top: -pad, paddingTop: pad, marginTop: -pad }} class="sticky z-20 bg-canvas -mx-1 px-1 pb-2 flex gap-1.5 overflow-x-auto border-b border-line">
-        {ms.map((m) => <button key={m} class="shrink-0 inline-flex items-center gap-1.5 h-7 !min-h-0 px-2.5 rounded-full border border-line bg-c0 text-[12px] font-semibold" onClick={() => document.getElementById(matId(m))?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-          <i class="w-2 h-2 rounded-full" style={{ background: matC(m) }} />{m}<span class="text-c2 font-medium">{shown.filter((s) => s.material === m).length}</span></button>)}
-      </nav>; })()}
       {(mat === "all" ? mats : [mat]).map((m) => {
                 const sp = shown.filter((s) => s.material === m);
         if (!sp.length) return null;
         const g = tot.filter((s) => s.material === m).reduce((s, x) => s + x.grams, 0); const mc = matC(m);
         return (
-          <section key={m} id={matId(m)} style={{ scrollMarginTop: chipH }}>
-            <div class="sticky z-10 bg-canvas flex items-center gap-2 pb-2" style={{ top: chipH ? chipH - pad : -pad, paddingTop: chipH ? 8 : pad + 8, marginTop: chipH ? 0 : -pad, borderBottom: `2px solid ${mc}` }}>
+          <section key={m} id={matId(m)} data-mat={m}>
+            <div class="flex items-center gap-2 pb-2" style={{ borderBottom: `2px solid ${mc}` }}>
               <b class="text-[14px] tracking-[0.04em]" style={{ color: mc }}>{m}</b>
               <span class="t-meta">{sp.length} spools</span>
               {g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}

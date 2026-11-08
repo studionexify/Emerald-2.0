@@ -275,8 +275,8 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
 }
 
 /** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
-export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
-  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; toolbar?: ComponentChildren;
+export function Page({ title, sub, actions, tabs, toolbar, strip, detail, children }: {
+  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; toolbar?: ComponentChildren; /** Always-visible band under the toolbar (outside the scroll area). */ strip?: ComponentChildren;
   /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
   return (
@@ -291,6 +291,7 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
         {toolbar && (isPhone.value ? <FilterSheet>{toolbar}</FilterSheet> : <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>)}
+        {strip}
       </div>
       <div class="flex-1 min-h-0">
         {detail !== undefined ? (
