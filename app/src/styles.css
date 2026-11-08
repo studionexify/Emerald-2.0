@@ -2,26 +2,44 @@
 
 /* "Warm & clean": beige canvas, white cards, sunken wells, ink + lime (always with ink text) + warn. */
 :root {
-  --bg: #e4e1da; --c-0: #ffffff; --c-1: #f3f1ec; --line: #ece9e2;
+  --bg-base: #e4e1da; --c-0: #ffffff; --c-1: #f3f1ec; --line: #ece9e2;
   --c-2: #6b685f; --c-3: #3a3833; --c-4: #1c1b19; --warn: #ff9500;
   --lime: #d8f36a; --red-bg: #f6d9cc; --red: #a2401c; --amb-bg: #fbe6cf; --amb: #9a5a12; --grn-bg: #d5ecdf; --grn: #0f5d47; --panel: #f6f4ef; --thead: #efece5; --avatar: #e5e2da; --late: #c4552b;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
+  --bg-base: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
   --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
   --lime: #d8f36a; --red-bg: #3a1d12; --red: #ff9b74; --amb-bg: #3a2810; --amb: #f5b860; --grn-bg: #11291f; --grn: #6fd3a8; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
+    --bg-base: #000000; --c-0: #121212; --c-1: #1c1c1e; --line: #2c2c2e;
     --c-2: #8e8e93; --c-3: #d1d1d6; --c-4: #ffffff; --warn: #ff9f0a;
   --lime: #d8f36a; --red-bg: #3a1d12; --red: #ff9b74; --amb-bg: #3a2810; --amb: #f5b860; --grn-bg: #11291f; --grn: #6fd3a8; --panel: #0a0a0a; --thead: #1c1c1e; --avatar: #2c2c2e; --late: #ff8a5c;
     color-scheme: dark;
   }
 }
 
+/* Module themes: each area owns one muted heritage/chalk accent (emerald = home/brand).
+   The accent marks active nav, the page title rule, tabs, and lightly tints the canvas. */
+:root { --acc: #1e6b52; --acc-d: #5fbf98; --on-acc: #ffffff; --bg: color-mix(in oklab, var(--bg-base) 90%, var(--acc)); --acc-bg: color-mix(in oklab, var(--c-0) 86%, var(--acc)); }
+[data-mod="home"] { --acc: #1e6b52; --acc-d: #5fbf98; }
+[data-mod="work"] { --acc: #2f4f7a; --acc-d: #8fb0dc; }
+[data-mod="workshop"] { --acc: #8a6a1f; --acc-d: #d9b660; }
+[data-mod="calculator"] { --acc: #5e5a86; --acc-d: #aca7dc; }
+[data-mod="mauny"] { --acc: #7d2f3e; --acc-d: #e0909f; }
+[data-mod="alerts"] { --acc: #a4492a; --acc-d: #f0987a; }
+[data-mod="todo"] { --acc: #4f6e4a; --acc-d: #9ec495; }
+[data-mod="logs"] { --acc: #6a625a; --acc-d: #b9afa4; }
+[data-mod="bin"] { --acc: #4c5560; --acc-d: #a3adb8; }
+[data-mod="settings"] { --acc: #3d4756; --acc-d: #9aa6b6; }
+:root[data-theme="dark"], :root[data-theme="dark"] [data-mod] { --acc: var(--acc-d); --on-acc: #000000; --bg: color-mix(in oklab, var(--bg-base) 93%, var(--acc)); --acc-bg: color-mix(in oklab, var(--c-0) 80%, var(--acc)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]), :root:not([data-theme="light"]) [data-mod] { --acc: var(--acc-d); --on-acc: #000000; --bg: color-mix(in oklab, var(--bg-base) 93%, var(--acc)); --acc-bg: color-mix(in oklab, var(--c-0) 80%, var(--acc)); } }
+
+/* inline: utilities read the element-level accent, so nav items can show their own module colour. */
+@theme inline { --color-acc: var(--acc); --color-acc-bg: var(--acc-bg); --color-on-acc: var(--on-acc); }
 @theme {
   --color-c0: var(--c-0);
   --color-c1: var(--c-1);

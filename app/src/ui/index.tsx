@@ -56,7 +56,7 @@ export function Big({ value, label }: { value: string; label: string }) {
 
 export function Chip({ active, children, onClick }: { active?: boolean; children: ComponentChildren; onClick?: () => void }) {
   return (
-    <button onClick={onClick} class={`h-7 px-3 inline-flex items-center rounded-full text-xs cursor-pointer whitespace-nowrap ${active ? "bg-c4 text-c0 font-semibold" : "bg-transparent text-c3 font-medium hover:text-c4"}`}>
+    <button onClick={onClick} class={`h-7 px-3 inline-flex items-center rounded-full text-xs cursor-pointer whitespace-nowrap ${active ? "bg-acc text-on-acc font-semibold" : "bg-transparent text-c3 font-medium hover:text-c4"}`}>
       {children}
     </button>
   );
@@ -69,7 +69,7 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
     <label class="relative block">
       <span class="sr-only">Section</span>
       <select value={current?.href} onChange={(e) => route((e.target as HTMLSelectElement).value)}
-        class="appearance-none cursor-pointer w-full h-8 pl-4 pr-8 rounded-full truncate bg-c0 border border-transparent text-c4 font-semibold text-[13px]">
+        class="appearance-none cursor-pointer w-full h-8 pl-4 pr-8 rounded-full truncate bg-acc-bg border border-transparent text-c4 font-semibold text-[13px]">
         {tabs.map((t) => <option key={t.href} value={t.href}>{t.label}</option>)}
       </select>
       <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c2"><Icon name="down" size={12} /></span>
@@ -284,7 +284,7 @@ export function Page({ title, sub, actions, tabs, toolbar, detail, children }: {
       <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 bg-canvas">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-baseline gap-3">
-            <h1 class="t-title truncate">{title}</h1>
+            <h1 class="t-title truncate flex items-center gap-2.5"><span aria-hidden="true" class="w-1.5 h-6 rounded-full bg-acc shrink-0" />{title}</h1>
             {sub && <p class="hidden lg:block t-meta truncate">{sub}</p>}
           </div>
           {tabs && <div class="w-[46%] md:w-48 shrink-0"><Tabs tabs={tabs} /></div>}
