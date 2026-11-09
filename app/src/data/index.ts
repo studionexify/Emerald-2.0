@@ -9,7 +9,7 @@ export const ordersSig = P<Order[]>("orders", []);
 export const batchesSig = P<Batch[]>("batches", []);
 export const logsSig = P<Log[]>("logs", []);
 export const consSig = P<Consumption[]>("consumption", []);
-import { spoolsSig, packSig } from "./inventory";
+import { spoolsSig, packSig, isSpoolItem, nextSpoolNo } from "./inventory";
 export * from "./inventory";
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
@@ -60,8 +60,7 @@ setStockSink((m) => {
   const mat = /PETG|ABS|TPU|ASA|PLA/i.exec(m.item)?.[0].toUpperCase() ?? "PLA";
   const colour = m.item.split("/").pop()?.trim() || "—";
   const n = Math.max(1, Math.round(m.qty / 1000));
-  const base = spoolsSig.value.length;
-  spoolsSig.value = [...Array.from({ length: n }, (_, k) => ({ id: crypto.randomUUID(), material: mat, colour, brand: m.vendor, grams: 1000, size: 1000, spoolNo: `SP-${String(base + k + 1).padStart(3, "0")}`,
+  spoolsSig.value = [...Array.from({ length: n }, (_, k) => ({ id: crypto.randomUUID(), material: mat, colour, brand: m.vendor, grams: 1000, size: 1000, spoolNo: nextSpoolNo(k + 1),
     tare: 250, gross: 1250, costKg: Math.round(m.unitCost * 1000), vendor: m.vendor, bought: m.date, status: "sealed" as const, active: true, notes: m.notes })), ...spoolsSig.value];
   applyMove({ ...m, item: `${mat} ${colour}` }, true);
 });
@@ -97,7 +96,7 @@ export const UNIT: Record<ConKind, string> = { filament: "g", packing: "pcs", ac
 /** Record any consumption; decrements stock where it applies and writes a log row. */
 export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string }) {
   let cost = d.qty * RATE[d.kind](d.item);
-  if (d.kind === "filament") spoolsSig.value = spoolsSig.value.map((s) => (d.item.includes(s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
+  if (d.kind === "filament") spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(d.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
   if (d.kind === "packing") {
     const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;
     packSig.value = packSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p));

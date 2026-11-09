@@ -285,7 +285,9 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   orders.filter((o) => o.stage === "shipping" && !o.tracking).forEach((o) => flow.push({ t: "warn", text: `${o.no} shipping — tracking missing`, href: "/work/shipping" }));
   shipmentsSig.value.filter((s) => s.eta < t && daysBetween(s.eta, t) < 30 && !s.tracking).forEach((s) => flow.push({ t: "warn", text: `${s.orderNo} shipment past delivery date`, href: "/work/shipping" }));
   const stock: Alert[] = [];
-  spools.forEach((s) => { if (s.grams === 0) stock.push({ t: "danger", text: `${s.material} ${s.colour} — out of stock`, href: "/workshop" }); else if (s.grams < rate("reorderFilament")) stock.push({ t: "warn", text: `${s.material} ${s.colour} ${s.grams} g — below reorder`, href: "/workshop" }); });
+  const byCol = new Map<string, number>();
+  spools.filter((s) => (s as { active?: boolean }).active !== false).forEach((s) => { const k = `${s.material} ${s.colour}`; byCol.set(k, (byCol.get(k) ?? 0) + s.grams); });
+  byCol.forEach((g, k) => { if (g <= 0) stock.push({ t: "danger", text: `${k} — out of stock`, href: "/workshop" }); else if (g < rate("reorderFilament")) stock.push({ t: "warn", text: `${k} ${g} g left — below reorder`, href: "/workshop" }); });
   pack.filter((p) => p.qty <= p.reorderAt).forEach((p) => stock.push({ t: "warn", text: `${p.name} ${p.qty} ${p.unit} — at reorder point`, href: "/workshop/packing" }));
   itemsSig.value.filter((a) => a.active !== false && a.qty <= a.reorderAt).forEach((a) => stock.push({ t: "warn", text: `${a.name} — below reorder`, href: "/workshop/parts" }));
   const order = (l: Alert[]) => l.sort((a, b) => ["danger", "warn", "info"].indexOf(a.t) - ["danger", "warn", "info"].indexOf(b.t));

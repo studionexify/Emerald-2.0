@@ -5,7 +5,7 @@ import { navigate } from "../router";
 import { Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col, Tip } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import {
+import { isSpoolItem, nextSpoolNo,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -171,9 +171,18 @@ function Masonry({ cols, items }: { cols: number; items: Spool[][] }) {
   for (const g of items) { const i = h.indexOf(Math.min(...h)); c[i].push(g); h[i] += 1.4 + g.length; }
   return <div class="flex gap-2 mt-2 items-start">{c.map((col, i) => <div key={i} class="flex-1 min-w-0 flex flex-col gap-2">{col.map((gs) => <SpoolCard key={gs[0].id} list={gs} open={() => {}} />)}</div>)}</div>;
 }
+/** Long material sections render 12 cards first; the rest on demand. */
+function MatCards({ cols, groups }: { cols: number; groups: Spool[][] }) {
+  const [n, setN] = useState(12);
+  return <>{<Masonry cols={cols} items={groups.slice(0, n)} />}
+    {groups.length > n && <button onClick={() => setN(n + 24)} class="mt-2 w-full h-9 rounded-xl border border-line bg-c0 text-[13px] font-semibold text-c3 hover:bg-c1 cursor-pointer">Show {Math.min(24, groups.length - n)} more of {groups.length - n}</button>}</>;
+}
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
   const mc = matC(h.material);
+  const [showSealed, setShowSealed] = useState(false);
+  const sealed = list.filter((x) => x.status === "sealed" && x.grams > 0);
+  const rows = sealed.length > 1 && !showSealed ? list.filter((x) => !sealed.includes(x)) : list;
   return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col" style={{ borderLeft: `3px solid ${mc}` }}>
     <div class="flex items-center gap-2.5 -mx-3 -mt-2.5 px-3 py-2.5 rounded-t-[var(--radius-card)]" style={{ background: hex, color: lightHex(hex) ? "#1a1a1a" : "#fff" }}>
       <button class="w-9 h-5 !min-h-0 rounded-md border border-current/30 shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
@@ -186,9 +195,14 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
       <span class="t-meta">applies to all {list.length > 1 ? `${list.length} spools` : "this spool"}</span>
     </div>}
     <div class="mt-2 flex flex-col">
-      {list.map((s) => <div key={s.id} class="border-t border-line">
+      {sealed.length > 1 && !showSealed && <button onClick={() => setShowSealed(true)} class="border-t border-line flex items-center gap-3 py-2 text-left cursor-pointer !min-h-0">
+        <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{sealed.length}×</span>
+        <span class="flex-1 min-w-0"><span class="block h-1.5 rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined }} /><span class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Sealed · #{sealed.map((x) => spN(x.spoolNo)).slice(0, 4).join(", ")}{sealed.length > 4 ? "…" : ""}</span><b class="num">{(sealed.reduce((a, x) => a + x.grams, 0) / 1000).toFixed(1)} kg</b></span></span>
+        <span class="h-7 px-2.5 rounded-lg border border-line text-[11px] font-semibold grid place-items-center">Show</span>
+      </button>}
+      {rows.map((s) => <div key={s.id} class="border-t border-line">
         <div class="flex items-center gap-3 py-2">
-          <span class="text-[20px] font-extrabold num leading-none w-7 shrink-0">{spN(s.spoolNo)}</span>
+          <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{spN(s.spoolNo)}</span>
           <div class="flex-1 min-w-0">
             <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined, width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
             <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net</span><b class="num">{s.grams.toLocaleString("en-IN")} g</b></div>
@@ -257,7 +271,7 @@ export function Filament() {
   const [q, setQ] = useState("");
   const r = useRecord<Spool>({
     sig: spoolsSig, kind: "Spool", title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
-    blank: () => ({ id: uid(), material: "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: 1.75, grams: 1000, size: 1000, tare: 250, gross: 1250, costKg: 1250, spoolNo: `SP-${String(spoolsSig.value.length + 1).padStart(3, "0")}`, vendor: "", bought: today(), status: "sealed", active: true }),
+    blank: () => ({ id: uid(), material: "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: 1.75, grams: 1000, size: 1000, tare: 250, gross: 1250, costKg: 1250, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }),
     onSave: (s, isNew) => { if (isNew) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "in", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: s.vendor ?? "", colour: s.colour, brand: s.brand, notes: "New spool", by: who() }, ...movesSig.value]; },
     facts: (s) => [
       ["Net remaining", <span class="text-lg font-extrabold num">{s.grams.toLocaleString("en-IN")} g</span>], ["Remaining", <span class="flex items-center gap-2"><span class="num">{spoolPct(s)}%</span><span class="flex-1"><Progress value={spoolPct(s)} /></span></span>],
@@ -273,7 +287,7 @@ export function Filament() {
       <Button variant="outline" onClick={() => put({ dried: today() }, "Dried")}>Mark dried</Button>
     </>,
     extra: (s, put) => {
-      const use = consSig.value.filter((c) => c.item.includes(s.spoolNo));
+      const use = consSig.value.filter((c) => isSpoolItem(c.item, s.spoolNo));
       return <>
         <WeighIn s={s} put={put} />
         <PaneSection title={`Usage · ${use.length}`}>
@@ -321,7 +335,7 @@ export function Filament() {
               {g <= REORDER_G && <span class="text-[11px] font-semibold px-1.5 rounded bg-warn/15">{g <= 0 ? "Out" : "Reorder"}</span>}
               <span class="ml-auto t-meta num whitespace-nowrap">{(g / 1000).toFixed(2)} kg net · {inr(tot.filter((s) => s.material === m).reduce((s, x) => s + spoolValue(x), 0))}</span>
             </div>
-            <Masonry cols={cols} items={groupSpools(sp)} />
+            <MatCards cols={cols} groups={groupSpools(sp)} />
           </section>
         );
       })}

@@ -66,7 +66,7 @@ export const REORDER_G = 1000;
 /** Apply a stock movement to the matching record and keep it in the ledger. Unit cost is the price at that time. */
 export function applyMove(m: Movement, record = true) {
   const d = m.dir === "in" ? m.qty : -m.qty;
-  if (m.cat === "filament") spoolsSig.value = spoolsSig.value.map((s) => (m.item.includes(s.spoolNo) ? { ...s, grams: Math.max(0, s.grams + d), gross: Math.max(0, s.grams + d) + (s.tare ?? 0), status: s.grams + d <= 0 ? "empty" : s.status } : s));
+  if (m.cat === "filament") spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(m.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams + d), gross: Math.max(0, s.grams + d) + (s.tare ?? 0), status: s.grams + d <= 0 ? "empty" : s.status } : s));
   else if (m.cat === "packing") packSig.value = packSig.value.map((p) => (p.name === m.item ? { ...p, qty: Math.max(0, p.qty + d), cost: m.dir === "in" && m.unitCost ? m.unitCost : p.cost } : p));
   else itemsSig.value = itemsSig.value.map((p) => (p.name === m.item ? { ...p, qty: Math.max(0, p.qty + d), cost: m.dir === "in" && m.unitCost ? m.unitCost : p.cost } : p));
   if (record) movesSig.value = [m, ...movesSig.value];
@@ -79,6 +79,9 @@ export const stockNames = (cat: string) =>
 try { localStorage.setItem("emerald:seedv", SEED_V); } catch {}
 
 /** Which spool a job draws from: its own, else the spool loaded on its printer. */
+/** True when a ledger/consumption item string names this exact spool ("PLA Black · SP-001", not SP-0011). */
+export const isSpoolItem = (item: string, no: string) => item === no || item.endsWith(` · ${no}`) || item.includes(` · ${no} `);
+export const nextSpoolNo = (k = 1) => { const max = spoolsSig.value.reduce((m, x) => Math.max(m, Number((x.spoolNo.match(/\d+/g) ?? ["0"]).pop())), 0); return `SP-${String(max + k).padStart(3, "0")}`; };
 export const jobSpool = (j: Job) => spoolsSig.value.find((s) => s.spoolNo === j.spool) ?? spoolsSig.value.find((s) => s.status === "loaded" && s.printer === j.printer);
 /** Grams already promised to queued or printing jobs. */
 export const committed = (s: Spool) => jobsSig.value.filter((j) => (j.status === "queued" || j.status === "printing") && jobSpool(j)?.id === s.id).reduce((a, j) => a + j.grams, 0);

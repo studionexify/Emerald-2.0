@@ -6,7 +6,7 @@ import { SETTINGS_TABS } from "../nav";
 import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
 import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall, Tip } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
-import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
+import { itemsSig, tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
 
 const tFields: FDef<Task>[] = [
   { k: "title", label: "Task", wide: true }, { k: "due", label: "Due", type: "date" },
@@ -369,6 +369,8 @@ export function Search() {
     ["Invoices", invoicesSig.value.filter((i) => hit(i.no, i.customer, i.orderNo)).map((i) => ({ k: i.id, t: `${i.no} · ${i.customer}`, d: i.kind, href: "/work/invoice" }))],
     ["Quotations", quotesSig.value.filter((x) => hit(x.no, x.customer)).map((x) => ({ k: x.id, t: `${x.no} · ${x.customer}`, d: x.outcome, href: "/work/quotes" }))],
     ["Bills & expenses", [...billsSig.value.filter((b) => hit(b.vendor, b.no)).map((b) => ({ k: b.id, t: `${b.vendor} ${b.no}`, d: "Bill", href: "/mauny/purchases" })), ...expensesSig.value.filter((e) => hit(e.vendor, e.head)).map((e) => ({ k: e.id, t: `${e.vendor} · ${e.head}`, d: "Expense", href: "/mauny/finance" }))]],
+    ["Filament", Object.values(spoolsSig.value.filter((x) => x.active !== false && hit(x.material, x.colour, x.brand, x.spoolNo)).reduce<Record<string, { k: string; t: string; d: string; href: string; n: number; g: number }>>((o, x) => { const k = `${x.material}|${x.colour}|${x.brand}`; const r = (o[k] ??= { k, t: `${x.material} ${x.colour} · ${x.brand}`, d: "", href: "/workshop", n: 0, g: 0 }); r.n++; r.g += x.grams; r.d = `${r.n} spools · ${(r.g / 1000).toFixed(1)} kg`; return o; }, {})).slice(0, 30)],
+    ["Store items", [...packSig.value, ...itemsSig.value].filter((x) => hit(x.name, x.vendor)).map((x) => ({ k: x.id, t: x.name, d: `${x.qty} ${x.unit}`, href: x.cat ? "/workshop/parts" : "/workshop/packing" }))],
     ["Pages", pages.map((p) => ({ k: p.href, t: p.label, d: p.href, href: p.href }))],
   ];
   const any = groups.some(([, l]) => l.length);

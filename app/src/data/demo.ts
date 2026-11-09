@@ -223,3 +223,24 @@ if (!done6 && !_sp6.value.length) {
     { id: "demo-cs5", at: d(-1), who: "Owner", orderNo: "EM-2105", kind: "packing", item: "Bubble wrap roll", qty: 3, unit: "m", cost: 27 },
   ] as never;
 }
+
+/* Seventh pass (v7): stress test — ~1,700 kg of filament across many types, colours and brands. */
+let done7 = false;
+try { done7 = !!localStorage.getItem("emerald:demo7"); localStorage.setItem("emerald:demo7", "1"); } catch {}
+if (!done7) {
+  const MATS: [string, number][] = [["PLA", 1150], ["PLA+", 1300], ["PLA Matte", 1450], ["PLA Silk", 1600], ["PETG", 1100], ["ABS", 1300], ["ASA", 1700], ["TPU", 2100], ["PA-CF", 4800], ["PC", 3200], ["PLA Wood", 1900], ["PETG-CF", 2600]];
+  const COLS: [string, string][] = [["Black", "#2B2B2B"], ["White", "#F2F0EA"], ["Grey", "#8A8A8A"], ["Red", "#B85450"], ["Blue", "#4A6FA5"], ["Green", "#5F8F6B"], ["Yellow", "#E0C068"], ["Orange", "#D98A4E"], ["Navy", "#3B4A6B"], ["Sage", "#9DB59A"], ["Beige", "#D9C7A5"], ["Purple", "#8A6FA8"], ["Pink", "#D69AB0"], ["Clear", "#DCE6EA"]];
+  const BRANDS = ["Polymaker", "eSun", "Sunlu", "Bambu", "Elegoo", "Eryone", "Prusament"];
+  let r = 7; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  const base = _sp6.value.length; const out: typeof _sp6.value = []; let kg = 0, k = 0;
+  while (kg < 1700) {
+    const [material, costKg] = MATS[Math.floor(rnd() * MATS.length)]; const [colour, hex] = COLS[Math.floor(rnd() * COLS.length)];
+    const brand = BRANDS[Math.floor(rnd() * BRANDS.length)]; const x = rnd();
+    const status = x < 0.6 ? "sealed" : x < 0.93 ? "open" : x < 0.97 ? "loaded" : "empty";
+    const grams = status === "sealed" ? 1000 : status === "empty" ? 0 : Math.round(50 + rnd() * 900);
+    kg += grams / 1000; k++;
+    out.push({ id: `demo-big${k}`, material, colour, hex, brand, grams, size: 1000, spoolNo: `SP-${String(base + k).padStart(4, "0")}`, tare: 250, gross: grams + 250,
+      costKg, vendor: brand, bought: d(-Math.floor(rnd() * 180)), status, location: `Rack ${"ABCDEFGH"[Math.floor(rnd() * 8)]}`, active: true, diameter: 1.75 });
+  }
+  _sp6.value = [..._sp6.value, ...out];
+}
