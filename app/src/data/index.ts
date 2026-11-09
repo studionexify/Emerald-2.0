@@ -159,8 +159,12 @@ export function startRun(o: Order, item: string, units: number, printer: string,
   batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spool || undefined, running: true, at: new Date().toISOString(), stage: "production" }];
   log("Started print", `${o.no} · ${units}× ${item} on ${printer}`);
 }
-export function finishRun(o: Order, id: string, good: number, bad: number): Order {
+/** Spool numbers in a run's spool label, e.g. "SP-001 · PLA Black + SP-004 · PLA White" → ["SP-001", "SP-004"]. */
+export const runSpools = (label?: string) => (label ? label.split(" + ").map((x) => x.split(" · ")[0].trim()).filter(Boolean) : []);
+export function finishRun(o: Order, id: string, good: number, bad: number, grams: Record<string, number> = {}): Order {
   const b = batchesSig.value.find((x) => x.id === id); if (!b) return o;
+  // Filament used (good and failed pieces alike) comes off each spool and lands in the order's consumption.
+  for (const [no, g] of Object.entries(grams)) if (g > 0) consume({ kind: "filament", item: no, qty: g, orderNo: o.no, batch: b.name, printer: b.printer });
   batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad } : x));
   log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}`);
   // Lines carrying imported totals get the run added on top; others are summed from runs.
