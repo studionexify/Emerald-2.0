@@ -23,7 +23,7 @@ export type Migrated = {
   tasks: Task[]; logs: Log[]; rates: Record<string, number>; nexcal?: Record<string, unknown>; nexres?: Record<string, unknown>; bin: Binned[]; team: { id: string; name: string; job: string; active: boolean }[]; business?: Partial<Biz>;
 };
 
-const STAGE: Record<string, Stage> = { quotation: "quotation", production: "production", qc: "qc", packing: "packing", invoice: "invoice", shipping: "shipping", archived: "archived", po: "po" };
+const STAGE: Record<string, Stage> = { quotation: "quotation", production: "production", qc: "qc", packing: "packing", invoice: "invoice", shipping: "shipping", archived: "archived", po: "production" };
 const KIND: Record<string, MoneyKind> = { customer_receipt: "receipt", customer_advance: "advance", expense: "expense", other_income: "other_income", refund_received: "other_income", capital_in: "capital_in", drawings: "drawings", tax_payment: "tax_payment", customer_refund: "expense", asset_purchase: "asset_purchase", loan_taken: "loan_taken", loan_repayment: "loan_repayment" };
 const METRIC: Record<string, GoalMetric> = { revenue: "revenue", collection: "collection", cash_collected: "collection", profit: "profit", expense_cap: "expense_cap", spend_cap: "expense_cap", orders: "orders", orders_closed: "orders", margin_pct: "margin_pct", avg_margin: "margin_pct", custom: "custom" };
 

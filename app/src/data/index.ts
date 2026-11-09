@@ -1,4 +1,5 @@
 /** Data access. Phase 1 reads in-memory mock; phase 2 swaps in the API. */
+import { effect } from "@preact/signals";
 import { persisted as P } from "./store";
 import type { Batch, BatchStage, ConKind, Consumption, Log, LogKind, Order, OrderType, Stage } from "../mock/types";
 import { STAGE_LABEL, STAGE_ORDER } from "./flows";
@@ -6,6 +7,8 @@ import { STAGE_LABEL, STAGE_ORDER } from "./flows";
 export * from "../mock/types";
 
 export const ordersSig = P<Order[]>("orders", []);
+/** The PO stage was retired — anything still parked there moves on to Production. */
+effect(() => { const o = ordersSig.value; if (o.some((x) => x.stage === "po")) ordersSig.value = o.map((x) => (x.stage === "po" ? { ...x, stage: "production" as const } : x)); });
 export const batchesSig = P<Batch[]>("batches", []);
 export const logsSig = P<Log[]>("logs", []);
 export const consSig = P<Consumption[]>("consumption", []);

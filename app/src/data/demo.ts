@@ -20,7 +20,7 @@ const orders: Order[] = [
   O(0, "Paper Trail Stationers", "b2b", "Stationery", "production", 4, [L("Pen stand", 120, 140, "PLA", "White"), L("Desk organiser", 60, 320, "PETG", "Grey")]),
   O(1, "Ananya Rao", "small", undefined, "production", 2, [L("Name keychain", 4, 120, "PLA", "Pink")]),
   O(2, "The Gift Box Co.", "b2b", "Gift shop", "qc", 1, [L("Lithophane lamp", 25, 850, "PLA", "White"), L("Planter pot", 40, 260, "PLA", "Terracotta"), L("Coaster set", 30, 300)]),
-  O(3, "Rohan Mehta", "bulk", undefined, "po", 9, [L("Phone stand", 200, 95, "PLA", "Blue")]),
+  O(3, "Rohan Mehta", "bulk", undefined, "production", 9, [L("Phone stand", 200, 95, "PLA", "Blue")]),
   O(4, "Studio Kiln Architects", "b2b", "Architect", "production", -1, [L("Site model 1:200", 1, 18500, "PLA", "White")], { blocked: "Waiting on revised CAD" }),
   O(5, "Meera Iyer", "small", undefined, "packing", 0, [L("Custom figurine", 1, 1450, "Resin", "Grey"), L("Display base", 1, 250)]),
   O(6, "BrightMinds School", "b2b", "Education", "quotation", 14, [L("Molecule kit", 50, 420, "PLA", "Mixed"), L("Gear set", 50, 180, "PETG", "Orange")]),

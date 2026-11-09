@@ -1,7 +1,7 @@
 /** Order types suggest a path. Forward moves pass each stage gate (see gateReason); backward moves need a reason. */
 import type { Batch, BatchStage, Order, OrderType, Stage } from "../mock/types";
 
-export const STAGE_ORDER: Stage[] = ["quotation", "po", "production", "qc", "packing", "invoice", "shipping", "archived"];
+export const STAGE_ORDER: Stage[] = ["quotation", "production", "qc", "packing", "invoice", "shipping", "archived"];
 export const STAGE_LABEL: Record<Stage, string> = {
   quotation: "Quotation", po: "PO", production: "Production", qc: "QC & Logging",
   packing: "Packing", invoice: "Invoice", shipping: "Shipping", archived: "Archive",
@@ -11,12 +11,12 @@ export const STAGE_LABEL: Record<Stage, string> = {
 export const SUGGESTED: Record<OrderType, Stage[]> = {
   inhouse: ["production", "qc", "packing", "archived"],
   client: ["quotation", "production", "qc", "packing", "invoice", "shipping", "archived"],
-  bulk: ["quotation", "po", "production", "qc", "packing", "invoice", "shipping", "archived"],
+  bulk: ["quotation", "production", "qc", "packing", "invoice", "shipping", "archived"],
 };
 export const FLOW_NOTE: Record<OrderType, string> = {
   inhouse: "Usually Production → QC → Packing → Archive · gated stage by stage",
   client: "Pay on delivery · usually Quotation → … → Shipping → Archive · gated stage by stage",
-  bulk: "Usually PO first, then batches each with their own QC, packing, invoice and dispatch · gated stage by stage",
+  bulk: "Usually Quotation, then batches each with their own QC, packing, invoice and dispatch · gated stage by stage",
 };
 
 export const BATCH_STAGES: BatchStage[] = ["production", "qc", "packing", "invoice", "shipping", "done"];

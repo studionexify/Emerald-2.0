@@ -76,7 +76,7 @@ function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: O
 /** Live order row: client · type | items | stage | city | deadline | ⋯ */
 /* Live-orders table: fixed columns stay tight, flexible ones (client, items, city) share the extra width. */
 const COLS = "@lg:grid-cols-[minmax(130px,1.3fr)_minmax(104px,0.7fr)_minmax(150px,1.6fr)_minmax(100px,0.6fr)_minmax(70px,0.7fr)_80px_28px] @4xl:grid-cols-[minmax(140px,1.3fr)_minmax(110px,0.7fr)_minmax(160px,1.6fr)_minmax(150px,1fr)_minmax(104px,0.6fr)_minmax(80px,0.7fr)_84px_28px]";
-const TRACK: [Order["stage"], string][] = [["quotation", "doc"], ["po", "stamp"], ["production", "printer"], ["qc", "shield"], ["packing", "box"], ["invoice", "receipt"], ["shipping", "truck"]];
+const TRACK: [Order["stage"], string][] = [["quotation", "doc"], ["production", "printer"], ["qc", "shield"], ["packing", "box"], ["invoice", "receipt"], ["shipping", "truck"]];
 const STAGE_HUE: Record<string, string> = { quotation: "#8A93A3", po: "#8C8FC4", production: "#6B8DB5", qc: "#C49A5A", packing: "#9A86B8", invoice: "#6FA39C", shipping: "#6E9C7C", archived: "#8A93A3", blocked: "#B97468" };
 const KIND_HUE = (k: string) => (k.startsWith("B2B") ? "#6B8DB5" : k === "Bulk" ? "#9A86B8" : k === "In-house" ? "#8A93A3" : "#6FA39C");
 const tint = (h: string) => ({ color: h, background: `color-mix(in srgb, ${h} 13%, transparent)` });

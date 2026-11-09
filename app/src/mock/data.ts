@@ -19,7 +19,7 @@ export const orders: Order[] = [
     items: [{ name: "Tool wall hooks", material: "PETG", colour: "Black", qty: 12, price: 0, cost: 140 }] },
   { id: "o10", approved: true, buildSheet: true, jobsDone: true, qcLogged: true, packed: true, no: "EM-1034", type: "client", customer: "Ishaan Desai", medium: "Referral", stage: "invoice", created: "2026-10-18", due: "2026-11-04",
     items: [{ name: "Architectural model", material: "PLA", colour: "White", qty: 1, price: 8900, cost: 2600 }] },
-  { id: "o9", approved: true, buildSheet: true, no: "EM-1043", type: "bulk", customer: "Vadodara Gift House", medium: "Phone", stage: "po", created: "2026-11-02", due: "2026-11-20",
+  { id: "o9", approved: true, buildSheet: true, no: "EM-1043", type: "bulk", customer: "Vadodara Gift House", medium: "Phone", stage: "production", created: "2026-11-02", due: "2026-11-20",
     items: [{ name: "Diwali diya stand", material: "PLA", colour: "Gold", qty: 300, price: 159, cost: 45 }] },
 ];
 
