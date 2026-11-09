@@ -8,44 +8,16 @@ export const priceFromMargin = (cost: number, marginPct: number) => cost / (1 - 
 export const marginPct = (price: number, cost: number) => (price > 0 ? r2(((price - cost) / price) * 100) : 0);
 
 /* ------------------------------------------------------------- Nexcal · FDM */
-export type NexcalSettings = {
-  materialEfficiencyFactor: number; labourHourlyRate: number; gstPercent: number; defaultMarginPercent: number; marginFloorPct: number;
-  printTimeRateMode: "auto" | "manual"; printTimeRateManual: number;
-  printerCost: number; additionalUpfrontCost: number; annualMaintenance: number; estimatedLifeYrs: number; estimatedUptimePct: number;
-  powerConsumptionW: number; electricityCost: number; costBufferFactor: number; spoolWeightGrams: number; bulkTiers: { min: number }[];
-};
-export const NEXCAL_DEFAULTS: NexcalSettings = {
-  materialEfficiencyFactor: 1.25, labourHourlyRate: 200, gstPercent: 18, defaultMarginPercent: 60, marginFloorPct: 40,
-  printTimeRateMode: "auto", printTimeRateManual: 14.39, printerCost: 65000, additionalUpfrontCost: 15000, annualMaintenance: 10000, estimatedLifeYrs: 3, estimatedUptimePct: 50,
-  powerConsumptionW: 200, electricityCost: 8, costBufferFactor: 1.5, spoolWeightGrams: 1000, bulkTiers: [{ min: 1 }, { min: 13 }, { min: 25 }, { min: 50 }],
-};
+/* The engine is Nexcal's own (data/nexcal/engine.ts, ported unchanged); this adds Emerald's margin floor. */
+import { NEXCAL_DEFAULT_SETTINGS, getPrintTimeRateValue, type NexcalSettings as EngineSettings } from "./nexcal/engine";
+export type NexcalSettings = EngineSettings & { marginFloorPct: number };
+export const NEXCAL_DEFAULTS: NexcalSettings = { ...NEXCAL_DEFAULT_SETTINGS, marginFloorPct: 40 };
 export const nexcalSig = persisted<NexcalSettings>("nexcalSettings", NEXCAL_DEFAULTS);
+/* Older saved settings lack the model-estimation fields: fill them from the defaults. */
+if (Object.keys(NEXCAL_DEFAULTS).some((k) => !(k in nexcalSig.value))) nexcalSig.value = { ...NEXCAL_DEFAULTS, ...nexcalSig.value };
 
 /** ₹/h derived from the printer's own economics (auto) or typed (manual). */
-export function machineRate(s: NexcalSettings) {
-  if (s.printTimeRateMode === "manual") return s.printTimeRateManual;
-  const hours = s.estimatedLifeYrs * 365 * 24 * (s.estimatedUptimePct / 100);
-  const capital = div(s.printerCost + s.additionalUpfrontCost + s.annualMaintenance * s.estimatedLifeYrs, hours);
-  const power = (s.powerConsumptionW / 1000) * s.electricityCost;
-  return r2((capital + power) * s.costBufferFactor);
-}
-/** Bulk tiers are keyed by spools consumed: tier n (0-based) takes n × 5 % off. */
-export function bulkDiscount(s: NexcalSettings, gramsTotal: number) {
-  const spools = gramsTotal / (s.spoolWeightGrams || 1000);
-  let n = 0; s.bulkTiers.forEach((t, i) => { if (spools >= t.min) n = i; });
-  return n * 5;
-}
-export type NexcalIn = { grams: number; hours: number; qty: number; perKg: number; finishingMin: number; extras: number; marginPct: number; supportPct?: number };
-export function nexcal(s: NexcalSettings, i: NexcalIn) {
-  const g = i.grams * (1 + (i.supportPct ?? 0) / 100) * s.materialEfficiencyFactor;
-  const material = (g / 1000) * i.perKg, machine = i.hours * machineRate(s), labour = (i.finishingMin / 60) * s.labourHourlyRate;
-  const unitCost = material + machine + labour + i.extras;
-  const qty = Math.max(1, i.qty), totalCost = unitCost * qty;
-  const disc = bulkDiscount(s, g * qty);
-  const price = priceFromMargin(totalCost, i.marginPct) * (1 - disc / 100);
-  return { material: r2(material), machine: r2(machine), labour: r2(labour), extras: r2(i.extras), unitCost: r2(unitCost), totalCost: r2(totalCost), discountPct: disc,
-    price: r2(price), unitPrice: r2(price / qty), gst: r2(price * s.gstPercent / 100), withGst: r2(price * (1 + s.gstPercent / 100)), actualMargin: marginPct(price, totalCost), floor: s.marginFloorPct };
-}
+export const machineRate = (s: NexcalSettings) => r2(getPrintTimeRateValue(s));
 
 /* ------------------------------------------------------------- NexRes · resin */
 export type NexResSettings = {
