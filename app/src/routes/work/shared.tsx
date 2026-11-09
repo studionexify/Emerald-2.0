@@ -9,7 +9,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
-import { startRun, finishRun, runSpools, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { startRun, finishRun, undoRun, gramsPerPiece, runSpools, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -244,7 +244,11 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
   const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
   const spools = spoolsSig.value.filter((x) => x.active !== false && x.status !== "empty");
   const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]);
-  const [fin, setFin] = useState<Record<string, [number, number]>>({}), [gm, setGm] = useState<Record<string, Record<string, number>>>({});
+  const [fin, setFin] = useState<Record<string, [number, number]>>({}), [gm, setGm] = useState<Record<string, Record<string, number>>>({}), [why, setWhy] = useState<Record<string, string>>({});
+  const gpp = gramsPerPiece(item.name);
+  /** Suggested grams per spool for a run: learnt grams-per-piece × pieces, split evenly across its spools. */
+  const guess = (r: Batch, no: string) => gm[r.id]?.[no] ?? (gpp ? Math.round((gpp * r.units) / Math.max(1, runSpools(r.spool).length)) : 0);
+  const gramsFor = (r: Batch) => Object.fromEntries(runSpools(r.spool).map((no) => [no, guess(r, no)]));
   const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
   const spLabel = (x: typeof spools[number]) => `${x.spoolNo} · ${x.material} ${x.colour}`.trim();
   const room = Math.max(0, p.pending - p.printing);
@@ -253,7 +257,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
   return <div class="flex flex-col gap-2">
     <form class="rounded-lg border border-c4/30 bg-c1 p-2 flex flex-col gap-1.5" onSubmit={start}>
       <span class="font-semibold text-[12px]">Start print <span class="t-meta font-normal">· {room} left to print</span></span>
-      <div class="grid grid-cols-[64px_1fr] gap-1.5">
+      <div class="grid grid-cols-[72px_minmax(0,1fr)] gap-1.5">
         <input class={c} type="number" min={1} placeholder={String(room)} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Pieces in this run" />
         <select class={c} value={pr || printers[0]?.name} onChange={(e) => setPr((e.target as HTMLSelectElement).value)} aria-label="Printer">{printers.map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}</select>
       </div>
@@ -264,30 +268,43 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
         {sps.length > 1 && <button type="button" class="w-7 h-7 !min-h-0 rounded-lg text-c3 hover:bg-c0 cursor-pointer" onClick={() => setSps(sps.filter((_, j) => j !== k))} aria-label={`Remove spool ${k + 1}`}>×</button>}
       </div>)}
       <button type="button" class="self-start underline t-meta cursor-pointer !min-h-0" onClick={() => setSps([...sps, ""])}>+ Add another spool / material</button>
+      {(() => { const pick = spools.filter((x) => sps.includes(spLabel(x))); if (!gpp || !pick.length) return null;
+        const need = Math.round(gpp * (qty || room)), have = pick.reduce((a, x) => a + x.grams, 0);
+        return need > have ? <p class="text-[11px] text-red font-medium" role="alert">⚠ Needs about {need} g but the picked spool{pick.length > 1 ? "s hold" : " holds"} {have} g — add a spool or print fewer.</p>
+          : <p class="t-meta">Needs about {need} g · {have} g on the picked spool{pick.length > 1 ? "s" : ""}</p>; })()}
       <button class="h-8 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
     </form>
-    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gm[r.id])); }}>
-      <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.spool ? ` · ${r.spool}` : ""}</span></div>
-      <div class="flex items-center gap-1.5">
+    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id])); }}>
+      <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.spool ? ` · ${r.spool}` : ""}{r.by ? <span class="t-meta"> · {r.by}</span> : null}</span></div>
+      <div class="flex flex-wrap items-center gap-1.5">
         <label class="t-meta">Good</label><input class={`${c} w-14`} type="number" min={0} value={f[0]} onInput={(e) => setFin({ ...fin, [r.id]: [Number((e.target as HTMLInputElement).value) || 0, f[1]] })} />
         <label class="t-meta">Failed</label><input class={`${c} w-14`} type="number" min={0} value={f[1]} onInput={(e) => setFin({ ...fin, [r.id]: [f[0], Number((e.target as HTMLInputElement).value) || 0] })} />
         <button class="h-8 px-3 ml-auto rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Print done</button>
       </div>
+      {f[1] > 0 && <label class="flex items-center gap-1.5"><span class="t-meta">Why failed?</span>
+        <select class={`${c} flex-1`} value={why[r.id] ?? ""} onChange={(e) => setWhy({ ...why, [r.id]: (e.target as HTMLSelectElement).value })} aria-label="Failure reason">
+          <option value="">Pick a reason (optional)</option>{FAIL_REASONS.map((x) => <option key={x}>{x}</option>)}</select></label>}
       {runSpools(r.spool).length > 0 && <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span class="t-meta w-full">Filament used (comes off the spool)</span>
+        <span class="t-meta w-full">Filament used (comes off the spool){gpp ? ` · filled from ${Math.round(gpp * 10) / 10} g per piece, adjust if needed` : ""}</span>
         {runSpools(r.spool).map((no) => { const left = spoolsSig.value.find((x) => x.spoolNo === no)?.grams; return <label key={no} class="flex items-center gap-1.5">
           <span class="font-mono text-[11px]">{no}</span>
-          <input class={`${c} w-20`} type="number" min={0} placeholder="g" value={gm[r.id]?.[no] || ""} onInput={(e) => setGm({ ...gm, [r.id]: { ...gm[r.id], [no]: Number((e.target as HTMLInputElement).value) || 0 } })} aria-label={`Grams used from ${no}`} />
+          <input class={`${c} w-20`} type="number" min={0} placeholder="g" value={guess(r, no) || ""} onInput={(e) => setGm({ ...gm, [r.id]: { ...gramsFor(r), ...gm[r.id], [no]: Number((e.target as HTMLInputElement).value) || 0 } })} aria-label={`Grams used from ${no}`} />
           <span class="t-meta">g{left !== undefined ? ` · ${left} g left` : ""}</span>
         </label>; })}
       </div>}
     </form>; })}
     {past.length > 0 && <details><summary class="cursor-pointer t-meta py-1">{past.length} run{past.length === 1 ? "" : "s"} done</summary>
-      <ul class="flex flex-col divide-y divide-line">{past.map((r) => <li key={r.id} class="flex items-center gap-2 py-1"><span class="flex-1 min-w-0 truncate">{r.printer || "—"}{r.spool ? ` · ${r.spool}` : ""}</span><span class="whitespace-nowrap"><span class="text-grn">{r.done}</span> · <span class="text-red">{r.failed ?? 0} ✕</span></span></li>)}</ul>
+      <ul class="flex flex-col divide-y divide-line">{past.map((r) => { const g = Object.values(r.grams ?? {}).reduce((a, x) => a + x, 0); return <li key={r.id} class="flex items-center gap-2 py-1.5">
+        <span class="flex-1 min-w-0"><span class="block truncate">{r.printer || "—"}{r.spool ? ` · ${r.spool}` : ""}</span>
+          <span class="block t-meta truncate">{[r.by, g ? `${g} g` : "", r.reason ? `failed: ${r.reason}` : ""].filter(Boolean).join(" · ") || "—"}</span></span>
+        <span class="whitespace-nowrap"><span class="text-grn">{r.done} good</span> · <span class="text-red">{r.failed ?? 0} failed</span></span>
+        <button type="button" class="underline t-meta cursor-pointer !min-h-0" onClick={() => { if (confirm(`Undo this run? ${r.done} good / ${r.failed ?? 0} failed come off the line${g ? ` and ${g} g go back on the spool` : ""}. It goes back on the plate so you can log it again.`)) onOpen(undoRun(order, r.id)); }}>Undo</button>
+      </li>; })}</ul>
     </details>}
   </div>;
 }
 
+const FAIL_REASONS = ["Warping / lifted", "Stringing", "Layer shift", "Spaghetti / detached", "Under-extrusion", "Clog", "Filament ran out", "Support failure", "Power cut", "Other"];
 const KINDS: ConKind[] = ["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"];
 export function ConsumeForm({ orderNo, batches = [] }: { orderNo?: string; batches?: string[] }) {
   const [k, setK] = useState<ConKind>("filament");

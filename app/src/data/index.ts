@@ -156,20 +156,39 @@ export function lineProgress(o: Order, i: Order["items"][number], batches = batc
 }
 /** Print runs: start a run of N units on a printer with a spool, then log good / failed when it comes off. */
 export function startRun(o: Order, item: string, units: number, printer: string, spool: string) {
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spool || undefined, running: true, at: new Date().toISOString(), stage: "production" }];
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spool || undefined, running: true, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
   log("Started print", `${o.no} · ${units}× ${item} on ${printer}`);
 }
 /** Spool numbers in a run's spool label, e.g. "SP-001 · PLA Black + SP-004 · PLA White" → ["SP-001", "SP-004"]. */
 export const runSpools = (label?: string) => (label ? label.split(" + ").map((x) => x.split(" · ")[0].trim()).filter(Boolean) : []);
-export function finishRun(o: Order, id: string, good: number, bad: number, grams: Record<string, number> = {}): Order {
+/** Grams per piece for a product, learnt from its most recent finished run that logged grams. */
+export function gramsPerPiece(item: string, batches = batchesSig.value) {
+  const r = [...batches].reverse().find((b) => b.name === item && !b.running && b.grams && b.done + (b.failed ?? 0) > 0);
+  if (!r) return 0;
+  const g = Object.values(r.grams!).reduce((a, x) => a + x, 0);
+  return g / (r.done + (r.failed ?? 0));
+}
+const addToLine = (o: Order, name: string, good: number, bad: number): Order =>
+  o.items.some((i) => i.name === name && (i.printed !== undefined || i.failed !== undefined))
+    ? patchOrder(o, { items: o.items.map((i) => (i.name === name && (i.printed !== undefined || i.failed !== undefined) ? { ...i, printed: Math.max(0, (i.printed ?? 0) + good), failed: Math.max(0, (i.failed ?? 0) + bad) } : i)) })
+    : o;
+export function finishRun(o: Order, id: string, good: number, bad: number, grams: Record<string, number> = {}, reason?: string): Order {
   const b = batchesSig.value.find((x) => x.id === id); if (!b) return o;
   // Filament used (good and failed pieces alike) comes off each spool and lands in the order's consumption.
-  for (const [no, g] of Object.entries(grams)) if (g > 0) consume({ kind: "filament", item: no, qty: g, orderNo: o.no, batch: b.name, printer: b.printer });
-  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad } : x));
-  log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}`);
-  // Lines carrying imported totals get the run added on top; others are summed from runs.
-  if (!o.items.some((i) => i.name === b.name && (i.printed !== undefined || i.failed !== undefined))) return o;
-  return patchOrder(o, { items: o.items.map((i) => (i.name === b.name && (i.printed !== undefined || i.failed !== undefined) ? { ...i, printed: (i.printed ?? 0) + good, failed: (i.failed ?? 0) + bad } : i)) });
+  const cons: string[] = [];
+  for (const [no, g] of Object.entries(grams)) if (g > 0) cons.push(consume({ kind: "filament", item: no, qty: g, orderNo: o.no, batch: b.name, printer: b.printer }).id);
+  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad, grams, cons, reason: bad > 0 ? reason || undefined : undefined, by: me.value?.name ?? x.by } : x));
+  log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}${bad && reason ? ` (${reason})` : ""}`);
+  return addToLine(o, b.name, good, bad);
+}
+/** Undo a finished run: counts come back off the line, grams go back on the spools, and the run is on the plate again to re-log. */
+export function undoRun(o: Order, id: string): Order {
+  const b = batchesSig.value.find((x) => x.id === id); if (!b || b.running) return o;
+  for (const [no, g] of Object.entries(b.grams ?? {})) if (g > 0) spoolsSig.value = spoolsSig.value.map((s) => (s.spoolNo === no ? { ...s, grams: s.grams + g, status: s.status === "empty" ? "open" : s.status } : s));
+  if (b.cons?.length) consSig.value = consSig.value.filter((c) => !b.cons!.includes(c.id));
+  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: true, done: 0, failed: undefined, grams: undefined, cons: undefined, reason: undefined } : x));
+  log("Undid print", `${o.no} · ${b.name}: ${b.done} good, ${b.failed ?? 0} failed`);
+  return addToLine(o, b.name, -b.done, -(b.failed ?? 0));
 }
 /** Machines a line was printed on, from print batches and production jobs. */
 export function lineMachines(o: Order, i: Order["items"][number], batches = batchesSig.value, jobs = jobsSig.value) {

@@ -3,7 +3,7 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, type OrderSize, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, type OrderSize, type Client } from "../../data";
 import { OrderDetail, PrintRuns, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
@@ -100,18 +100,18 @@ function Items({ o, seg, all, setAll }: { o: Order; seg?: Segment; all?: boolean
 /** Bulk print desk: every line of the order, with start / finish print right on the main screen. */
 function PrintDesk({ o }: { o: Order }) {
   const [pk, setPk] = useState<number | null>(null);
-  return <div class="border-t border-line bg-c1/40 px-4 py-3 pop-in" onClick={(e) => e.stopPropagation()}>
+  return <div class="border-t border-line bg-c1/40 px-2 md:px-4 py-3 pop-in" onClick={(e) => e.stopPropagation()}>
     <ul class="flex flex-col divide-y divide-line rounded-lg bg-c0 border border-line">
       {o.items.map((i, k) => { const p = lineProgress(o, i), pct = i.qty ? Math.min(100, (p.printed / i.qty) * 100) : 0, wp = i.qty ? Math.min(100 - pct, (p.failed / i.qty) * 100) : 0;
         return <li key={k} class="px-3 py-2">
-          <div class="grid grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_auto] items-center gap-3">
+          <div class="grid grid-cols-[28px_minmax(0,1fr)_auto] md:grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
             <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" />
             <div class="min-w-0"><div class="text-[13px] font-semibold truncate">{i.name}</div><div class="t-meta">×{i.qty}</div></div>
-            <div class="min-w-0"><div class="flex h-1.5 rounded-full bg-c1 overflow-hidden"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></div>
+            <div class="min-w-0 col-span-full row-start-2 md:col-span-1 md:row-start-auto"><div class="flex h-1.5 rounded-full bg-c1 overflow-hidden"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></div>
               <div class="text-[11px] font-medium mt-0.5 whitespace-nowrap"><span class="text-grn">{p.printed} done</span> · <span class="text-red">{p.failed} failed</span> · <span class="text-c3">{p.pending} left</span>{p.printing > 0 && <b class="text-c4"> · {p.printing} on plate</b>}</div></div>
             <button class={`h-8 px-3 !min-h-0 rounded-lg text-[12px] font-semibold cursor-pointer ${pk === k ? "bg-c1 text-c4" : "bg-c4 text-c0"}`} onClick={() => setPk(pk === k ? null : k)}>{pk === k ? "Close" : p.printing ? "Finish / print" : "Print"}</button>
           </div>
-          {pk === k && <div class="mt-2 max-w-xl ml-10 text-xs"><PrintRuns order={o} item={i} onOpen={() => {}} /></div>}
+          {pk === k && <div class="mt-2 max-w-xl md:ml-10 text-xs"><PrintRuns order={o} item={i} onOpen={() => {}} /></div>}
         </li>; })}
     </ul>
   </div>;
@@ -249,7 +249,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const nos = new Set(mine.map((o) => o.no));
   const myJobs = jobsSig.value.filter((j) => nos.has(j.orderNo));
-  const busy = fleet.filter((p) => p.status === "printing").length;
+  const busy = fleet.filter((p) => p.status === "printing" || batchesSig.value.some((b) => b.running && b.printer === p.name)).length;
   const flow = SUGGESTED[seg === "client" ? "client" : seg === "inhouse" ? "inhouse" : "bulk"];
   const stages = STAGES.filter((x) => flow.includes(x.key));
   const all = mine.filter((o) => o.stage !== "archived");
@@ -276,9 +276,10 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         <Waterfall min={260} max={5} gap="gap-3" items={[
           ...fleet.map((p): [number, preact.ComponentChildren] => {
             const j = myJobs.find((x) => x.printer === p.name && x.status === "printing");
-            const ord = j && mine.find((o) => o.no === j.orderNo);
-            const hot = !!j || p.status === "printing";
-            return [j ? 3 : 2,
+            const run = batchesSig.value.find((b) => b.running && b.printer === p.name);
+            const ord = j ? mine.find((o) => o.no === j.orderNo) : run && mine.find((o) => o.no === run.orderNo);
+            const hot = !!j || !!run || p.status === "printing";
+            return [j || (run && ord) ? 3 : 2,
               <a key={p.id} href="#" onClick={(e) => { e.preventDefault(); if (ord) setOpen(ord); }}
                 class={`rounded-[var(--radius-card)] p-4 min-w-0 block min-h-[148px] transition-colors ${hot ? "bg-c4 text-c0 border-2 border-c4 shadow-lg" : "bg-c0 border border-line hover:bg-c1/40"}`}>
                 <div class="flex items-start justify-between gap-2">
@@ -286,7 +287,14 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
                   {hot ? <span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full bg-c0 text-c4 text-[11px] font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-[#8FC29E] animate-pulse" />Printing</span>
                     : <Status tone={p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>}
                 </div>
-                {j ? (
+                {!j && run && ord ? (
+                  <div class="mt-3">
+                    <div class="text-[11px] uppercase tracking-[0.06em] opacity-70">For</div>
+                    <div class="text-[15px] font-semibold leading-snug">{ord.customer}</div>
+                    <div class="text-[13px] opacity-80">{run.units}× {run.name}</div>
+                    <div class="text-[12px] opacity-70 mt-1 truncate">{[run.spool, run.by, run.at ? `since ${new Date(run.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""].filter(Boolean).join(" · ")}</div>
+                  </div>
+                ) : j ? (
                   <div class="mt-3">
                     <div class="text-[11px] uppercase tracking-[0.06em] opacity-70">For</div>
                     <div class="text-[15px] font-semibold leading-snug">{ord?.customer ?? j.orderNo}</div>

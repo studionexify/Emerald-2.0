@@ -125,7 +125,7 @@ export function Tip({ text, children }: { text?: string; children?: ComponentChi
   return (
     <span class="relative inline-flex group align-middle shrink-0" tabIndex={0} aria-label={text}>
       <span class="w-4 h-4 grid place-items-center text-c3 hover:text-c4 cursor-help"><Icon name="info" size={14} /></span>
-      <span role="tooltip" class="pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 z-50 w-max max-w-[280px] rounded-lg bg-c4 text-c0 text-[12px] font-medium leading-snug px-2.5 py-1.5 shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus:opacity-100 group-focus:visible transition-opacity whitespace-normal normal-case tracking-normal">{text ?? children}</span>
+      <span role="tooltip" class="pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 z-50 w-max max-w-[280px] rounded-lg bg-c4 text-c0 text-[12px] font-medium leading-snug px-2.5 py-1.5 shadow-lg hidden group-hover:block group-focus:block whitespace-normal normal-case tracking-normal">{text ?? children}</span>
     </span>
   );
 }
