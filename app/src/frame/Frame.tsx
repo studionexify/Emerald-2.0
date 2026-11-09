@@ -2,10 +2,11 @@ import type { ComponentChildren } from "preact";
 import { signal } from "@preact/signals";
 import { navigate, useLocation } from "../router";
 import { syncState } from "../data/sync";
-import { NAV } from "../nav";
+import { NAV, NAV_GROUPS, type NavItem } from "../nav";
 import { AskHost, Icon } from "../ui";
 import { searchQ } from "../data/search";
-import { attention, batchesSig, can, isExternal, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
+import { segmentOf } from "../data/inventory";
+import { attention, batchesSig, binSig, tasksSig, can, isExternal, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
 
 /** Module key for the themed accent: first path segment; home-like pages share the brand emerald. */
@@ -29,23 +30,52 @@ addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLow
 const ALL = [...NAV, { href: "/settings", label: "Settings", icon: "settings" }];
 const titleOf = (path: string) => (path === "/more" ? "More" : path === "/search" ? "Search" : [...ALL].sort((a, b) => b.href.length - a.href.length).find((n) => isActive(path, n.href))?.label ?? "Emerald");
 
+/** Exact match for the production segments (they share the /work prefix); prefix match elsewhere. */
+const SEG_HREFS = ["/work", "/work/b2b", "/work/inhouse"];
+const navOn = (path: string, href: string) => (SEG_HREFS.includes(href) ? path === href || (href === "/work" && path.startsWith("/work/") && !SEG_HREFS.includes(path)) : isActive(path, href));
+
+function navCount(href: string) {
+  const live = ordersSig.value.filter((o) => o.stage !== "archived");
+  if (href === "/work") return live.filter((o) => segmentOf(o) === "client").length;
+  if (href === "/work/b2b") return live.filter((o) => segmentOf(o) === "bulk").length;
+  if (href === "/work/inhouse") return live.filter((o) => segmentOf(o) === "inhouse").length;
+  if (href === "/todo") return tasksSig.value.filter((t) => !t.done).length;
+  if (href === "/alerts") return Object.values(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
+  if (href === "/bin") return binSig.value.length;
+  return 0;
+}
+
 function Sidebar() {
   const { path } = useLocation();
   const c = collapsed.value;
+  if (isExternal()) return null;
+  const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((n) => can(moduleOf(n.href))) })).filter((g) => g.items.length);
+  const item = (n: NavItem) => {
+    const on = navOn(path, n.href), k = navCount(n.href), hot = n.href === "/alerts" && k > 0;
+    return (
+      <a key={n.href} href={n.href} data-mod={modOf(n.href)} aria-current={on ? "page" : undefined} title={n.label}
+        class={`relative flex items-center ${c ? "flex-col justify-center gap-1 h-[54px] px-1 rounded-2xl text-[10.5px] leading-tight text-center" : "gap-3 h-10 pl-3 pr-2 rounded-xl text-[14px]"} ${on ? "bg-acc text-on-acc font-semibold shadow-sm" : "text-c4 font-medium hover:bg-c1"}`}>
+        <span class={`shrink-0 ${on ? "" : "text-acc"}`}><Icon name={n.icon} size={c ? 18 : 17} /></span>
+        <span class={`min-w-0 ${c ? "max-w-full truncate" : "flex-1 truncate"}`}>{c ? n.label.split(" ")[0] : n.label}</span>
+        {k > 0 && (c
+          ? <span class={`absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full text-[9.5px] leading-4 num font-bold ${hot ? "bg-warn text-black" : on ? "bg-c0 text-c4" : "bg-c1 text-c3"}`}>{k}</span>
+          : <span class={`min-w-6 h-5 px-1.5 rounded-full text-[11px] leading-5 text-center num font-bold ${hot ? "bg-warn text-black" : on ? "bg-c0/25 text-on-acc" : "bg-c1 text-c3"}`}>{k}</span>)}
+      </a>
+    );
+  };
   return (
     <aside aria-label="Main navigation"
-      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-c0 rounded-[22px] my-2 ml-[max(8px,env(safe-area-inset-left))] mr-2 py-1 ${c ? "w-[84px]" : "w-52 2xl:w-56"}`}>
-      <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col gap-0.5 p-2">
-        {ALL.filter((n) => (isExternal() ? n.href === "/settings" : can(moduleOf(n.href)))).concat(isExternal() ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }] : []).map((n) => {
-          const on = isActive(path, n.href);
-          return (
-            <a key={n.href} href={n.href} data-mod={modOf(n.href)} aria-current={on ? "page" : undefined} title={n.label}
-              class={`flex items-center rounded-full ${n.href === "/settings" ? "mt-auto" : ""} ${c ? "flex-col justify-center gap-1 min-h-[52px] py-2 px-1 text-[10px] leading-tight text-center rounded-2xl" : "gap-2.5 h-9 px-3 text-[13px]"} ${on ? "bg-acc text-on-acc font-semibold" : "text-c3 font-medium hover:bg-c1 hover:text-c4"}`}>
-              <span class={on ? "" : "text-acc"}><Icon name={n.icon} size={c ? 18 : 16} /></span>
-              <span class="min-w-0">{c ? n.label.split(" ")[0] : n.label}</span>
-            </a>
-          );
-        })}
+      class={`hidden md:flex flex-col shrink-0 min-h-0 bg-c0 rounded-[22px] my-2 ml-[max(8px,env(safe-area-inset-left))] mr-2 ${c ? "w-[88px]" : "w-60 2xl:w-64"}`}>
+      <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col p-2.5">
+        {groups.map((g, gi) => (
+          <div key={g.label || gi} class={gi ? "mt-2 pt-2 border-t border-line" : ""}>
+            {g.label && (c
+              ? <div class="text-[9px] font-bold uppercase tracking-[0.08em] text-c2 text-center pb-1">{g.label === "Production" ? "Prod." : g.label === "Operations" ? "Ops" : "Space"}</div>
+              : <div class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-c2">{g.label}</div>)}
+            <div class={`flex flex-col gap-0.5 ${g.label === "Production" && !c ? "rounded-2xl bg-c1/50 p-1" : ""}`}>{g.items.map(item)}</div>
+          </div>
+        ))}
+        <div class="mt-auto pt-2 border-t border-line">{item({ href: "/settings", label: "Settings", icon: "settings" })}</div>
       </nav>
     </aside>
   );

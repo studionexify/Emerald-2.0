@@ -1,3 +1,4 @@
+import { LinkedTasks } from "../Todo";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
@@ -81,6 +82,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       </div>
       {gate && order.stage !== "archived" && <p class="text-xs mb-2 rounded-xl bg-c1 p-2" role="note"><b>Blocked:</b> {gate}</p>}
       {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
+      <LinkedTasks kind={order.stage === "quotation" ? "Quotation" : "Order"} refNo={order.no} />
 
       {order.stage === "production" && lowAcc.length > 0 && <div class="rounded-xl bg-c1 p-2 text-xs mb-3"><b>Stock check (advisory):</b> {lowAcc.map((a) => a.name).join(", ")} at or below reorder.</div>}
       <h3 class="font-semibold text-sm mb-1.5">Recorded</h3>

@@ -47,3 +47,47 @@ if (!done && !ordersSig.value.length) {
   if (!printersSig.value.length) printersSig.value = printers;
   if (!jobsSig.value.length) jobsSig.value = jobs;
 }
+
+/* Second pass (v2): in-house work, linked tasks, a log history and a few Bin items. Runs once per browser. */
+import { binSig, tasksSig } from "./inventory";
+import { logsSig } from "./index";
+import type { Binned, Log, Task } from "../mock/types";
+let done2 = false;
+try { done2 = !!localStorage.getItem("emerald:demo2"); localStorage.setItem("emerald:demo2", "1"); } catch {}
+if (!done2 && ordersSig.value.some((o) => o.id.startsWith("demo-"))) {
+  const inh: Order[] = [
+    { id: "demo-o8", no: "EM-2109", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "production", created: d(-3), due: d(5), items: [L("Display shelf samples", 6, 0, "PLA", "Mixed"), L("Calibration cubes", 12, 0)] },
+    { id: "demo-o9", no: "EM-2110", type: "inhouse", customer: "Studio Nexify", medium: "Internal", stage: "qc", created: d(-5), due: d(2), items: [L("Printer spare clips", 30, 0, "PETG", "Black")] },
+  ];
+  if (!ordersSig.value.some((o) => o.id === "demo-o8")) ordersSig.value = [...ordersSig.value, ...inh];
+  const T = (i: number, title: string, due: number, p: Partial<Task> = {}): Task => ({ id: `demo-t${i}`, title, due: due === 99 ? "" : d(due), done: false, who: "You", created: d(-2), ...p });
+  const tasks: Task[] = [
+    T(0, "Call Studio Kiln about revised CAD", 0, { myDay: d(0), important: true, link: { kind: "Order", ref: "EM-2105" }, steps: [{ id: "s1", title: "Email current drawing", done: true }, { id: "s2", title: "Confirm 1:200 scale", done: false }] }),
+    T(1, "Send quotation to BrightMinds School", 1, { myDay: d(0), link: { kind: "Quotation", ref: "EM-2107" }, notes: "Include bulk discount for 100+ pieces." }),
+    T(2, "QC lithophane lamps — light test", 0, { important: true, link: { kind: "Order", ref: "EM-2103" }, who: "Priya" }),
+    T(3, "Book DTDC pickup for Kabir", 2, { link: { kind: "Order", ref: "EM-2108" } }),
+    T(4, "Fix Elegoo Saturn vat leak", -1, { link: { kind: "Printer", ref: "Elegoo Saturn · 04" }, who: "Arjun", list: "Studio" }),
+    T(5, "Reorder white PLA (5 kg)", 3, { list: "Purchases", repeat: "Monthly" }),
+    T(6, "Follow up with Paper Trail on second PO", 99, { link: { kind: "Client", ref: "Paper Trail Stationers" } }),
+    T(7, "Clean build plates", -2, { done: true, doneAt: d(-1), repeat: "Weekly", list: "Studio" }),
+  ];
+  if (!tasksSig.value.length) tasksSig.value = tasks;
+  const now = (n: number, hm: string) => `${d(n)} ${hm}`;
+  const logs: Log[] = ([
+    [0, "10:42", "You", "Moved to QC", "EM-2103", "order"], [0, "10:05", "Priya", "Logged filament", "EM-2101 · 820 g White PLA", "consumption"],
+    [0, "09:30", "You", "Added task", "Call Studio Kiln about revised CAD", "order"], [-1, "18:12", "Arjun", "Stock in", "White PLA × 4 kg", "stock"],
+    [-1, "16:40", "You", "Recorded payment", "EM-2108 · ₹500", "money"], [-1, "15:02", "Priya", "Completed task", "Clean build plates", "order"],
+    [-1, "11:20", "You", "Deleted order", "EM-2099", "order"], [-2, "17:45", "Arjun", "Logged packing", "EM-2106 · box M", "consumption"],
+    [-2, "12:10", "You", "Created order", "EM-2107", "order"], [-2, "09:15", "You", "Bought", "Bubble wrap roll", "money"],
+    [-3, "14:00", "Arjun", "Stock out", "Grey PETG × 1.4 kg", "stock"], [-3, "10:30", "You", "Restored from Bin", "Lithophane template", "order"],
+  ] as const).map(([n, hm, who, action, target, kind], i) => ({ id: `demo-l${i}`, at: now(n, hm), who, action, target, kind }));
+  if (!logsSig.value.length) logsSig.value = logs;
+  const bin: Binned[] = [
+    { id: "demo-b0", kind: "Order", label: "Ravi Kumar · EM-2099", deletedAt: d(-1), by: "You", data: O(20, "Ravi Kumar", "small", undefined, "quotation", 6, [L("Bobblehead", 1, 1200)], { no: "EM-2099" }) },
+    { id: "demo-b1", kind: "Task", label: "Post reel of lithophanes", deletedAt: d(-2), by: "You", data: T(20, "Post reel of lithophanes", 1) },
+    { id: "demo-b2", kind: "Task", label: "Renew printer warranty", deletedAt: d(-5), by: "Arjun", data: T(21, "Renew printer warranty", 4) },
+    { id: "demo-b3", kind: "Job", label: "Phone stand · Prusa MK4 · 03", deletedAt: d(-3), by: "Priya", data: { id: "demo-j9", orderNo: "EM-2104", item: "Phone stand", printer: "Prusa MK4 · 03", operator: "Priya", status: "queued", hours: 14, grams: 2600 } },
+    { id: "demo-b4", kind: "Client", label: "Ravi Kumar", deletedAt: d(-6), by: "You", data: { id: "demo-c20", name: "Ravi Kumar", kind: "Individual", city: "Kochi", medium: "Instagram", active: true } },
+  ];
+  if (!binSig.value.length) binSig.value = bin;
+}

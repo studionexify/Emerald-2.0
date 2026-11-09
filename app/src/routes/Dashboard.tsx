@@ -2,6 +2,9 @@ import { useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { Card, Icon, KV, Page, Section, Status, Waterfall } from "../ui";
 import { Initials, StageStrip } from "../ui/stage-strip";
+import { navigate } from "../router";
+import { openOrderSig, segmentOf, SEGMENT_HREF, SEGMENT_LABEL, type Segment } from "../data/inventory";
+import { STAGES } from "../data";
 import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
 
 export default function Dashboard() {
@@ -42,6 +45,18 @@ export default function Dashboard() {
         <StageStrip orders={ordersSig.value} showValue={can("mauny")} />
       </Section>
 
+      <Section title="Production by segment">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(["client", "bulk", "inhouse"] as Segment[]).map((g) => { const l = open.filter((o) => segmentOf(o) === g), lt = l.filter((o) => o.due && o.due < today).length;
+            return (
+              <a key={g} href={SEGMENT_HREF[g]} class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 hover:ring-1 hover:ring-c2 min-w-0">
+                <div class="flex items-center justify-between gap-2"><span class="text-[15px] font-bold text-c4">{SEGMENT_LABEL[g]}</span><span class="t-meta">Open →</span></div>
+                <div class="flex items-baseline gap-3 mt-1"><span class="num text-[26px] font-semibold leading-none">{l.length}</span><span class="t-meta">live{lt ? <b class="text-warn"> · {lt} late</b> : ""}</span></div>
+                <div class="flex flex-wrap gap-1 mt-2">{STAGES.filter((s) => l.some((o) => o.stage === s.key)).map((s) => <span key={s.key} class="text-[11px] font-medium bg-c1 rounded-full px-2 h-5 leading-5">{s.label} {l.filter((o) => o.stage === s.key).length}</span>)}{!l.length && <span class="t-meta">Nothing in progress</span>}</div>
+              </a>); })}
+        </div>
+      </Section>
+
       <Waterfall min={360} max={4} items={[
         [2 + Math.min(feed.length, 8) * 0.6, <div key="a"><Section title="Action center" note={`${all.length} items`} action={<a href="/alerts" class="t-meta whitespace-nowrap">All →</a>}>
           <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
@@ -64,13 +79,13 @@ export default function Dashboard() {
         [1 + machines.length * 0.7, <div key="m"><Section title="Machines" action={<a href="/workshop/printers" class="t-meta">Printers →</a>}>
           <Card>
             {machines.length ? <div class="flex flex-col gap-3">{machines.map((p) => (
-              <div key={p.id} class="flex items-center gap-3 min-w-0">
+              <a key={p.id} href="/workshop/printers" class="flex items-center gap-3 min-w-0 -mx-2 px-2 py-1 rounded-xl hover:bg-c1">
                 <span class={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${p.status === "printing" ? "bg-lime text-black" : "bg-c1 text-c2"}`}><Icon name={p.status === "down" ? "wrench" : "printer"} size={16} /></span>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-baseline justify-between gap-2"><span class="font-semibold truncate">{p.name}</span><Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status></div>
                   <div class="t-meta truncate num">{p.model}{p.job ? ` · ${p.job}` : ""} · {p.hours}h</div>
                 </div>
-              </div>))}</div> : <p class="t-meta">No printers yet.</p>}
+              </a>))}</div> : <p class="t-meta">No printers yet.</p>}
           </Card>
         </Section></div>],
         [2.5, <div key="f"><Section title="Money flow" action={<a href="/mauny/finance" class="t-meta">Finance →</a>}>
@@ -79,24 +94,30 @@ export default function Dashboard() {
               <div><div class="t-meta">Net this week</div><div class="num text-[22px] font-semibold leading-tight">{inr(wk)}</div></div>
               <svg viewBox="0 0 100 22" class="w-28 h-8 text-c4" preserveAspectRatio="none" aria-hidden="true"><polyline points={spark} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" /></svg>
             </div>
-            <div class="mt-2">
+            <a href="/mauny/finance" class="block mt-2 -mx-2 px-2 rounded-xl hover:bg-c1">
               <KV label={<span class="inline-flex items-center gap-1.5"><Icon name="cash" size={13} />Earned · month</span>} value={inr(fm.earned)} />
               <KV label={<span class="inline-flex items-center gap-1.5"><Icon name="wallet" size={13} />Spent · month</span>} value={inr(fm.spent)} />
-            </div>
+            </a>
           </Card>
         </Section></div>],
         [1 + dueSoon.length * 0.7, <div key="d"><Section title="Due soonest" action={<a href="/work/orders" class="t-meta">All →</a>}>
-          <Card class="!py-1">{dueSoon.map((o) => <KV key={o.id} label={<span class="flex items-center gap-2.5 min-w-0"><Initials name={o.customer} /><span class="min-w-0"><span class="block truncate font-semibold text-c4">{o.customer}</span><span class="block font-mono text-[11px] text-c2">{o.no}</span></span></span>} value={shortDate(o.due)} />)}</Card>
+          <Card class="!py-1">{dueSoon.map((o) => <Go key={o.id} onClick={() => goOrder(o.no)}><KV label={<span class="flex items-center gap-2.5 min-w-0"><Initials name={o.customer} /><span class="min-w-0"><span class="block truncate font-semibold text-c4">{o.customer}</span><span class="block font-mono text-[11px] text-c2">{o.no}</span></span></span>} value={shortDate(o.due)} /></Go>)}</Card>
         </Section></div>],
         [1 + Math.max(1, Math.min(todo.length, 5)) * 0.6, <div key="t"><Section title="To-do" note={money ? String(todo.length) : undefined} action={<a href="/todo" class="t-meta">All →</a>}>
-          <Card class="!py-1">{!todo.length && <p class="t-meta py-2">No open tasks.</p>}{todo.slice(0, 5).map((t) => <KV key={t.id} label={t.title} value={<span class="t-meta">{t.who} · {shortDate(t.due)}</span>} />)}</Card>
+          <Card class="!py-1">{!todo.length && <p class="t-meta py-2">No open tasks.</p>}{todo.slice(0, 5).map((t) => <Go key={t.id} href="/todo"><KV label={t.title} value={<span class="t-meta">{t.who}{t.due ? ` · ${shortDate(t.due)}` : ""}</span>} /></Go>)}</Card>
         </Section></div>],
         [1 + Math.max(1, Math.min(logsSig.value.length, 5)) * 0.6, <div key="r"><Section title="Recent activity" action={<a href="/logs" class="t-meta">Logs →</a>}>
-        <Card class="!py-1">{!logsSig.value.length && <p class="t-meta py-2">Nothing logged yet.</p>}{logsSig.value.slice(0, 5).map((l) => <KV key={l.id} label={<span><b class="text-c4">{l.who}</b> {l.action.toLowerCase()} · {l.target}</span>} value={<span class="t-meta">{l.at.slice(11)}</span>} />)}</Card>
+        <Card class="!py-1">{!logsSig.value.length && <p class="t-meta py-2">Nothing logged yet.</p>}{logsSig.value.slice(0, 5).map((l) => <Go key={l.id} href="/logs"><KV label={<span><b class="text-c4">{l.who}</b> {l.action.toLowerCase()} · {l.target}</span>} value={<span class="t-meta">{l.at.slice(11)}</span>} /></Go>)}</Card>
       </Section></div>],
       ]} />
     </Page>
   );
+}
+
+/** Open an order on its production page. */
+const goOrder = (no: string) => { const o = ordersSig.value.find((x) => x.no === no); if (!o) return; openOrderSig.value = no; navigate(SEGMENT_HREF[segmentOf(o)]); };
+function Go({ href, onClick, children }: { href?: string; onClick?: () => void; children: ComponentChildren }) {
+  return href ? <a href={href} class="block -mx-2 px-2 rounded-lg hover:bg-c1">{children}</a> : <button onClick={onClick} class="block w-[calc(100%+16px)] text-left -mx-2 px-2 rounded-lg hover:bg-c1 cursor-pointer !min-h-0">{children}</button>;
 }
 
 function Tile({ href, icon, label, value, caption, live }: { href: string; icon: string; label: string; value: ComponentChildren; caption: string; live?: boolean }) {

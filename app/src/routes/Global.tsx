@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import { clientsSig } from "../data/inventory";
 import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
-import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow } from "../ui";
+import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
 
@@ -43,47 +43,78 @@ export function Todo() {
   );
 }
 
+const LOG_GROUP: Record<string, [string, string, string]> = { order: ["Orders & production", "work", "#2563eb"], stock: ["Stock & store", "box", "#d97706"], consumption: ["Consumption", "scale", "#9333ea"], money: ["Money", "money", "#16a34a"] };
+const groupOfLog = (l: Log) => (l.kind && l.kind !== "order" ? l.kind : /task/i.test(l.action) ? "task" : /bin|deleted|restored/i.test(l.action) ? "bin" : "order");
+const LOG_EXTRA: Record<string, [string, string, string]> = { task: ["Tasks", "check", "#0d9488"], bin: ["Deletes & restores", "bin", "#dc2626"] };
+
 export function Logs() {
   const [who, setWho] = useState("all");
-  const [kind, setKind] = useState("all");
   const [open, setOpen] = useState<Log | null>(null);
+  const [more, setMore] = useState<Record<string, boolean>>({});
   const people = ["all", ...new Set(logsSig.value.map((l) => l.who))];
+  const rows = logsSig.value.filter((l) => who === "all" || l.who === who);
+  const keys = [...new Set(rows.map(groupOfLog))];
   return (
-    <Page title="Logs" sub="Who changed what, and when — stamped from the signed-in account" detail={open && <Inspect title={open.action} row={{ when: open.at, who: open.who, action: open.action, record: open.target, kind: open.kind ?? "order" }} onClose={() => setOpen(null)} />}
-      toolbar={<div class="flex flex-wrap items-center gap-2"><Pick title="Kind" value={kind} on={setKind} items={["all", "order", "consumption", "stock", "money"]} label={(x) => x === "all" ? "All kinds" : x[0].toUpperCase() + x.slice(1)} /><Pick title="Who" value={who} on={setWho} items={people} label={(p) => (p === "all" ? "Everyone" : p)} /></div>}>
-      <Card class="!py-1">
-        <Table rows={logsSig.value.filter((l) => (who === "all" || l.who === who) && (kind === "all" || (l.kind ?? "order") === kind))} rowKey={(l) => l.id} onRow={setOpen} cols={[
-          { key: "x", label: "Action", render: (l) => l.action },
-          { key: "t", label: "Record", render: (l) => l.target },
-          { key: "w", label: "Who", render: (l) => l.who },
-          { key: "a", label: "When", render: (l) => <span class="text-c3">{l.at}</span> },
-        ]} />
-      </Card>
+    <Page title="Logs" sub="Who changed what, and when — grouped by type" detail={open && <Inspect title={open.action} row={{ when: open.at, who: open.who, action: open.action, record: open.target, kind: open.kind ?? "order" }} onClose={() => setOpen(null)} />}
+      toolbar={<Pick title="Who" value={who} on={setWho} items={people} label={(p) => (p === "all" ? "Everyone" : p)} />}>
+      {!rows.length && <Card><Empty title="Nothing logged yet" hint="Every change made in Emerald is stamped here." /></Card>}
+      <Waterfall min={340} max={3} items={keys.map((k) => {
+        const [label, icon, hue] = LOG_GROUP[k] ?? LOG_EXTRA[k];
+        const list = rows.filter((l) => groupOfLog(l) === k), shown = more[k] ? list : list.slice(0, 10);
+        return [2 + shown.length * 0.55, (
+          <div key={k} class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
+            <div class="flex items-center gap-2.5 px-4 h-12 border-b border-line" style={{ background: `color-mix(in srgb, ${hue} 8%, transparent)` }}>
+              <span class="w-7 h-7 rounded-lg grid place-items-center text-white shrink-0" style={{ background: hue }}><Icon name={icon} size={14} /></span>
+              <span class="text-[15px] font-bold text-c4 flex-1">{label}</span><span class="num text-[12px] font-semibold text-c3">{list.length}</span>
+            </div>
+            <ul>{shown.map((l) => (
+              <li key={l.id}><button onClick={() => setOpen(l)} class="w-full text-left flex items-start gap-3 px-4 py-2 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0">
+                <span class="min-w-0 flex-1"><span class="block text-[13px] font-semibold text-c4 truncate">{l.action}</span><span class="block text-[12px] text-c3 truncate">{l.target}</span></span>
+                <span class="text-right shrink-0"><span class="block text-[12px] font-medium">{l.who}</span><span class="block text-[11px] text-c3 num">{l.at}</span></span>
+              </button></li>))}
+            </ul>
+            {list.length > 10 && <button onClick={() => setMore({ ...more, [k]: !more[k] })} class="w-full h-9 border-t border-line text-[12px] font-semibold text-c3 hover:bg-c1/60 cursor-pointer">{more[k] ? "Show less" : `Show all ${list.length}`}</button>}
+          </div>)] as [number, preact.ComponentChildren];
+      })} />
     </Page>
   );
 }
 
+const BIN_ICON: Record<string, [string, string]> = { Order: ["work", "#2563eb"], Job: ["printer", "#0d9488"], Task: ["check", "#16a34a"], Client: ["user", "#9333ea"], Printer: ["printer", "#64748b"], Spool: ["box", "#d97706"], "Packing item": ["box", "#a16207"], "Accessory / part": ["wrench", "#475569"], Movement: ["rows", "#0891b2"], "QC entry": ["shield", "#d97706"], "Packing record": ["box", "#9333ea"] };
 export function Bin() {
   const left = (d: string) => Math.max(0, 7 - Math.round((Date.parse(today()) - Date.parse(d)) / 864e5));
   const items = binSig.value;
-  const kinds = [...new Set(items.map((b) => b.kind))];
+  const kinds = [...new Set(items.map((b) => b.kind))].sort();
   const [open, setOpen] = useState<Binned | null>(null);
+  const [msg, setMsg] = useState("");
+  const restore = (b: Binned) => { restoreBin(b); log("Restored from Bin", b.label); setMsg(`Restored “${b.label}” to ${b.kind === "Task" ? "To-do" : b.kind.toLowerCase() + "s"}.`); if (open?.id === b.id) setOpen(null); };
+  const purge = (b: Binned) => ask(`Delete “${b.label}” forever? This can't be undone.`, { ok: "Delete" }).then((ok) => { if (ok) { purgeBin(b); log("Deleted forever", b.label); if (open?.id === b.id) setOpen(null); } });
   return (
-    <Page title="Bin" sub="Recoverable for 7 days · grouped by kind" detail={open && <Inspect title={open.label} row={{ kind: open.kind, deleted: shortDate(open.deletedAt), by: open.by, daysLeft: left(open.deletedAt), ...(open.data && typeof open.data === "object" ? open.data as Record<string, unknown> : {}) }} onClose={() => setOpen(null)}>
-      <Actions>{canRestore(open) && <Button onClick={() => { restoreBin(open); log("Restored from Bin", open.label); setOpen(null); }}>Restore</Button>}<Button variant="ghost" icon="bin" onClick={() => { ask("Delete forever?", { ok: "Delete" }).then((ok) => { if (ok) { purgeBin(open); setOpen(null); } }); }}>Delete forever</Button></Actions></Inspect>}>
+    <Page title="Bin" sub="Recoverable for 7 days · grouped by type" actions={items.length ? <Button variant="outline" onClick={() => { const r = items.filter(canRestore); r.forEach(restoreBin); log("Restored from Bin", `${r.length} items`); setMsg(`Restored ${r.length} items.`); }}>Restore all</Button> : undefined}
+      detail={open && <Inspect title={open.label} row={{ kind: open.kind, deleted: shortDate(open.deletedAt), by: open.by, daysLeft: left(open.deletedAt), ...(open.data && typeof open.data === "object" ? open.data as Record<string, unknown> : {}) }} onClose={() => setOpen(null)}>
+      <Actions>{canRestore(open) && <Button onClick={() => restore(open)}>Restore</Button>}<Button variant="ghost" icon="bin" onClick={() => purge(open)}>Delete forever</Button></Actions></Inspect>}>
+      {msg && <p role="status" class="rounded-xl px-4 py-2.5 text-[13px] font-semibold" style={{ color: "#16a34a", background: "color-mix(in srgb, #16a34a 12%, transparent)" }}>{msg}</p>}
       {!items.length && <Card><Empty title="The Bin is empty" hint="Deleted records stay here for 7 days." /></Card>}
-      {kinds.map((k) => (
-        <Section key={k} title={k} note={String(items.filter((b) => b.kind === k).length)}>
-          <Card class="!py-1">
-            <Table rows={items.filter((b) => b.kind === k)} rowKey={(b) => b.id} onRow={setOpen} cols={[
-              { key: "l", label: "Record", render: (b) => b.label },
-              { key: "d", label: "Deleted", render: (b) => `${shortDate(b.deletedAt)} by ${b.by}` },
-              { key: "x", label: "Left", render: (b) => <Status tone={left(b.deletedAt) <= 2 ? "blocked" : "waiting"}>{left(b.deletedAt)} days</Status> },
-              { key: "r", label: "", align: "right", render: (b) => canRestore(b) ? <Button variant="outline" onClick={(e) => { e.stopPropagation(); restoreBin(b); log("Restored from Bin", b.label); }}>Restore</Button> : <span class="text-xs text-c3">Needs server</span> },
-            ]} />
-          </Card>
-        </Section>
-      ))}
+      <Waterfall min={320} max={4} items={kinds.map((k) => {
+        const list = items.filter((b) => b.kind === k), [icon, hue] = BIN_ICON[k] ?? ["bin", "#64748b"];
+        return [2 + list.length * 0.8, (
+          <div key={k} class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
+            <div class="flex items-center gap-2.5 px-4 h-12 border-b border-line" style={{ background: `color-mix(in srgb, ${hue} 8%, transparent)` }}>
+              <span class="w-7 h-7 rounded-lg grid place-items-center text-white shrink-0" style={{ background: hue }}><Icon name={icon} size={14} /></span>
+              <span class="text-[15px] font-bold text-c4 flex-1">{k === "Accessory / part" ? "Accessories & parts" : k + "s"}</span><span class="num text-[12px] font-semibold text-c3">{list.length}</span>
+            </div>
+            <ul>{list.map((b) => { const d = left(b.deletedAt); return (
+              <li key={b.id} class="flex items-center gap-2 px-4 py-2.5 border-t border-line first:border-0">
+                <button onClick={() => setOpen(b)} class="min-w-0 flex-1 text-left cursor-pointer !min-h-0">
+                  <span class="block text-[13px] font-semibold text-c4 truncate">{b.label}</span>
+                  <span class="block text-[11px] text-c3">{shortDate(b.deletedAt)} · by {b.by} · <b style={{ color: d <= 2 ? "#dc2626" : "inherit" }}>{d}d left</b></span>
+                </button>
+                {canRestore(b) ? <Button variant="outline" onClick={() => restore(b)}>Restore</Button> : <span class="text-xs text-c3">Needs server</span>}
+                <button aria-label={`Delete ${b.label} forever`} onClick={() => purge(b)} class="w-8 h-8 !min-h-0 grid place-items-center rounded-lg text-c2 hover:bg-c1 hover:text-warn cursor-pointer"><Icon name="close" size={14} /></button>
+              </li>); })}
+            </ul>
+          </div>)] as [number, preact.ComponentChildren];
+      })} />
     </Page>
   );
 }

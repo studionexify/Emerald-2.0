@@ -1,5 +1,6 @@
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
+import { signal } from "@preact/signals";
 import { persisted, today, uid } from "./store";
 import { B2B_TYPES } from "../mock/types";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
@@ -89,3 +90,20 @@ export function machineStats(printer: string) {
   const failed = js.filter((j) => j.status === "failed").length;
   return { jobs: js.length, fail: js.length ? Math.round((failed / js.length) * 100) : 0, hours: Math.round(js.reduce((a, j) => a + j.hours, 0)), util: 0, uptime: 100, lost: 0, blocks: 0 };
 }
+
+/** Production segment: who the work is for. Client = small retail orders; Bulk = bulk + B2B (shops, stationery, gift, corporate); In-house = our own. */
+export type Segment = "client" | "bulk" | "inhouse";
+export const SEGMENT_LABEL: Record<Segment, string> = { client: "Client", bulk: "Bulk & B2B", inhouse: "In-house" };
+export const SEGMENT_HREF: Record<Segment, string> = { client: "/work", bulk: "/work/b2b", inhouse: "/work/inhouse" };
+export function segmentOf(o: { type: string; size?: string; customer: string }): Segment {
+  if (o.type === "inhouse") return "inhouse";
+  if (o.size) return o.size === "small" ? "client" : "bulk";
+  if (o.type === "bulk") return "bulk";
+  const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
+  return c && (c.kind === "Business" || c.gstin) ? "bulk" : "client";
+}
+
+/** Cross-page jump: set the order to open, then navigate to its production page (read once by the page). */
+export const openOrderSig = signal<string | null>(null);
+/** Custom To-do lists (beyond the smart lists). */
+export const taskListsSig = persisted<string[]>("task-lists", ["Studio", "Purchases"]);

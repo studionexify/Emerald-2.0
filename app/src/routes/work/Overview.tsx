@@ -2,7 +2,9 @@ import { useEffect, useState } from "preact/hooks";
 import { Button, Card, DetailHead, Icon, Section, Status, KV, CardTitle, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Client } from "../../data";
-import { OrderDetail, TypeChips, WorkShell, type TypeFilter } from "./shared";
+import { OrderDetail, WorkShell } from "./shared";
+import { Pick } from "../../ui";
+import { openOrderSig, segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 const PAGE = 25;
@@ -150,17 +152,22 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
   );
 }
 
-export default function Overview() {
-  const [f, setF] = useState<TypeFilter>("all");
-  const [open, setOpen] = useState<Order | null>(null);
+export const BulkB2B = () => <Overview seg="bulk" />;
+export const InHouse = () => <Overview seg="inhouse" />;
+const SEG_SUB: Record<Segment, string> = { client: "Small orders from individual clients", bulk: "Bulk runs and business clients — stationery, gift shops, corporate", inhouse: "Our own builds, samples and stock prints" };
+export default function Overview({ seg = "client" }: { seg?: Segment }) {
+  const [f, setF] = useState<string>("all");
+  const [open, setOpen] = useState<Order | null>(() => { const no = openOrderSig.value; openOrderSig.value = null; return no ? ordersSig.value.find((o) => o.no === no) ?? null : null; });
   const [edit, setEdit] = useState<Order | null>(null);
   const [n, setN] = useState(PAGE);
-  const list = ordersSig.value.filter((o) => f === "all" || o.type === f);
+  const mine = ordersSig.value.filter((o) => segmentOf(o) === seg);
+  const subs = [...new Set(mine.map((o) => kindOf(o)))].sort();
+  const list = mine.filter((o) => f === "all" || kindOf(o) === f);
   const live = list.filter((o) => o.stage !== "archived").sort((a, b) => Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const busy = fleet.filter((p) => p.status === "printing").length;
   return (
-    <WorkShell detail={edit ? <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} /> : open && <OrderDetail order={ordersSig.value.find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title="Production" sub="Everything on the floor, in one place" toolbar={<TypeChips value={f} onChange={setF} />}>
+    <WorkShell detail={edit ? <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} /> : open && <OrderDetail order={ordersSig.value.find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} /></Section>
 
       <Section title="Live orders" note={String(live.length)} action={<a href="/work/orders" class="t-meta whitespace-nowrap">Board →</a>}>

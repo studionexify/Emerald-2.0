@@ -1,5 +1,26 @@
 export type NavItem = { href: string; label: string; icon: string };
 
+/** Sidebar groups. Production is split by who the work is for. */
+export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  { label: "", items: [{ href: "/", label: "Dashboard", icon: "home" }] },
+  { label: "Production", items: [
+    { href: "/work", label: "Client", icon: "user" },
+    { href: "/work/b2b", label: "Bulk & B2B", icon: "work" },
+    { href: "/work/inhouse", label: "In-house", icon: "wrench" },
+  ] },
+  { label: "Operations", items: [
+    { href: "/workshop", label: "Store", icon: "box" },
+    { href: "/calculator", label: "Nexcal", icon: "calc" },
+    { href: "/mauny", label: "Mauny", icon: "money" },
+  ] },
+  { label: "Workspace", items: [
+    { href: "/alerts", label: "Attention", icon: "bell" },
+    { href: "/todo", label: "To-do", icon: "check" },
+    { href: "/logs", label: "Logs", icon: "list" },
+    { href: "/bin", label: "Bin", icon: "bin" },
+  ] },
+];
+
 export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "home" },
   { href: "/work", label: "Production", icon: "work" },
@@ -13,7 +34,9 @@ export const NAV: NavItem[] = [
 ];
 
 export const WORK_TABS = [
-  { href: "/work", label: "Overview" },
+  { href: "/work", label: "Client orders" },
+  { href: "/work/b2b", label: "Bulk & B2B" },
+  { href: "/work/inhouse", label: "In-house" },
   { href: "/work/orders", label: "Orders" },
   { href: "/work/production", label: "Production" },
   { href: "/work/qc", label: "QC" },
@@ -21,7 +44,7 @@ export const WORK_TABS = [
   { href: "/work/invoice", label: "Invoice" },
   { href: "/work/shipping", label: "Shipping" },
   { href: "/work/archive", label: "Archive" },
-  { href: "/work/bulk", label: "Bulk" },
+  { href: "/work/bulk", label: "Bulk batches" },
   { href: "/work/clients", label: "Clients" },
   { href: "/work/quotes", label: "Quotes" },
   { href: "/work/documents", label: "Documents" },
