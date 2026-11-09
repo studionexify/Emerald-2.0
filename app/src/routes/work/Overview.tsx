@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { Button, Card, DetailHead, Icon, Section, Status, KV } from "../../ui";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Client } from "../../data";
 import { OrderDetail, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
@@ -31,6 +31,7 @@ const DAY = 86400000;
 /** Small / Bulk / B2B (business clients, with their kind of shop). */
 function kindOf(o: Order, c?: Client) {
   if (o.type === "inhouse") return "In-house";
+  if (o.size) return o.size === "b2b" ? (o.b2b ? `B2B · ${o.b2b}` : "B2B") : SIZE_LABEL[o.size];
   if (o.type === "bulk") return "Bulk";
   if (c && (c.kind === "Business" || c.gstin)) return c.medium ? `B2B · ${c.medium}` : "B2B";
   return "Small";
@@ -102,6 +103,8 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
       <div class="grid grid-cols-2 gap-2 text-[12px]">
         <label class="col-span-2">Client<input class={f} value={o.customer} onInput={(e) => setO({ ...o, customer: (e.target as HTMLInputElement).value })} /></label>
         <label>Type<select class={f} value={o.type} onChange={(e) => setO({ ...o, type: (e.target as HTMLSelectElement).value as Order["type"] })}>{Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label>Order type<select class={f} value={o.size ?? ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value as OrderSize; setO({ ...o, size: v || undefined, b2b: v === "b2b" ? o.b2b ?? B2B_TYPES[0] : undefined }); }}><option value="">—</option>{Object.entries(SIZE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        {o.size === "b2b" && <label>B2B type<select class={f} value={o.b2b} onChange={(e) => setO({ ...o, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>}
         <label>Deadline<input type="date" class={f} value={o.due} onInput={(e) => setO({ ...o, due: (e.target as HTMLInputElement).value })} /></label>
         <label class="col-span-2">Medium<input class={f} value={o.medium} onInput={(e) => setO({ ...o, medium: (e.target as HTMLInputElement).value })} /></label>
       </div>

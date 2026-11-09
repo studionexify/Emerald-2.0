@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
 import { MetaRow } from "../../ui/disclose";
 import { Initials, StagePill, StageStrip } from "../../ui/stage-strip";
-import { batchesSig, can, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, type Order, type Stage } from "../../data";
+import { batchesSig, can, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
 export default function Orders() {
@@ -101,7 +101,7 @@ function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () =>
 
 function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
   const [t, setT] = useState<OrderType>("client");
-  const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "" });
+  const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "", size: "small" as OrderSize, b2b: B2B_TYPES[0] });
   const f = (k: keyof typeof d) => ({ value: d[k], class: inputCls, onInput: (e: Event) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, [k]: typeof d[k] === "number" ? Number(v) || 0 : v }); } });
   return (
     <div>
@@ -117,6 +117,8 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
         <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} /></Field></div>
         <Field label="Quantity"><input type="number" {...f("qty")} /></Field>
         {t !== "inhouse" ? <Field label="Unit price (₹)"><input type="number" {...f("price")} /></Field> : <Field label="Purpose"><select class={inputCls}><option>Jig / tool</option><option>Sample</option><option>R&D</option><option>Display</option></select></Field>}
+        {t !== "inhouse" && <Field label="Order type"><select class={inputCls} value={d.size} onChange={(e) => setD({ ...d, size: (e.target as HTMLSelectElement).value as OrderSize })}>{Object.entries(SIZE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>}
+        {t !== "inhouse" && d.size === "b2b" && <Field label="B2B type"><select class={inputCls} value={d.b2b} onChange={(e) => setD({ ...d, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((x) => <option key={x}>{x}</option>)}</select></Field>}
         {t !== "inhouse" && <Field label="Came via"><select class={inputCls} value={d.medium} onChange={(e) => setD({ ...d, medium: (e.target as HTMLSelectElement).value })}>{["Instagram", "WhatsApp", "Website", "Referral", "Word of mouth", "Exhibition", "Phone", "Email"].map((m) => <option key={m}>{m}</option>)}</select></Field>}
         {t === "bulk" && <Field label="GSTIN"><input class={inputCls} placeholder="24…" /></Field>}
         <Field label="Due"><input type="date" {...f("due")} /></Field>

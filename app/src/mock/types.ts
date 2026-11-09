@@ -1,12 +1,16 @@
 export type OrderType = "inhouse" | "client" | "bulk";
 export type Stage = "quotation" | "po" | "production" | "qc" | "packing" | "invoice" | "shipping" | "archived";
 
+export type OrderSize = "small" | "bulk" | "b2b";
+export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bulk", b2b: "B2B" };
+export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number };
 export type Order = {
   id: string; no: string; type: OrderType; customer: string; medium: string;
   stage: Stage; created: string; due: string; items: LineItem[]; blocked?: string; invoiced?: boolean;
   approved?: boolean; buildSheet?: boolean; jobsDone?: boolean; qcLogged?: boolean; packed?: boolean; tracking?: string;
   po?: string; paid?: boolean; skipPacking?: boolean;
+  /** Commercial type: Small / Bulk / B2B; b2b names the kind of business. */ size?: OrderSize; b2b?: string;
   /** How the order leaves the studio; address/pincode only for courier. */ delivery?: Delivery; supports?: boolean;
 };
 export type Delivery = { method: "pickup" | "hand" | "courier"; address?: string; pincode?: string; freight?: number };

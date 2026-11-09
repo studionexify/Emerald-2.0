@@ -2,6 +2,8 @@ import { render } from "preact";
 import { App } from "./app";
 import "./styles.css";
 
+if (import.meta.env.MODE === "artifact") await import("./data/demo");
+
 render(<App />, document.getElementById("app")!);
 
 if (import.meta.env.PROD && import.meta.env.MODE !== "artifact" && "serviceWorker" in navigator && location.protocol !== "file:")
