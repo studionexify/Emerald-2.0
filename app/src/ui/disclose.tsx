@@ -31,6 +31,7 @@ export type MenuItem = { label: string; on: () => void; danger?: boolean; hidden
 /** Contextual "…" menu for non-primary actions. Popover on desktop (arrow keys, Esc), sheet on phone. */
 export function Menu({ items, label = "More actions" }: { items: MenuItem[]; label?: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const box = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const xs = items.filter((i) => !i.hidden);
@@ -47,9 +48,11 @@ export function Menu({ items, label = "More actions" }: { items: MenuItem[]; lab
       else if (e.key === "Tab") setOpen(false);
     };
     const out = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const close = () => setOpen(false);
     document.addEventListener("keydown", key, true);
     document.addEventListener("pointerdown", out, true);
-    return () => { document.removeEventListener("keydown", key, true); document.removeEventListener("pointerdown", out, true); };
+    addEventListener("scroll", close, true); addEventListener("resize", close);
+    return () => { document.removeEventListener("keydown", key, true); document.removeEventListener("pointerdown", out, true); removeEventListener("scroll", close, true); removeEventListener("resize", close); };
   }, [open, phone]);
   if (!xs.length) return null;
   const run = (i: MenuItem) => { setOpen(false); i.on(); };
@@ -59,11 +62,11 @@ export function Menu({ items, label = "More actions" }: { items: MenuItem[]; lab
   );
   return (
     <div ref={box} class="relative inline-block" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-      <button ref={btn} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}
+      <button ref={btn} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => { const r = btn.current!.getBoundingClientRect(); const up = innerHeight - r.bottom < 40 * xs.length + 24; setPos({ right: Math.max(8, innerWidth - r.right), ...(up ? { bottom: innerHeight - r.top + 4 } : { top: r.bottom + 4 }) }); setOpen(!open); }}
         class="w-11 h-11 md:w-7 md:h-7 rounded-md inline-flex items-center justify-center text-c3 hover:bg-c1 hover:text-c4 cursor-pointer">
         <span class="text-lg leading-none tracking-tighter" aria-hidden="true">···</span>
       </button>
-      {open && !phone && <div role="menu" class="absolute right-0 top-full mt-1 z-40 min-w-44 p-1 rounded-lg bg-c0 border border-line shadow-xl pop-in">{xs.map(row)}</div>}
+      {open && !phone && <div role="menu" style={pos} class="fixed z-[60] flex flex-col whitespace-nowrap text-left min-w-44 max-w-[calc(100vw-16px)] p-1 rounded-lg bg-c0 border border-line shadow-xl pop-in">{xs.map(row)}</div>}
       {phone && <Sheet open={open} onClose={() => setOpen(false)} title={label}><div role="menu" class="flex flex-col divide-y divide-line">{xs.map(row)}</div></Sheet>}
     </div>
   );

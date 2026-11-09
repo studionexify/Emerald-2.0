@@ -130,3 +130,10 @@ export function assignSlots(list: Spool[]): Spool[] {
   return list.map((s) => (give.has(s.id) ? { ...s, slot: give.get(s.id) } : s));
 }
 effect(() => { const l = spoolsSig.value; const n = assignSlots(l); if (n !== l) queueMicrotask(() => { spoolsSig.value = assignSlots(spoolsSig.value); }); });
+
+/** Human label for a stock item string: "PLA Black · SP-0042" → "PLA Black Polymaker #3". */
+export function itemLabel(item: string): string {
+  const m = /· (SP-\d+)\s*$/.exec(item); if (!m) return item;
+  const sp = spoolsSig.value.find((x) => x.spoolNo === m[1]); if (!sp) return item;
+  return `${sp.material} ${sp.colour} ${sp.brand}${sp.slot != null ? ` #${sp.slot}` : ""}`;
+}

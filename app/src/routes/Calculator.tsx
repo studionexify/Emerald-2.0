@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Field, Flow, Icon, inputCls, isPhone, KV, Page, Sheet, Tip } from "../ui";
+import { Button, Card, CardTitle, Field, Flow, Icon, inputCls, isPhone, KV, Page, Sheet } from "../ui";
 import { navigate } from "../router";
 import { Reveal } from "../ui/disclose";
 import { createOrder, type Delivery, inr, spoolsSig, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
@@ -190,7 +190,6 @@ export function NexRes() {
               <tbody>{ladder(rs, inp).map((l) => <tr key={l.qty}><td>{l.qty}</td><td class="text-right">{inr(l.costPerItem)}</td><td class="text-right">{inr(l.pricePerItem)}</td><td class="text-right">{l.actualMargin}%</td></tr>)}</tbody></table>
           )],
         ]} />
-        <Tip>Failure {rs.failPct}% and finishing {rs.minPerMl} min/ml are estimates, not measurements — edit in Pricing settings.</Tip>
       </Card>
       <Result price={r.withGst} rows={rows} q={q} create={create} />
     </Shell>
@@ -216,7 +215,6 @@ export function RatesEditor({ bare }: { bare?: boolean }) {
   if (bare) return cards;
   return (
     <>
-      <Tip>Every price and rate used by the calculators, consumption costs, quotes and alerts. Changes apply immediately and are remembered on this device.</Tip>
       <Flow w={420}>{cards}</Flow>
       <div><Button variant="outline" onClick={resetRates}>Reset to defaults</Button></div>
     </>

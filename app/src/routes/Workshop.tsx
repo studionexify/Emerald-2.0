@@ -2,10 +2,10 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col, Tip } from "../ui";
+import { Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import { isSpoolItem, nextSpoolNo,
+import { itemLabel, isSpoolItem, nextSpoolNo,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -109,7 +109,7 @@ export function Printers() {
         <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} act={(p) => <PrinterAct p={p} open={r.open} />} cols={[
           { key: "n", label: "Printer", render: (p) => <span class="flex flex-col min-w-0"><span class="font-semibold">{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}{serviceDue(p) && <span class="ml-2 inline-flex items-center gap-1 text-[11px] font-bold"><span class="w-1.5 h-1.5 rounded-full bg-warn" />Service due</span>}</span><MetaRow items={[p.model, loadedOn(p)]} /></span> },
           { key: "s", label: "Status", card: "status", render: (p) => <Status tone={pTone(p.status)}>{p.status}</Status> },
-          { key: "j", label: "Now", card: "foot", render: (p) => p.job ? `Printing ${p.job}` : p.status === "down" ? "Needs attention" : "Free" },
+          { key: "j", label: "Now", card: "foot", render: (p) => { const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing"); return j ? `${j.orderNo} · ${j.item}` : p.job ? `Printing ${p.job}` : p.status === "down" ? "Needs attention" : p.status === "printing" ? "Printing" : "Free"; } },
           { key: "u", label: "Utilisation", level: 2, render: (p) => `${mlog(p).util}%` },
           { key: "f", label: "Fail rate", level: 2, render: (p) => `${mlog(p).fail}%` },
           { key: "up", label: "Uptime", level: 2, render: (p) => `${mlog(p).uptime}%` },
@@ -118,7 +118,6 @@ export function Printers() {
           { key: "nz", label: "Nozzle", level: 2, render: (p) => p.nozzle ?? "—" },
         ]} />
       </Card>
-      <Tip>Tap a printer for details. Retire takes it off every picker; old jobs keep its name. Delete is only for a row typed by mistake — it goes to the Bin.</Tip>
     </Shell>
   );
 }
@@ -242,7 +241,6 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
   const tare = s.tare ?? 0, net = Math.max(0, g - tare), diff = net - s.grams;
   return (
     <PaneSection title="Weigh-in">
-      <Tip>Finished jobs already deducted their planned grams. Weigh to correct the record: net = gross − tare ({tare} g); the difference is logged as variance.</Tip>
       <div class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
         <Field label="Gross on scale (g)"><input class={inputCls} type="number" value={g || ""} onInput={(e) => setG(num(e))} /></Field>
         <Button icon="scale" class="!h-10 md:!h-11" disabled={!g} onClick={() => {
@@ -464,7 +462,7 @@ export function Movements() {
       <div class="flex items-center justify-between gap-2 mb-3"><h2 class="text-base md:text-xl font-extrabold tracking-tight">Log movement</h2><Button variant="ghost" icon="close" onClick={() => setForm(false)}>Close</Button></div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Category"><select class={inputCls} value={d.cat} onChange={(e) => { const c = (e.target as HTMLSelectElement).value; set({ cat: c, item: stockNames(c)[0] ?? "", unit: c === "filament" ? "g" : "pcs" }); }}>{CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
-        <Field label="Item"><select class={inputCls} value={d.item} onChange={(e) => set({ item: (e.target as HTMLSelectElement).value })}>{names.map((n) => <option key={n}>{n}</option>)}</select></Field>
+        <Field label="Item"><select class={inputCls} value={d.item} onChange={(e) => set({ item: (e.target as HTMLSelectElement).value })}>{names.map((n) => <option key={n} value={n}>{itemLabel(n)}</option>)}</select></Field>
         <Field label="Direction"><select class={inputCls} value={d.dir} onChange={(e) => set({ dir: (e.target as HTMLSelectElement).value as "in" })}><option value="in">In — purchase / return</option><option value="out">Out — manual use / write-off</option></select></Field>
         <Field label={`Quantity (${d.unit})`}><input class={inputCls} type="number" value={d.qty || ""} onInput={(e) => set({ qty: num(e) })} /></Field>
         <Field label="Unit cost ₹ (at this time)"><input class={inputCls} type="number" step="0.01" value={d.unitCost || ""} onInput={(e) => set({ unitCost: num(e) })} /></Field>
@@ -474,9 +472,8 @@ export function Movements() {
         <div class="sm:col-span-2"><Field label="Notes"><input class={inputCls} value={d.notes} onInput={(e) => set({ notes: val(e) })} /></Field></div>
       </div>
       <div class="mt-4"><Actions><Button icon="check" disabled={!d.qty || !d.item} onClick={() => { applyMove(d); log(`Stock ${d.dir} ${d.qty} ${d.unit}`, d.item, "stock"); setOpen(d); setForm(false); setD(blank()); }}>Save movement</Button><Button variant="outline" onClick={() => setForm(false)}>Cancel</Button></Actions></div>
-      <Tip>Prints and packing draw stock automatically — log here only purchases and manual adjustments.</Tip>
     </div>
-  ) : open && <Inspect title={`${open.dir === "in" ? "In" : "Out"} · ${open.item}`} row={{ date: open.date, category: open.cat, direction: open.dir, quantity: `${open.qty} ${open.unit}`, unitCost: `₹${open.unitCost}`, value: inr(open.qty * open.unitCost), vendor: open.vendor, colour: open.colour ?? "", brand: open.brand ?? "", notes: open.notes, loggedBy: open.by }} onClose={() => setOpen(null)} />;
+  ) : open && <Inspect title={`${open.dir === "in" ? "In" : "Out"} · ${itemLabel(open.item)}`} row={{ date: open.date, category: open.cat, direction: open.dir, quantity: `${open.qty} ${open.unit}`, unitCost: `₹${open.unitCost}`, value: inr(open.qty * open.unitCost), vendor: open.vendor, colour: open.colour ?? "", brand: open.brand ?? "", notes: open.notes, loggedBy: open.by }} onClose={() => setOpen(null)} />;
   return (
     <Shell sub="Purchases and manual adjustments — every movement in and out" detail={detail}
       toolbar={<div class="flex flex-wrap gap-2"><Pick title="Category" value={cat} on={setCat} items={["all", ...CATS]} label={(c) => c === "all" ? "All" : c[0].toUpperCase() + c.slice(1)} /></div>}
@@ -488,7 +485,7 @@ export function Movements() {
       </div>
       <Card class="!py-1">
         <Table rows={rows} rowKey={(m) => m.id} onRow={(m) => { setForm(false); setOpen(m); }} cols={[
-          { key: "i", label: "Item", render: (m) => m.item },
+          { key: "i", label: "Item", render: (m) => itemLabel(m.item) },
           { key: "d", label: "Date", render: (m) => shortDate(m.date) },
           { key: "k", label: "Category", render: (m) => <span class="capitalize">{m.cat}</span>, hideTablet: true },
           { key: "x", label: "Direction", render: (m) => <Status tone={m.dir === "in" ? "done" : "active"}>{m.dir}</Status> },
@@ -512,7 +509,7 @@ export function ConsumptionLog() {
   return (
     <Shell sub="Everything used — filament, machine hours, power, labour, packing, parts, freight, scrap"
       toolbar={<Pick title="Kind" value={k} on={setK} items={kinds} label={(x) => (x === "all" ? "All" : x[0].toUpperCase() + x.slice(1))} />}
-      detail={open && <Inspect title={`${open.item}`} row={{ kind: open.kind, quantity: `${open.qty} ${open.unit}`, cost: inr(open.cost), order: open.orderNo ?? "Store use", batch: open.batch ?? "", printer: open.printer ?? "", when: open.at, who: open.who }} onClose={() => setOpen(null)} />}>
+      detail={open && <Inspect title={itemLabel(open.item)} row={{ kind: open.kind, quantity: `${open.qty} ${open.unit}`, cost: inr(open.cost), order: open.orderNo ?? "Store use", batch: open.batch ?? "", printer: open.printer ?? "", when: open.at, who: open.who }} onClose={() => setOpen(null)} />}>
       <div class="strip grid grid-cols-3 md:grid-cols-6">
         <Stat value={inr(consSig.value.reduce((s, c) => s + c.cost, 0))} label="Total" />
         {["filament", "machine", "packing", "labour", "scrap"].map((x) => <Stat key={x} value={inr(by(x))} label={x} />)}
@@ -520,7 +517,7 @@ export function ConsumptionLog() {
       <Card><div class="text-sm font-bold mb-2">Log consumption <span class="font-normal text-c3">— no order = store use</span></div><ConsumeForm /></Card>
       <Card class="!py-1">
         <Table rows={rows} rowKey={(c) => c.id} onRow={setOpen} cols={[
-          { key: "i", label: "Item", render: (c) => c.item },
+          { key: "i", label: "Item", render: (c) => itemLabel(c.item) },
           { key: "k", label: "Kind", render: (c) => <span class="capitalize">{c.kind}</span> },
           { key: "q", label: "Qty", align: "right", render: (c) => `${c.qty} ${c.unit}` },
           { key: "c", label: "Cost", align: "right", render: (c) => inr(c.cost) },

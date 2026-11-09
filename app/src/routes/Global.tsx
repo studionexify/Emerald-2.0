@@ -4,7 +4,7 @@ import { clientsSig } from "../data/inventory";
 import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
-import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall, Tip } from "../ui";
+import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { itemsSig, tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
 
@@ -211,7 +211,6 @@ function BooksModeCard() {
             </button>
           ))}
         </div>
-        <Tip>Changes what Emerald shows for every user: orders, quotations, Mauny entries, expenses and bills. Books, GST desk, Tally and the year-end pack always include every record.</Tip>
       </Card>
     </Section>
   );
@@ -225,7 +224,6 @@ export function Profile() {
       <BooksModeCard />
       <Section title="Account">
         <Card class="!py-1"><KV label="Name" value={u.name} /><KV label="Email" value={u.email} /><KV label="Access role" value={ROLE_LABEL[u.role]} /></Card>
-        <Tip>Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</Tip>
       </Section>
       <Disclosure title="Password & passkey">
         <div class="grid sm:grid-cols-2 gap-3">
@@ -261,7 +259,6 @@ export function Users() {
       </Disclosure>
       {cloudEnabled && owner && <Accounts />}
       <Section title="Team & users" note={`${usersSig.value.filter((u) => u.active).length} active`} action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true, login: false, job: "" })}>Add person</Button>}>
-        <Tip>One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</Tip>
         {edit && (
           <Card class="grid gap-3 sm:grid-cols-3 xl:grid-cols-6 items-end">
             <Field label="Name"><input class={inputCls} value={edit.name} onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} /></Field>
@@ -298,7 +295,6 @@ export function Business() {
         {f("address", "Address", true)}{f("addressShort", "Short address (footer)")}{f("website", "Website")}
         {f("upi", "UPI ID")}{f("upiNumber", "UPI number")}{f("bankName", "Bank & branch")}{f("accName", "Account name")}{f("accNo", "Account no.")}{f("ifsc", "IFSC")}{f("jurisdiction", "Jurisdiction (terms)")}
         {f("bank", "Bank (one line, if fields above are blank)", true)}{f("series", "Invoice series")}{f("terms", "Terms printed on documents", true)}
-        <Tip>Saved as you type · printed on every quotation, invoice and credit note.</Tip>
       </Card>
     </SettingsShell>
   );
@@ -316,7 +312,7 @@ function ImportE1() {
   const go = () => { if (!state.m) return; applyEmerald1(state.m); log("Imported Emerald 1 data", `${state.m.invoices.length} invoices · ${state.m.orders.length} orders`); setState({ done: true }); };
   return (
     <Card class="space-y-3">
-      <div><b>Import from Emerald 1</b><Tip>Choose the live-data export (.md — the full file, the parts, or both). Replaces sample data on this device; the old database is never contacted.</Tip></div>
+      <div><b>Import from Emerald 1</b></div>
       <input type="file" multiple accept=".md,text/markdown,text/plain" onChange={pick} />
       {state.busy && <p class="t-meta">Reading…</p>}
       {state.err && <p class="text-[var(--danger,red)]">{state.err}</p>}

@@ -1,5 +1,5 @@
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
-import { ordersSig, log } from "../../data";
+import { itemLabel, ordersSig, log } from "../../data";
 import { vOrders } from "../../data";
 import { LinkedTasks } from "../Todo";
 import type { ComponentChildren } from "preact";
@@ -104,7 +104,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       <ul class="flex flex-col mt-2 mb-3 text-xs">
         {cons.map((c) => (
           <li key={c.id} class="flex justify-between gap-2 py-1 border-t border-line">
-            <span class="min-w-0"><b class="capitalize">{c.kind}</b> · {c.item}{c.batch ? ` · ${c.batch}` : ""}<span class="block text-c3">{c.at} · {c.who}</span></span>
+            <span class="min-w-0"><b class="capitalize">{c.kind}</b> · {itemLabel(c.item)}{c.batch ? ` · ${c.batch}` : ""}<span class="block text-c3">{c.at} · {c.who}</span></span>
             <span class="num whitespace-nowrap text-right">{c.qty} {c.unit}<span class="block text-c3">{inr(c.cost)}</span></span>
           </li>
         ))}
