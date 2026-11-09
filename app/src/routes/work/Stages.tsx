@@ -6,7 +6,7 @@ import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progre
 import { Menu, MetaRow } from "../../ui/disclose";
 import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
-import { ConsumeForm, OrderDetail, WorkShell } from "./shared";
+import { ConsumeForm, OrderDetail, WorkShell , useOpenOrder } from "./shared";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 const sel = (opts: string[]) => <select class={inputCls}>{opts.map((o) => <option key={o}>{o}</option>)}</select>;
@@ -278,7 +278,7 @@ export function Packing() {
 
 export function Archive() {
   const list = vOrders().filter((o) => o.stage === "archived");
-  const [open, setOpen] = useState<Order | null>(null);
+  const [open, setOpen] = useOpenOrder();
   const cur = open && (vOrders().find((o) => o.id === open.id) ?? open);
   return (
     <WorkShell stage="archived" title="Archive" sub="Final cost rollup · tap an order to see its cost lines or reopen it" detail={cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}>

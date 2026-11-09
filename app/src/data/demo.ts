@@ -244,3 +244,16 @@ if (!done7) {
   }
   _sp6.value = [..._sp6.value, ...out];
 }
+
+/* v8: sample product photos on some order lines (SVG, tiny) */
+import { ordersSig as _or8 } from "./index";
+let done8 = false;
+try { done8 = !!localStorage.getItem("emerald:demo8"); localStorage.setItem("emerald:demo8", "1"); } catch {}
+if (!done8) {
+  const HUE = ["#4a7bd0", "#2e9a4b", "#c0603a", "#8a5cc2", "#1f9a9a", "#c9a227"];
+  const pic = (name: string, i: number) => { const c = HUE[i % HUE.length];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="640" height="480" fill="${c}"/><rect x="170" y="110" width="300" height="230" rx="18" fill="#fff" opacity=".9"/><path d="M200 310 l80-90 60 60 40-40 80 70z" fill="${c}" opacity=".7"/><circle cx="410" cy="170" r="24" fill="${c}" opacity=".7"/><text x="320" y="410" font-family="sans-serif" font-size="30" fill="#fff" text-anchor="middle">${name.replace(/[<&>]/g, "")}</text></svg>`;
+    return "data:image/svg+xml;utf8," + encodeURIComponent(svg); };
+  let n = 0;
+  _or8.value = _or8.value.map((o, oi) => oi % 3 === 2 ? o : { ...o, items: o.items.map((it, k) => (k === 0 && !it.img ? { ...it, img: pic(it.name, n), thumb: pic(it.name, n++) } : it)) });
+}

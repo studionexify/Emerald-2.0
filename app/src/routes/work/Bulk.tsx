@@ -1,11 +1,10 @@
 import { vOrders } from "../../data";
-import { useState } from "preact/hooks";
 import { Button, Card, CardTitle, Meter, Section } from "../../ui";
-import { BATCH_LABEL, BATCH_STAGES, batchesSig, inr, orderTotal, orderUnits, shortDate, STAGE_LABEL, type Order } from "../../data";
-import { BatchRow, OrderDetail, WorkShell } from "./shared";
+import { BATCH_LABEL, BATCH_STAGES, batchesSig, inr, orderTotal, orderUnits, shortDate, STAGE_LABEL } from "../../data";
+import { BatchRow, OrderDetail, WorkShell , useOpenOrder } from "./shared";
 
 export default function Bulk() {
-  const [open, setOpen] = useState<Order | null>(null);
+  const [open, setOpen] = useOpenOrder();
   const orders = vOrders().filter((o) => o.type === "bulk" && o.stage !== "archived");
   const batches = batchesSig.value.filter((b) => orders.some((o) => o.no === b.orderNo));
   return (

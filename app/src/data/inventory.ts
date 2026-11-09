@@ -108,6 +108,10 @@ export function segmentOf(o: { type: string; size?: string; customer: string }):
 
 /** Cross-page jump: set the order to open, then navigate to its production page (read once by the page). */
 export const openOrderSig = signal<string | null>(null);
+/** Where the order panel was opened from, so Back returns to the same screen with the same order open. */
+export const returnSig = signal<{ path: string; no: string; scroll: number } | null>(null);
+/** Open sections per order, kept across navigation. */
+export const foldState = new Map<string, boolean>();
 /** Custom To-do lists (beyond the smart lists). */
 export const taskListsSig = persisted<string[]>("task-lists", ["Studio", "Purchases"]);
 

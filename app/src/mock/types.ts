@@ -4,7 +4,7 @@ export type Stage = "quotation" | "po" | "production" | "qc" | "packing" | "invo
 export type OrderSize = "small" | "bulk" | "b2b";
 export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bulk", b2b: "B2B" };
 export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
-export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number };
+export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string };
 export type Order = {
   /** Alpha = bank/UPI, Beta = cash. One mode per order. */ pay?: "alpha" | "beta";
   id: string; no: string; type: OrderType; customer: string; medium: string;

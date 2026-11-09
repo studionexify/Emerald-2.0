@@ -257,12 +257,21 @@ export function Split({ detail, children }: { detail: ComponentChildren | null; 
   }, []);
   useEffect(() => setHide(false), [!!detail]);
   if (hide && !phone) detail = null;
+  const [w, setW] = useState(() => { try { return Number(localStorage.getItem("emerald:inspW")) || 0; } catch { return 0; } });
+  const drag = (e: PointerEvent) => {
+    e.preventDefault(); const el = e.currentTarget as HTMLElement, x0 = e.clientX, w0 = el.parentElement!.getBoundingClientRect().width, cw = el.parentElement!.parentElement!.getBoundingClientRect().width;
+    const mv = (m: PointerEvent) => setW(Math.round(Math.max(320, Math.min(cw - 560, w0 + x0 - m.clientX))));
+    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); document.body.style.cursor = ""; setW((v) => { try { localStorage.setItem("emerald:inspW", String(v)); } catch {} return v; }); };
+    document.body.style.cursor = "col-resize"; addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  };
   return (
-    <div class={`min-h-0 h-full ${detail && !phone ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
-      <div class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
+    <div style={detail && !phone && w ? { gridTemplateColumns: `minmax(0,1fr) min(${w}px, max(320px, calc(100% - 560px)))` } : undefined} class={`min-h-0 h-full ${detail && !phone ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
+      <div data-split-main class="min-w-0 min-h-0 h-full overflow-y-auto overflow-x-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
         <div class="flex flex-col gap-4">{children}</div>
       </div>
-      {detail && !phone && <aside aria-label="Inspector (⌘I to hide)" class="sheet-fade min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 border-l border-line p-4">{detail}</aside>}
+      {detail && !phone && <div class="relative min-w-0 min-h-0 h-full">
+        <div onPointerDown={drag} onDblClick={() => { setW(0); try { localStorage.removeItem("emerald:inspW"); } catch {} }} title="Drag to resize · double-click to reset" class="absolute -left-1.5 top-0 bottom-0 w-3 z-10 cursor-col-resize group"><span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-10 rounded-full bg-line group-hover:bg-c3 transition-colors" /></div>
+        <aside aria-label="Inspector (⌘I to hide)" class="sheet-fade min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 border-l border-line p-4">{detail}</aside></div>}
       {detail && phone && <Sheet full onClose={close}><div ref={ref} class="pt-1">{detail}</div></Sheet>}
     </div>
   );
@@ -369,6 +378,23 @@ export function KV({ label, value, strong }: { label: ComponentChildren; value: 
       <span class="text-[13px] text-c3 min-w-0 truncate">{label}</span>
       <span class={`num text-[13px] whitespace-nowrap ${strong ? "font-bold" : "font-medium"}`}>{value}</span>
     </div>
+  );
+}
+
+const FOLD = new Map<string, boolean | undefined>();
+/** Colour-coded collapsible section for inspectors. */
+export function Fold({ title, meta, hue, open, action, children, id }: { title: ComponentChildren; meta?: ComponentChildren; hue: string; open?: boolean; action?: ComponentChildren; children: ComponentChildren; /** remembers open/closed */ id?: string }) {
+  const o = id && FOLD.has(id) ? FOLD.get(id) : open;
+  return (
+    <details open={o} onToggle={id ? (e) => FOLD.set(id, (e.currentTarget as HTMLDetailsElement).open) : undefined} class="rounded-xl min-w-0 mb-2 overflow-hidden" style={{ background: `color-mix(in srgb, ${hue} 7%, var(--c0))`, boxShadow: `inset 3px 0 0 ${hue}` }}>
+      <summary class="flex items-center gap-2 h-10 pl-3.5 pr-2 select-none cursor-pointer">
+        <span class="chev inline-flex" style={{ color: hue }}><Icon name="right" size={12} /></span>
+        <span class="text-[13px] font-semibold min-w-0 truncate">{title}</span>
+        {meta && <span class="ml-auto t-meta num whitespace-nowrap truncate">{meta}</span>}
+        {action && <span class={meta ? "" : "ml-auto"} onClick={(e) => e.stopPropagation()}>{action}</span>}
+      </summary>
+      <div class="pl-3.5 pr-3 pb-3">{children}</div>
+    </details>
   );
 }
 

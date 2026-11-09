@@ -1,12 +1,13 @@
+import { Thumb } from "../../ui/media";
 import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, DetailHead, Icon, Section, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Client } from "../../data";
-import { OrderDetail, WorkShell } from "./shared";
+import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
-import { openOrderSig, segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
+import { segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
 const PAGE = 25;
@@ -74,7 +75,7 @@ function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: O
 
 /** Live order row: client · type | items | stage | city | deadline | ⋯ */
 /* Live-orders table: fixed columns stay tight, flexible ones (client, items, city) share the extra width. */
-const COLS = "md:grid-cols-[minmax(130px,1.3fr)_minmax(104px,0.7fr)_minmax(150px,1.6fr)_minmax(100px,0.6fr)_minmax(70px,0.7fr)_80px_28px] xl:grid-cols-[minmax(140px,1.3fr)_minmax(110px,0.7fr)_minmax(160px,1.6fr)_minmax(150px,1fr)_minmax(104px,0.6fr)_minmax(80px,0.7fr)_84px_28px]";
+const COLS = "@lg:grid-cols-[minmax(130px,1.3fr)_minmax(104px,0.7fr)_minmax(150px,1.6fr)_minmax(100px,0.6fr)_minmax(70px,0.7fr)_80px_28px] @4xl:grid-cols-[minmax(140px,1.3fr)_minmax(110px,0.7fr)_minmax(160px,1.6fr)_minmax(150px,1fr)_minmax(104px,0.6fr)_minmax(80px,0.7fr)_84px_28px]";
 const TRACK: [Order["stage"], string][] = [["quotation", "doc"], ["po", "stamp"], ["production", "printer"], ["qc", "shield"], ["packing", "box"], ["invoice", "receipt"], ["shipping", "truck"]];
 const STAGE_HUE: Record<string, string> = { quotation: "#8A93A3", po: "#8C8FC4", production: "#6B8DB5", qc: "#C49A5A", packing: "#9A86B8", invoice: "#6FA39C", shipping: "#6E9C7C", archived: "#8A93A3", blocked: "#B97468" };
 const KIND_HUE = (k: string) => (k.startsWith("B2B") ? "#6B8DB5" : k === "Bulk" ? "#9A86B8" : k === "In-house" ? "#8A93A3" : "#6FA39C");
@@ -103,20 +104,21 @@ function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void;
   const d = left(o.due), kind = kindOf(o, c), st = o.blocked ? "blocked" : o.stage;
   return (
     <div role="button" tabIndex={0} onClick={() => onOpen(o)} onKeyDown={(e) => e.key === "Enter" && onOpen(o)}
-      class={`grid grid-cols-[minmax(0,1fr)_auto] ${COLS} items-center gap-x-4 2xl:gap-x-6 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0`}>
+      class={`grid grid-cols-[minmax(0,1fr)_auto] ${COLS} items-center gap-x-4 @6xl:gap-x-6 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0`}>
       <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
-      <div class="max-md:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
-      <ul class="min-w-0 max-md:col-span-2 max-md:row-start-2 text-[13px] leading-[1.5]">
-        {o.items.map((i, k) => <li key={k} class="flex items-baseline gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><span class="min-w-0 text-c3">{i.name}</span></li>)}
+      <div class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
+      <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
+        {o.items.slice(0, 2).map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
+        {o.items.length > 2 && <li class="pl-[84px] t-meta">+{o.items.length - 2} more</li>}
       </ul>
-      <div class="max-xl:hidden pr-2"><Track o={o} /></div>
-      <div class="max-md:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>
-      <span class="max-md:hidden text-[13px] text-c3 truncate">{c?.city || "—"}</span>
-      <div class="text-right md:text-left max-md:col-start-2 max-md:row-start-1">
+      <div class="@max-4xl:hidden pr-2"><Track o={o} /></div>
+      <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>
+      <span class="@max-lg:hidden text-[13px] text-c3 truncate">{c?.city || "—"}</span>
+      <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
         <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
         <div class={`text-[11px] whitespace-nowrap font-medium`} style={{ color: d < 0 ? STAGE_HUE.blocked : d <= 2 ? STAGE_HUE.qc : "var(--c-3)" }}>{leftLabel(d)}</div>
       </div>
-      <div class="max-md:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>
+      <div class="@max-lg:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>
     </div>
   );
 }
@@ -160,7 +162,7 @@ export const InHouse = () => <Overview seg="inhouse" />;
 const SEG_SUB: Record<Segment, string> = { client: "Small orders from individual clients", bulk: "Bulk runs and business clients — stationery, gift shops, corporate", inhouse: "Our own builds, samples and stock prints" };
 export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [f, setF] = useState<string>("all");
-  const [open, setOpen] = useState<Order | null>(() => { const no = openOrderSig.value; openOrderSig.value = null; return no ? vOrders().find((o) => o.no === no) ?? null : null; });
+  const [open, setOpen] = useOpenOrder();
   const [edit, setEdit] = useState<Order | null>(null);
   const [n, setN] = useState(PAGE);
   const mine = vOrders().filter((o) => segmentOf(o) === seg);
@@ -174,8 +176,8 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
       <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} /></Section>
 
       <Section title="Live orders" note={String(live.length)} action={<a href="/work/orders" class="t-meta whitespace-nowrap">Board →</a>}>
-          <div class="rounded-[var(--radius-card)] bg-c0 border border-line">
-            <div class={`hidden md:grid ${COLS} gap-x-4 2xl:gap-x-6 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3`}><span>Client</span><span>Type</span><span>Items</span><span class="max-xl:hidden">Progress</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
+          <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
+            <div class={`hidden @lg:grid ${COLS} gap-x-4 @6xl:gap-x-6 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3`}><span>Client</span><span>Type</span><span>Items</span><span class="@max-4xl:hidden">Progress</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
             {live.slice(0, n).map((o) => <OrderRow key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => { setOpen(null); setEdit(x); }} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>

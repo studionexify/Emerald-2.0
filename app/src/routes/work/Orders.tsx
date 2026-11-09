@@ -6,12 +6,12 @@ import { Initials, StagePill, StageStrip } from "../../ui/stage-strip";
 import { b2bFor } from "../../data/inventory";
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { batchesSig, can, createOrder, duplicateOrder, inr, orderTotal, type OrderType, shortDate, STAGES, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Order, type Stage } from "../../data";
-import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
+import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter , useOpenOrder } from "./shared";
 
 export default function Orders() {
   const [f, setF] = useState<TypeFilter>("all");
   const [view, setView] = useState<"board" | "list">("list");
-  const [open, setOpen] = useState<Order | null>(null);
+  const [open, setOpen] = useOpenOrder();
   const [creating, setCreating] = useState(false);
   const cur = open && (vOrders().find((o) => o.id === open.id) ?? open);
   const batchesAt = (k: Stage) => (["production", "qc", "packing", "invoice", "shipping"].includes(k) ? batchesSig.value.filter((b) => b.stage === k && list.some((o) => o.no === b.orderNo)) : []);

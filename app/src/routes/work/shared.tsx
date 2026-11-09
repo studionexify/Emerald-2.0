@@ -1,17 +1,29 @@
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
-import { itemLabel, ordersSig, log } from "../../data";
+import { itemLabel, ordersSig, log, clientsSig, invoicesSig, quotesSig, shipmentsSig, openOrderSig, returnSig } from "../../data";
+import { navigate, path } from "../../router";
+import { STAGE_HREF } from "../../ui/stage-strip";
 import { vOrders } from "../../data";
 import { LinkedTasks } from "../Todo";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
-import { Pick, Button, DetailHead, Fact, Page, Status } from "../../ui";
-import { storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
-import { MediaImg } from "../../ui/media";
+import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
+import { storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
+/** Order panel state for a list page: reopens the order you came back to (and its scroll). */
+export function useOpenOrder() {
+  return useState<Order | null>(() => {
+    let no = openOrderSig.value; openOrderSig.value = null; const r = returnSig.value;
+    if (!no && r && r.path === path.value) { no = r.no; returnSig.value = null; const y = r.scroll; setTimeout(() => { const m = document.querySelector("[data-split-main]"); if (m) m.scrollTop = y; }, 60); }
+    return no ? vOrders().find((o) => o.no === no) ?? null : null;
+  });
+}
+const goStage = (o: Order, st: Stage) => { returnSig.value = { path: path.value, no: o.no, scroll: document.querySelector("[data-split-main]")?.scrollTop ?? 0 }; openOrderSig.value = o.no; navigate(STAGE_HREF[st]); };
 export function WorkShell({ title, sub, actions, toolbar, detail, children, stage }: { stage?: Stage; title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
-  return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={vOrders()} showValue={can("mauny")} active={stage} />}{children}</Page>;
+  const r = returnSig.value; const back = r && r.path !== path.value ? r : null;
+  return <Page title={title} sub={sub} actions={<>{back && <Button variant="outline" icon="left" onClick={() => navigate(back.path)}>Back to {back.no}</Button>}{actions}</>} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={vOrders()} showValue={can("mauny")} active={stage} />}{children}</Page>;
 }
 
 export type TypeFilter = "all" | OrderType;
@@ -28,8 +40,8 @@ export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void;
   return (
     <button onClick={() => onOpen(o)} class="w-full min-w-0 text-left rounded-2xl bg-c0 border border-line hover:border-c2 px-2.5 py-2 cursor-pointer text-[13px]">
       <div class="flex items-center justify-between gap-2"><span class="font-mono text-[11px] font-bold">{o.no}</span><span class="t-meta">{o.type === "bulk" ? "Bulk" : shortDate(o.due)}</span></div>
-      <div class="font-medium truncate mt-0.5">{o.customer}</div>
-      <div class="t-meta truncate">{o.items.map((i) => i.name).join(", ")}</div>
+      <div class="flex items-center gap-2 mt-1"><Thumb thumb={o.items[0]?.thumb} full={o.items[0]?.img} alt={o.items[0]?.name ?? ""} class="w-9 h-9" /><div class="min-w-0"><div class="font-medium truncate">{o.customer}</div>
+      <div class="t-meta truncate">{o.items[0]?.name}{o.items.length > 1 ? ` +${o.items.length - 1} more` : ""}</div></div></div>
       <div class="flex items-center justify-between gap-2 mt-1">
         <span class="num text-[12px]">{o.type === "inhouse" ? "Internal" : inr(orderTotal(o))}</span>
         {o.blocked && <span class="inline-flex items-center gap-1 text-[11px] font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-warn" />Blocked</span>}
@@ -67,98 +79,133 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
   const hist = historySig.value.filter((h) => h.orderNo === order.no);
   const photos = photosSig.value.filter((p) => p.ref === order.no);
   const lowAcc = itemsSig.value.filter((a) => a.cat === "Accessory" && a.qty <= a.reorderAt);
+  const ck = checks(order, batchesSig.value); const ckDone = ck.filter((c) => c.done).length;
+  const sel = "h-9 !min-h-0 rounded-lg border border-line bg-c0 px-2 text-[13px] font-semibold min-w-0 cursor-pointer";
+  const H = { client: "#4a7bd0", order: "#8a5cc2", prod: "#2e9a4b", docs: "#1f9a9a", internal: "#7a8594" };
+  const filG = cons.filter((x) => x.kind === "filament").reduce((s, x) => s + x.qty, 0);
+  const cl = clientsSig.value.find((c) => c.name.toLowerCase() === order.customer.toLowerCase());
+  const qs = quotesSig.value.filter((q) => q.orderNo === order.no), invs = invoicesSig.value.filter((i) => i.orderNo === order.no), ships = shipmentsSig.value.filter((x) => x.orderNo === order.no);
+  const docN = qs.length + invs.length + ships.length + photos.length + (order.po ? 1 : 0);
+  const cur = STAGE_ORDER.indexOf(order.stage);
+  const F = (id: string) => `${order.no}:${id}`;
+  const Row = ({ k, v }: { k: string; v?: ComponentChildren }) => <div class="flex justify-between gap-3 py-1 border-t border-line first:border-0 text-[13px]"><span class="text-c3 shrink-0">{k}</span><span class="text-right min-w-0 break-words">{v || "—"}</span></div>;
+  const Doc = ({ label, sub, href }: { label: string; sub?: string; href: string }) => <button class="w-full flex items-center justify-between gap-2 py-1.5 border-t border-line first:border-0 text-left text-[13px] cursor-pointer !min-h-0" onClick={() => { returnSig.value = { path: path.value, no: order.no, scroll: document.querySelector("[data-split-main]")?.scrollTop ?? 0 }; navigate(href); }}><span class="min-w-0"><b>{label}</b>{sub && <span class="t-meta"> · {sub}</span>}</span><Icon name="right" size={12} /></button>;
   return (
     <div>
-      <DetailHead title={`${order.no} · ${order.customer}`} onClose={() => { setMsg(""); onClose(); }} />
-      <div class="text-xs text-c3 mb-2">{TYPE_LABEL[order.type]} · via {order.medium} · {FLOW_NOTE[order.type]}</div>
-      {canSwitchMode() && order.type !== "inhouse" && <div class="flex items-center gap-2 mb-2 text-[12px]"><span class="text-c3">Payment mode</span>{(["alpha", "beta"] as const).map((m) => <button key={m} onClick={() => { ordersSig.value = ordersSig.value.map((x) => (x.id === order.id ? { ...x, pay: m } : x)); log("Payment mode", `${order.no} → ${PAY_LABEL[m]}`); onOpen({ ...order, pay: m }); }} class={`h-7 px-2.5 rounded-full font-semibold cursor-pointer !min-h-0 ${(order.pay ?? "alpha") === m ? "bg-c4 text-c0" : "bg-c1 text-c3"}`}>{PAY_LABEL[m]}</button>)}</div>}
-      <div class="text-[11px] text-c3 mb-1">Stage — tap any to move (outlined = usual path)</div>
-      <ol class="flex flex-wrap gap-1 mb-2" aria-label="Stages">
-        {STAGE_ORDER.map((s) => (
-          <li key={s}><button onClick={() => go(s)} aria-pressed={order.stage === s}
-            class={`text-[11px] px-2 h-6 inline-flex items-center rounded-full cursor-pointer ${order.stage === s ? "bg-c4 text-c0 font-semibold" : sug.includes(s) ? "bg-c0 border border-c3" : "bg-c1 text-c3"}`}>{STAGE_LABEL[s]}</button></li>
-        ))}
-      </ol>
-      <div class="flex flex-wrap gap-2 mb-3">
-        {prev && <Button variant="outline" onClick={() => go(prev)}>← {STAGE_LABEL[prev]}</Button>}
-        {next && <Button onClick={() => go(next)}>{STAGE_LABEL[next]} →</Button>}
-        <Button variant="outline" icon="copy" onClick={() => { const c = duplicateOrder(order); setMsg(`Created ${c.no}`); onOpen(c); }}>Duplicate</Button>
-      </div>
-      {gate && order.stage !== "archived" && <p class="text-xs mb-2 rounded-xl bg-c1 p-2" role="note"><b>Blocked:</b> {gate}</p>}
+      <DetailHead title={<>{order.no} <span class="text-c3 font-medium">· {order.customer}</span></>} onClose={() => { setMsg(""); onClose(); }} />
+      <div class="t-meta -mt-2 mb-3">{TYPE_LABEL[order.type]} · {STAGE_LABEL[order.stage]} · due {shortDate(order.due)}{total ? ` · ${inr(total)}` : ""}</div>
+      {gate && order.stage !== "archived" && <p class="text-xs mb-2 rounded-xl p-2.5" style={{ background: "color-mix(in srgb, #d97706 14%, var(--c0))" }} role="note"><b>Blocked:</b> {gate}</p>}
       {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
-      <LinkedTasks kind={order.stage === "quotation" ? "Quotation" : "Order"} refNo={order.no} />
 
-      {order.stage === "production" && lowAcc.length > 0 && <div class="rounded-xl bg-c1 p-2 text-xs mb-3"><b>Stock check (advisory):</b> {lowAcc.map((a) => a.name).join(", ")} at or below reorder.</div>}
-      <h3 class="font-semibold text-sm mb-1.5">Recorded</h3>
-      <ul class="grid grid-cols-2 gap-x-3 gap-y-1 mb-3 text-xs">
-        {checks(order, batchesSig.value).map((c) => (
-          <li key={c.label} class="flex items-center justify-between gap-1">
-            <Status tone={c.done ? "done" : "idle"}>{c.label}</Status>
-            {!c.done && <button class="underline cursor-pointer" onClick={() => onOpen(satisfy(order, c.field))}>{c.action}</button>}
-          </li>
-        ))}
-      </ul>
+      <Fold id={F("client")} hue={H.client} title="1 · Client details" meta={cl?.city || order.medium}>
+        <Row k="Name" v={order.customer} />
+        <Row k="Phone" v={cl?.phone && <a class="underline" href={`tel:${cl.phone}`}>{cl.phone}</a>} />
+        <Row k="Email" v={cl?.email && <a class="underline" href={`mailto:${cl.email}`}>{cl.email}</a>} />
+        <Row k="Delivery address" v={cl?.address} />
+        <Row k="City" v={cl?.city} />
+        <Row k="GSTIN" v={cl?.gstin} />
+        <Row k="Came via" v={order.medium} />
+        <button class="text-xs underline mt-1.5 cursor-pointer" onClick={() => { returnSig.value = { path: path.value, no: order.no, scroll: 0 }; navigate("/work/clients"); }}>{cl ? "Edit client" : "Add to clients"} →</button>
+      </Fold>
 
-      <h3 class="font-semibold text-sm mb-1.5 flex justify-between">Consumption <span class="num font-normal text-c3">{inr(used)} used{total ? ` · margin ${Math.round((1 - used / total) * 100)}%` : ""}</span></h3>
-      <ConsumeForm orderNo={order.no} batches={mine.map((b) => b.name)} />
-      <ul class="flex flex-col mt-2 mb-3 text-xs">
-        {cons.map((c) => (
-          <li key={c.id} class="flex justify-between gap-2 py-1 border-t border-line">
-            <span class="min-w-0"><b class="capitalize">{c.kind}</b> · {itemLabel(c.item)}{c.batch ? ` · ${c.batch}` : ""}<span class="block text-c3">{c.at} · {c.who}</span></span>
-            <span class="num whitespace-nowrap text-right">{c.qty} {c.unit}<span class="block text-c3">{inr(c.cost)}</span></span>
-          </li>
-        ))}
-        {!cons.length && <li class="text-c3">Nothing logged yet.</li>}
-      </ul>
+      <Fold id={F("order")} hue={H.order} open title={`2 · Order details · ${order.items.length} line${order.items.length === 1 ? "" : "s"}`} meta={total ? inr(total) : "Internal"}>
+        <ul class="flex flex-col">{order.items.map((i, k) => <LineRow key={k} order={order} i={i} k={k} onOpen={onOpen} filG={filG} />)}</ul>
+        <div class="flex justify-between text-[13px] pt-2 mt-1 border-t border-line"><span class="text-c3">Total · due {shortDate(order.due)}</span><b class="num">{total ? inr(total) : "Internal"}</b></div>
+      </Fold>
 
-      <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Batches <button class="text-xs underline cursor-pointer" onClick={() => { addBatch(order); onOpen({ ...order }); }}>+ Add batch</button></h3>
-      <ul class="flex flex-col gap-2 mb-3">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}{!mine.length && <li class="text-xs text-c3">No batches — any order can be split.</li>}</ul>
+      <Fold id={F("prod")} hue={H.prod} open title="3 · Production status" meta={`${STAGE_LABEL[order.stage]} · ${ckDone}/${ck.length}`}>
+        <ol class="flex flex-col mb-2" aria-label="Pipeline">
+          {STAGE_ORDER.map((st, i) => { const done = i < cur, now = i === cur, off = !sug.includes(st);
+            return <li key={st}><button onClick={() => goStage(order, st)} class={`w-full flex items-center gap-2.5 h-9 !min-h-0 px-1 rounded-lg text-left cursor-pointer hover:bg-c1 ${off && !now ? "opacity-45" : ""}`} title={`Open ${STAGE_LABEL[st]} page`}>
+              <span class="w-5 h-5 rounded-full grid place-items-center shrink-0 text-[10px] font-bold" style={now ? { background: H.prod, color: "#fff" } : done ? { background: `color-mix(in srgb, ${H.prod} 25%, var(--c0))`, color: H.prod } : { boxShadow: "inset 0 0 0 1.5px var(--line)" }}>{done ? "✓" : i + 1}</span>
+              <span class={`flex-1 text-[13px] ${now ? "font-bold" : ""}`}>{STAGE_LABEL[st]}</span>
+              {now && <span class="text-[11px] font-semibold" style={{ color: H.prod }}>Current</span>}
+              <Icon name="right" size={12} />
+            </button></li>; })}
+        </ol>
+        <div class="grid grid-cols-[auto_minmax(0,1fr)] gap-2 mb-2">
+          {prev ? <Button variant="outline" onClick={() => go(prev)}>← {STAGE_LABEL[prev]}</Button> : <span />}
+          {next && <Button onClick={() => go(next)}>Move to {STAGE_LABEL[next]} →</Button>}
+        </div>
+        <label class="flex items-center gap-2 text-[12px] mb-2"><span class="text-c3">Jump to</span><select class={`${sel} flex-1`} value={order.stage} onChange={(e) => go((e.target as HTMLSelectElement).value as Stage)}>{STAGE_ORDER.map((st) => <option key={st} value={st}>{STAGE_LABEL[st]}{sug.includes(st) ? "" : " (off path)"}</option>)}</select></label>
+        <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Checklist · {ckDone}/{ck.length}</summary>
+          <ul class="flex flex-col">{ck.map((c) => <li key={c.label} class="flex items-center justify-between gap-2 py-1 border-t border-line first:border-0"><Status tone={c.done ? "done" : "idle"}>{c.label}</Status>{!c.done && <button class="underline cursor-pointer" onClick={() => onOpen(satisfy(order, c.field))}>{c.action}</button>}</li>)}</ul>
+        </details>
+        <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Batches · {mine.length}</summary>
+          <ul class="flex flex-col gap-2 py-1">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}{!mine.length && <li class="text-c3">No batches — any order can be split.</li>}</ul>
+          <button class="underline cursor-pointer" onClick={() => { addBatch(order); onOpen({ ...order }); }}>+ Add batch</button>
+        </details>
+        {order.stage === "production" && lowAcc.length > 0 && <p class="text-xs mt-1 rounded-lg bg-c1 p-2"><b>Low stock:</b> {lowAcc.map((a) => a.name).join(", ")}</p>}
+      </Fold>
 
-      <div class="grid grid-cols-2 gap-3 my-3 text-sm">
-        <Fact label="Created" value={shortDate(order.created)} />
-        <Fact label="Due" value={shortDate(order.due)} />
-        <Fact label="Value" value={total ? inr(total) : "Internal"} />
-        <Fact label="Payment" value={order.paid ? "Paid" : "On delivery"} />
-        <Fact label="PO" value={order.po ?? "—"} />
-        <Fact label="Invoice" value={order.invoiced ? "Raised" : "—"} />
-      </div>
-      <h3 class="font-semibold text-sm mb-2">Line items</h3>
-      <ul class="flex flex-col gap-2 mb-3">
-        {order.items.map((i, k) => (
-          <li key={k} class="bg-c1 rounded-xl p-2.5 text-sm flex justify-between gap-3">
-            <span class="min-w-0"><span class="font-medium block">{i.name}</span><span class="text-c3 text-xs">{i.material} · {i.colour} · ×{i.qty}</span></span>
-            <span class="num text-right">{i.price ? inr(i.price * i.qty) : "—"}<span class="block text-c3 text-xs">est. cost {inr(i.cost * i.qty)}</span></span>
-          </li>
-        ))}
-      </ul>
-      <h3 class="font-semibold text-sm mb-1.5">Design record per line</h3>
-      <div class="flex flex-col gap-2 mb-3">
-        {order.items.map((i, k) => { const key = `${order.no}#${k}`; const d = designSig.value[key] ?? { file: "", profile: "", grams: 0, minutes: 0, bom: "", measuredBy: "", source: "slicer" as const };
-          const set = (p: Partial<typeof d>) => (designSig.value = { ...designSig.value, [key]: { ...d, ...p, measuredBy: "you" } });
-          const c = "h-8 px-2 rounded-lg border border-c3 bg-c0 text-xs min-w-0";
-          return (
-            <div key={k} class="bg-c1 rounded-xl p-2 text-xs">
-              <div class="font-medium mb-1">{i.name}</div>
-              <div class="grid grid-cols-2 gap-1">
-                <input class={c} placeholder="Print file name" value={d.file} onInput={(e) => set({ file: (e.target as HTMLInputElement).value })} />
-                <input class={c} placeholder="Slice profile" value={d.profile} onInput={(e) => set({ profile: (e.target as HTMLInputElement).value })} />
-                <input class={c} type="number" placeholder="Sliced g" value={d.grams || ""} onInput={(e) => set({ grams: Number((e.target as HTMLInputElement).value) || 0 })} />
-                <input class={c} type="number" placeholder="Sliced min" value={d.minutes || ""} onInput={(e) => set({ minutes: Number((e.target as HTMLInputElement).value) || 0 })} />
-                <input class={`${c} col-span-2`} placeholder="BOM: magnets ×2, insert ×4…" value={d.bom} onInput={(e) => set({ bom: (e.target as HTMLInputElement).value })} />
-              </div>
-              {d.grams > 0 && <div class="text-c3 mt-1">Sliced vs logged filament: {d.grams * i.qty} g vs {cons.filter((x) => x.kind === "filament").reduce((s, x) => s + x.qty, 0)} g</div>}
-            </div>
-          ); })}
-      </div>
+      <Fold id={F("docs")} hue={H.docs} title="4 · Documents & photos" meta={String(docN)} action={<label class="text-xs underline cursor-pointer">+ Photo<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); }); }} /></label>}>
+        {qs.map((q) => <Doc key={q.id} label={`Quotation ${q.no}`} sub={`${shortDate(q.date)} · ${q.outcome}`} href="/work/quotes" />)}
+        {order.po && <Doc label={`Purchase order ${order.po}`} href="/work/orders" />}
+        {invs.map((i) => <Doc key={i.id} label={`${i.kind === "credit" ? "Credit note" : "Invoice"} ${i.no}`} sub={`${shortDate(i.date)}${i.paidOn ? " · paid" : ""}${i.status === "cancelled" ? " · cancelled" : ""}`} href="/work/invoice" />)}
+        {ships.map((x) => <Doc key={x.id} label={`Shipment · ${x.courier}`} sub={x.tracking || shortDate(x.date)} href="/work/shipping" />)}
+        {!qs.length && !invs.length && !ships.length && !order.po && <p class="text-xs text-c3 mb-1">No documents yet.</p>}
+        <div class="grid grid-cols-4 gap-2 mt-2">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><Thumb full={p.data} alt={p.name} class="w-full aspect-square" /><figcaption class="truncate">{p.stage}</figcaption></figure>)}
+          {Array.from({ length: Math.max(0, 4 - photos.length) }, (_, k) => <figure key={`ph${k}`} class="text-[10px] text-c3"><Thumb alt="Photo" class="w-full aspect-square" onAdd={(f) => shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); })} /><figcaption>{["QC", "Packing", "Shipping", "Other"][photos.length + k] ?? "Photo"}</figcaption></figure>)}</div>
+      </Fold>
 
-      <h3 class="font-semibold text-sm mb-1.5 flex justify-between items-center">Photos <label class="text-xs underline cursor-pointer">+ Add (QC / packing)<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); }); }} /></label></h3>
-      <div class="grid grid-cols-4 gap-2 mb-3">{photos.map((p) => <figure key={p.id} class="text-[10px] text-c3"><MediaImg v={p.data} alt={p.name} class="w-full aspect-square object-cover rounded-lg bg-c1" /><figcaption>{p.stage}</figcaption></figure>)}{!photos.length && <p class="col-span-4 text-xs text-c3">None yet.</p>}</div>
-
-      <h3 class="font-semibold text-sm mb-1.5">Stage history</h3>
-      <ul class="text-xs mb-3">{hist.map((h) => <li key={h.id} class="py-1 border-t border-line">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>
-      <label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!order.paid} onChange={() => onOpen(patchOrder(order, { paid: !order.paid }))} /> Payment received</label>
+      <Fold id={F("internal")} hue={H.internal} title="5 · Internal" meta={total ? `${inr(used)} used · ${Math.round((1 - used / total) * 100)}% margin` : `${inr(used)} used`}>
+        {canSwitchMode() && order.type !== "inhouse" && <label class="flex items-center gap-2 text-[12px] mb-2"><span class="text-c3 w-24">Payment mode</span>
+          <select class={`${sel} flex-1`} value={order.pay ?? "alpha"} onChange={(e) => { const m = (e.target as HTMLSelectElement).value as "alpha" | "beta"; ordersSig.value = ordersSig.value.map((x) => (x.id === order.id ? { ...x, pay: m } : x)); log("Payment mode", `${order.no} → ${PAY_LABEL[m]}`); onOpen({ ...order, pay: m }); }}>
+            {(["alpha", "beta"] as const).map((m) => <option key={m} value={m}>{PAY_LABEL[m]}</option>)}</select></label>}
+        <label class="flex items-center gap-2 text-xs mb-2"><input type="checkbox" checked={!!order.paid} onChange={() => onOpen(patchOrder(order, { paid: !order.paid }))} /> Payment received</label>
+        <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Consumption · {inr(used)} · {cons.length}</summary>
+          <ConsumeForm orderNo={order.no} batches={mine.map((b) => b.name)} />
+          <ul class="flex flex-col mt-2">{cons.map((c) => <li key={c.id} class="flex justify-between gap-2 py-1 border-t border-line"><span class="min-w-0"><b class="capitalize">{c.kind}</b> · {itemLabel(c.item)}{c.batch ? ` · ${c.batch}` : ""}<span class="block text-c3">{c.at} · {c.who}</span></span><span class="num whitespace-nowrap text-right">{c.qty} {c.unit}<span class="block text-c3">{inr(c.cost)}</span></span></li>)}{!cons.length && <li class="text-c3">Nothing logged yet.</li>}</ul>
+        </details>
+        <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Tasks</summary><LinkedTasks kind={order.stage === "quotation" ? "Quotation" : "Order"} refNo={order.no} /></details>
+        <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Stage history · {hist.length}</summary>
+          <ul>{hist.map((h) => <li key={h.id} class="py-1 border-t border-line">{h.at} · {h.by}: {STAGE_LABEL[h.from]} → {STAGE_LABEL[h.to]}{h.reason ? ` — “${h.reason}”` : ""}</li>)}{!hist.length && <li class="text-c3">No moves yet.</li>}</ul>
+        </details>
+        <div class="flex justify-between items-center text-xs mt-2 pt-2 border-t border-line"><span class="text-c3">Created {shortDate(order.created)}</span>
+          <button class="underline cursor-pointer" onClick={() => { const c = duplicateOrder(order); setMsg(`Created ${c.no}`); onOpen(c); }}>Duplicate order</button></div>
+      </Fold>
     </div>
   );
+}
+
+/** One order line: basic row; tap to reveal image upload and the design record. */
+function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"][number]; k: number; onOpen: (o: Order) => void; filG: number }) {
+  const [open, setOpen] = useState(false); const [drag, setDrag] = useState(false);
+  const key = `${order.no}#${k}`; const d = designSig.value[key] ?? { file: "", profile: "", grams: 0, minutes: 0, bom: "", measuredBy: "", source: "slicer" as const };
+  const set = (p: Partial<typeof d>) => (designSig.value = { ...designSig.value, [key]: { ...d, ...p, measuredBy: "you" } });
+  const putItem = (p: Partial<typeof i>) => onOpen(patchOrder(order, { items: order.items.map((x, j) => (j === k ? { ...x, ...p } : x)) }));
+  const attach = async (f?: File | null) => { if (!f || !f.type.startsWith("image/")) return;
+    const [full, thumb] = await Promise.all([shrinkImage(f, 1024, 0.6), shrinkImage(f, 160, 0.6)]);
+    putItem({ img: storeMedia(full, `${order.no} ${i.name}`), thumb }); };
+  const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
+  return <li class="border-t border-line first:border-0">
+    <div class="flex items-center gap-2.5 py-2">
+      <Thumb thumb={i.thumb} full={i.img} alt={i.name} onAdd={attach} />
+      <button class="flex-1 min-w-0 text-left cursor-pointer !min-h-0" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span class="font-medium text-sm block truncate">{i.name}</span>
+        <span class="t-meta">{i.material} · {i.colour} · ×{i.qty}</span>
+      </button>
+      <span class="num text-sm text-right whitespace-nowrap">{i.price ? inr(i.price * i.qty) : "—"}</span>
+      <button class="w-7 h-7 !min-h-0 grid place-items-center rounded-lg text-c3 cursor-pointer" style={{ transform: open ? "rotate(90deg)" : undefined }} onClick={() => setOpen(!open)} aria-label="More"><Icon name="right" size={12} /></button>
+    </div>
+    {open && <div class="pb-3 flex flex-col gap-2 text-xs pop-in">
+      <label class={`flex items-center gap-2 rounded-lg border border-dashed p-2 cursor-pointer ${drag ? "border-c4 bg-c1" : "border-line"}`}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); attach(e.dataTransfer?.files?.[0]); }}
+        onPaste={(e) => attach([...(e.clipboardData?.files ?? [])][0])} tabIndex={0}>
+        <Icon name="image" size={16} /><span class="flex-1">{i.img ? "Replace product image" : "Add product image"} — drop, paste or pick</span>
+        {i.img && <button class="underline text-red" onClick={(e) => { e.preventDefault(); putItem({ img: undefined, thumb: undefined }); }}>Remove</button>}
+        <input type="file" accept="image/*" class="sr-only" onChange={(e) => attach((e.target as HTMLInputElement).files?.[0])} />
+      </label>
+      <div class="flex justify-between t-meta"><span>Est. cost {inr(i.cost * i.qty)}</span>{d.grams > 0 && <span>Sliced {d.grams * i.qty} g · logged {filG} g</span>}</div>
+      <div class="grid grid-cols-2 gap-1.5">
+        <input class={c} placeholder="Print file name" value={d.file} onInput={(e) => set({ file: (e.target as HTMLInputElement).value })} />
+        <input class={c} placeholder="Slice profile" value={d.profile} onInput={(e) => set({ profile: (e.target as HTMLInputElement).value })} />
+        <input class={c} type="number" placeholder="Sliced g" value={d.grams || ""} onInput={(e) => set({ grams: Number((e.target as HTMLInputElement).value) || 0 })} />
+        <input class={c} type="number" placeholder="Sliced min" value={d.minutes || ""} onInput={(e) => set({ minutes: Number((e.target as HTMLInputElement).value) || 0 })} />
+        <input class={`${c} col-span-2`} placeholder="BOM: magnets ×2, insert ×4…" value={d.bom} onInput={(e) => set({ bom: (e.target as HTMLInputElement).value })} />
+      </div>
+    </div>}
+  </li>;
 }
 
 const KINDS: ConKind[] = ["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"];
