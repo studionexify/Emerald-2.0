@@ -110,7 +110,7 @@ function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void;
       <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
         {o.items.slice(0, 2).map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
         {o.items.length > 2 && <li class="pl-[84px] t-meta">+{o.items.length - 2} more</li>}
-        {(() => { const t = orderProgress(o); return (t.printed > 0 || t.failed > 0 || o.type === "bulk") && <li class="pl-[84px] text-[11px] font-medium whitespace-nowrap"><span style={{ color: "#3F8F5F" }}>{t.printed} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></li>; })()}
+        {(() => { const t = orderProgress(o); return (t.printed > 0 || t.failed > 0 || o.type === "bulk") && <li class="pl-[84px] text-[11px] font-medium whitespace-nowrap"><span class="text-grn">{t.printed} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></li>; })()}
       </ul>
       <div class="@max-4xl:hidden pr-2"><Track o={o} /></div>
       <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>
@@ -154,7 +154,7 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
       <div class="flex flex-wrap items-center gap-x-5 gap-y-1 mt-5 mb-2">
         <h3 class="font-semibold text-sm mr-auto">Items · {o.items.length}</h3>
         <span class="text-[12px]">Ordered <b class="num">{tot.qty}</b></span>
-        <span class="text-[12px]" style={{ color: "#3F8F5F" }}>Printed <b class="num">{tot.printed}</b></span>
+        <span class="text-[12px] text-grn">Printed <b class="num">{tot.printed}</b></span>
         <span class="text-[12px] text-red">Wasted <b class="num">{tot.failed}</b></span>
         <span class="text-[12px]">Pending <b class="num">{tot.pending}</b></span>
         <span class="text-[13px] font-semibold num">Total {inr(orderTotal(o))}</span>

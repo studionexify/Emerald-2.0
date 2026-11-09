@@ -184,7 +184,7 @@ function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"
       <button class="flex-1 min-w-0 text-left cursor-pointer !min-h-0" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span class="font-medium text-sm block truncate">{i.name}</span>
         <span class="t-meta">{i.material} · {i.colour} · ×{i.qty}</span>
-        {(() => { const p = lineProgress(order, i); return (p.printed > 0 || p.failed > 0) && <span class="block text-[11px] font-medium"><span style={{ color: "#3F8F5F" }}>{p.printed} printed</span> · <span class="text-red">{p.failed} wasted</span> · <span class="text-c3">{p.pending} pending</span></span>; })()}
+        {(() => { const p = lineProgress(order, i); return (p.printed > 0 || p.failed > 0) && <span class="block text-[11px] font-medium"><span class="text-grn">{p.printed} printed</span> · <span class="text-red">{p.failed} wasted</span> · <span class="text-c3">{p.pending} pending</span></span>; })()}
       </button>
       <span class="num text-sm text-right whitespace-nowrap">{i.price ? inr(i.price * i.qty) : "—"}</span>
       <button class="w-7 h-7 !min-h-0 grid place-items-center rounded-lg text-c3 cursor-pointer" style={{ transform: open ? "rotate(90deg)" : undefined }} onClick={() => setOpen(!open)} aria-label="More"><Icon name="right" size={12} /></button>
