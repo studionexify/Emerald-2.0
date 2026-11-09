@@ -3,7 +3,7 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, type OrderSize, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, PrintRuns, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
@@ -120,6 +120,13 @@ const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : 
 const Due = ({ o }: { o: Order }) => { const d = left(o.due); return <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
   <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
   <div class="text-[11px] whitespace-nowrap font-medium" style={{ color: d < 0 ? STAGE_HUE.blocked : d <= 2 ? STAGE_HUE.qc : "var(--c-3)" }}>{leftLabel(d)}</div></div>; };
+function Pace({ o }: { o: Order }) {
+  const p = orderPace(o); if (!p) return null;
+  if (p.finish === null && p.late === 0) return null;
+  const bad = p.late > 0;
+  return <div class={`text-[11px] font-semibold whitespace-nowrap ${bad ? "text-red" : "text-grn"}`} title={`About ${Math.round(p.rate)} good pieces a day so far`}>
+    {p.late === Infinity ? "No pace yet" : bad ? `${p.late}d late at this pace` : `On track · ${shortDate(p.finish!)}`}</div>;
+}
 function Progress({ o }: { o: Order }) {
   const t = orderProgress(o), pct = t.qty ? Math.min(100, (t.printed / t.qty) * 100) : 0, wp = t.qty ? Math.min(100 - pct, (t.failed / t.qty) * 100) : 0;
   return <div class="@max-lg:col-span-2 min-w-0">
@@ -150,7 +157,7 @@ function SegRow({ seg, o, onOpen, onEdit }: { seg: Segment; o: Order; onOpen: (o
     <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
     <div class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
     <Items o={o} seg={seg} all={desk} setAll={setDesk} /><Progress o={o} />
-    <StagePill o={o} /><Due o={o} />{menu}
+    <StagePill o={o} /><div class="@max-lg:col-start-2 @max-lg:row-start-1"><Due o={o} /><Pace o={o} /></div>{menu}
   </div>{desk && <PrintDesk o={o} />}</div>;
 }
 function Kpis({ items }: { items: [string, string | number, string?][] }) {
@@ -242,10 +249,14 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [edit, setEdit] = useState<Order | null>(null);
   const [n, setN] = useState(PAGE);
   const [st, setSt] = useState("");
+  const [q, setQ] = useState(""), [sort, setSort] = useState<"due" | "done" | "pending">("due");
   const mine = vOrders().filter((o) => segmentOf(o) === seg);
   const subs = [...new Set(mine.map((o) => kindOf(o)))].sort();
   const list = mine.filter((o) => f === "all" || kindOf(o) === f);
-  const live = list.filter((o) => (st ? o.stage === st : o.stage !== "archived")).sort((a, b) => Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
+  const ql = q.trim().toLowerCase();
+  const pctDone = (o: Order) => { const t = orderProgress(o); return t.qty ? t.printed / t.qty : 0; };
+  const live = list.filter((o) => (st ? o.stage === st : o.stage !== "archived")).filter((o) => !ql || o.customer.toLowerCase().includes(ql) || o.no.toLowerCase().includes(ql) || o.items.some((i) => i.name.toLowerCase().includes(ql)))
+    .sort((a, b) => sort === "done" ? pctDone(b) - pctDone(a) : sort === "pending" ? orderProgress(b).pending - orderProgress(a).pending : Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const nos = new Set(mine.map((o) => o.no));
   const myJobs = jobsSig.value.filter((j) => nos.has(j.orderNo));
@@ -265,6 +276,12 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
       <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} active={st} onPick={setSt} stages={stages} /></Section>
 
       <Section title={st ? `${STAGES.find((x) => x.key === st)?.label} orders` : "Live orders"} note={String(live.length)} action={st ? <button class="t-meta underline cursor-pointer !min-h-0" onClick={() => setSt("")}>Show all live</button> : undefined}>
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search client, order no. or product" aria-label="Search live orders" class="h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] flex-1 min-w-[180px]" />
+            <select value={sort} onChange={(e) => setSort((e.target as HTMLSelectElement).value as typeof sort)} aria-label="Sort live orders" class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer">
+              <option value="due">Sort: deadline</option>{seg !== "client" && <option value="done">Sort: most done</option>}{seg !== "client" && <option value="pending">Sort: most pending</option>}
+            </select>
+          </div>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
             <div class={`${HEAD} ${SEG_COLS[seg].cols}`}>{SEG_COLS[seg].head.map((h, i) => <span key={i}>{h}</span>)}</div>
             {live.slice(0, n).map((o) => <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} />)}

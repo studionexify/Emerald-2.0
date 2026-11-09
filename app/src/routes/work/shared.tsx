@@ -298,6 +298,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
         <span class="flex-1 min-w-0"><span class="block truncate">{r.printer || "—"}{r.spool ? ` · ${r.spool}` : ""}</span>
           <span class="block t-meta truncate">{[r.by, g ? `${g} g` : "", r.reason ? `failed: ${r.reason}` : ""].filter(Boolean).join(" · ") || "—"}</span></span>
         <span class="whitespace-nowrap"><span class="text-grn">{r.done} good</span> · <span class="text-red">{r.failed ?? 0} failed</span></span>
+        {(r.failed ?? 0) > 0 && <button type="button" class="h-7 px-2 rounded-md bg-c1 text-[11px] font-semibold cursor-pointer !min-h-0" onClick={() => { startRun(order, item.name, r.failed!, r.printer || printers[0]?.name || "Printer", r.spool ?? ""); onOpen({ ...order }); }} title="Start a new run for just the failed pieces, same printer and spools">Reprint {r.failed}</button>}
         <button type="button" class="underline t-meta cursor-pointer !min-h-0" onClick={() => { if (confirm(`Undo this run? ${r.done} good / ${r.failed ?? 0} failed come off the line${g ? ` and ${g} g go back on the spool` : ""}. It goes back on the plate so you can log it again.`)) onOpen(undoRun(order, r.id)); }}>Undo</button>
       </li>; })}</ul>
     </details>}

@@ -190,6 +190,20 @@ export function undoRun(o: Order, id: string): Order {
   log("Undid print", `${o.no} · ${b.name}: ${b.done} good, ${b.failed ?? 0} failed`);
   return addToLine(o, b.name, -b.done, -(b.failed ?? 0));
 }
+/** Pace forecast for an order from its print runs: pieces per day since the first run, and the finish date at that pace. */
+export function orderPace(o: Order, batches = batchesSig.value) {
+  const runs = batches.filter((b) => b.orderNo === o.no && b.at && !b.running);
+  if (!runs.length) return null;
+  const first = Math.min(...runs.map((b) => Date.parse(b.at!)));
+  const days = Math.max(1, (Date.now() - first) / 864e5);
+  const made = runs.reduce((a, b) => a + b.done, 0), rate = made / days;
+  const left = orderProgress(o, batches).pending;
+  if (!left) return { rate, finish: null, late: 0 };
+  if (rate <= 0) return { rate: 0, finish: null, late: Infinity };
+  const finish = new Date(Date.now() + (left / rate) * 864e5).toISOString().slice(0, 10);
+  const late = Math.round((Date.parse(finish) - Date.parse(o.due)) / 864e5);
+  return { rate, finish, late };
+}
 /** Machines a line was printed on, from print batches and production jobs. */
 export function lineMachines(o: Order, i: Order["items"][number], batches = batchesSig.value, jobs = jobsSig.value) {
   const m = new Map<string, number>();
