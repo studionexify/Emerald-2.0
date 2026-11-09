@@ -137,3 +137,36 @@ export function itemLabel(item: string): string {
   const sp = spoolsSig.value.find((x) => x.spoolNo === m[1]); if (!sp) return item;
   return `${sp.material} ${sp.colour} ${sp.brand}${sp.slot != null ? ` #${sp.slot}` : ""}`;
 }
+
+/* ---------------------------------------------------------------- Filament master (settings) */
+export type FilMat = { name: string; hex?: string; nozzle?: string; bed?: string; costKg?: number };
+export type SpoolBody = { name: string; tare: number };
+export type FilColour = { name: string; hex: string };
+export type FilMaster = { materials: FilMat[]; colours: FilColour[]; brands: string[]; finishes: string[]; bodies: SpoolBody[]; sizes: number[]; diameters: number[]; body: string; size: number; tare: number; diameter: number; costKg: number; lowG: number; reorderG: number };
+const eqi = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+const FM_DEF: FilMaster = { materials: [], colours: [], brands: [], finishes: [],
+  bodies: [{ name: "Plastic", tare: 250 }, { name: "Cardboard", tare: 150 }, { name: "Plastic (large)", tare: 600 }, { name: "Metal", tare: 900 }],
+  sizes: [250, 500, 750, 1000, 2000, 3000, 5000], diameters: [1.75, 2.85], body: "Plastic", size: 1000, tare: 250, diameter: 1.75, costKg: 1250, lowG: 250, reorderG: 1000 };
+export const filMasterSig = persisted<FilMaster>("filMaster", FM_DEF);
+filMasterSig.value = { ...FM_DEF, ...filMasterSig.value };
+export const bodyTare = (name?: string) => filMasterSig.value.bodies.find((b) => eqi(b.name, name))?.tare;
+/** Names already used on spools join the master, so it never starts empty. */
+effect(() => {
+  const m = filMasterSig.peek(), sp = spoolsSig.value;
+  const mats = [...m.materials], cols = [...m.colours], brands = [...m.brands], fin = [...m.finishes]; let ch = false;
+  for (const s of sp) {
+    if (s.material && !mats.some((x) => eqi(x.name, s.material))) { mats.push({ name: s.material, nozzle: s.nozzle, bed: s.bed }); ch = true; }
+    if (s.colour && !cols.some((x) => eqi(x.name, s.colour))) { cols.push({ name: s.colour, hex: s.hex && s.hex !== "#000000" ? s.hex : "" }); ch = true; }
+    if (s.brand && !brands.some((x) => eqi(x, s.brand))) { brands.push(s.brand); ch = true; }
+    if (s.finish && !fin.some((x) => eqi(x, s.finish))) { fin.push(s.finish); ch = true; }
+  }
+  if (ch) filMasterSig.value = { ...m, materials: mats, colours: cols, brands, finishes: fin };
+});
+export const masterMat = (name: string) => filMasterSig.value.materials.find((x) => eqi(x.name, name));
+export const masterColour = (name?: string) => filMasterSig.value.colours.find((x) => eqi(x.name, name));
+/** Rename a master entry and every spool that uses it. */
+export function renameMaster(field: "material" | "colour" | "brand" | "finish", from: string, to: string) {
+  if (!to.trim() || from === to) return;
+  spoolsSig.value = spoolsSig.value.map((s) => (eqi(s[field] as string, from) ? { ...s, [field]: to.trim() } : s));
+}
+export const masterUse = (field: "material" | "colour" | "brand" | "finish", name: string) => spoolsSig.value.filter((s) => s.active !== false && eqi(s[field] as string, name)).length;

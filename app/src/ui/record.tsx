@@ -44,7 +44,7 @@ export function Input<T>({ f, value, on }: { f: FDef<T>; value: unknown; on: (v:
   const v = value ?? "";
   if (t === "select") {
     const opts = typeof f.options === "function" ? f.options() : f.options ?? [];
-    return <select class={inputCls} value={String(v)} onChange={(e) => on((e.target as HTMLSelectElement).value)}>{!opts.includes(String(v)) && <option value={String(v)}>{String(v) || "—"}</option>}{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+    return <select class={inputCls} value={String(v)} onChange={(e) => { const x = (e.target as HTMLSelectElement).value; on(typeof value === "number" && x !== "" && !isNaN(Number(x)) ? Number(x) : x); }}>{!opts.includes(String(v)) && <option value={String(v)}>{String(v) || "—"}</option>}{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
   }
   if (t === "textarea") return <textarea class={`${inputCls} h-20 py-2`} value={String(v)} onInput={(e) => on((e.target as HTMLTextAreaElement).value)} />;
   if (t === "color") return <div class="flex items-center gap-2"><input type="color" class="h-10 w-12 rounded-lg border border-c3 bg-c0 shrink-0 cursor-pointer" value={String(v) || "#000000"} onInput={(e) => on((e.target as HTMLInputElement).value)} aria-label={f.label} /><input class={inputCls} value={String(v)} onInput={(e) => on((e.target as HTMLInputElement).value)} /></div>;
