@@ -243,21 +243,27 @@ function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["items"]
   const p = lineProgress(order, item);
   const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
   const spools = spoolsSig.value.filter((x) => x.active !== false && x.status !== "empty");
-  const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sp, setSp] = useState("");
+  const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]);
   const [fin, setFin] = useState<Record<string, [number, number]>>({});
   const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
   const spLabel = (x: typeof spools[number]) => `${x.spoolNo} · ${x.material} ${x.colour}`.trim();
   const room = Math.max(0, p.pending - p.printing);
-  const start = (e: Event) => { e.preventDefault(); const n = qty || room; if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", sp || (spools[0] ? spLabel(spools[0]) : "")); setQty(0); onOpen({ ...order }); };
+  const start = (e: Event) => { e.preventDefault(); const n = qty || room; if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", sps.filter(Boolean).join(" + ")); setQty(0); setSps([""]); onOpen({ ...order }); };
   const live = runs.filter((r) => r.running), past = runs.filter((r) => !r.running);
   return <div class="flex flex-col gap-2">
     <form class="rounded-lg border border-c4/30 bg-c1 p-2 flex flex-col gap-1.5" onSubmit={start}>
       <span class="font-semibold text-[12px]">Start print <span class="t-meta font-normal">· {room} left to print</span></span>
-      <div class="grid grid-cols-[64px_1fr_1fr] gap-1.5">
+      <div class="grid grid-cols-[64px_1fr] gap-1.5">
         <input class={c} type="number" min={1} placeholder={String(room)} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Pieces in this run" />
         <select class={c} value={pr || printers[0]?.name} onChange={(e) => setPr((e.target as HTMLSelectElement).value)} aria-label="Printer">{printers.map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}</select>
-        <select class={c} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)} aria-label="Spool"><option value="">{spools.length ? "Spool…" : "No spools"}</option>{spools.map((x) => <option key={x.id} value={spLabel(x)}>{spLabel(x)} ({x.grams} g)</option>)}</select>
       </div>
+      <span class="t-meta">Spools / materials used</span>
+      {sps.map((v, k) => <div key={k} class="flex items-center gap-1.5">
+        <span class="t-meta w-4 text-right">{k + 1}</span>
+        <select class={`${c} flex-1`} value={v} onChange={(e) => setSps(sps.map((x, j) => (j === k ? (e.target as HTMLSelectElement).value : x)))} aria-label={`Spool ${k + 1}`}><option value="">{spools.length ? "Pick spool…" : "No spools"}</option>{spools.filter((x) => spLabel(x) === v || !sps.includes(spLabel(x))).map((x) => <option key={x.id} value={spLabel(x)}>{spLabel(x)} ({x.grams} g)</option>)}</select>
+        {sps.length > 1 && <button type="button" class="w-7 h-7 !min-h-0 rounded-lg text-c3 hover:bg-c0 cursor-pointer" onClick={() => setSps(sps.filter((_, j) => j !== k))} aria-label={`Remove spool ${k + 1}`}>×</button>}
+      </div>)}
+      <button type="button" class="self-start underline t-meta cursor-pointer !min-h-0" onClick={() => setSps([...sps, ""])}>+ Add another spool / material</button>
       <button class="h-8 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
     </form>
     {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1])); }}>
