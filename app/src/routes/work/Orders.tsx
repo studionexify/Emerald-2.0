@@ -1,6 +1,6 @@
 import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
-import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
+import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table, Tip } from "../../ui";
 import { MetaRow } from "../../ui/disclose";
 import { Initials, StagePill, StageStrip } from "../../ui/stage-strip";
 import { b2bFor } from "../../data/inventory";
@@ -114,7 +114,7 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
           <button key={k} onClick={() => setT(k)} class={`h-9 rounded-full text-sm cursor-pointer ${t === k ? "bg-c4 text-c0" : "bg-c1"}`}>{TYPE_LABEL[k]}</button>
         ))}
       </div>
-      <p class="text-xs text-c3 mb-3">{FLOW_NOTE[t]}</p>
+      <Tip>{FLOW_NOTE[t]}</Tip>
       <div class="grid grid-cols-2 gap-2.5">
         {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} onInput={(e) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, customer: v, ...(b2bFor(v) ?? {}) }); }} /></Field></div>}
         <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} /></Field></div>

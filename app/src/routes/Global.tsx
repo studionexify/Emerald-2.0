@@ -4,7 +4,7 @@ import { clientsSig } from "../data/inventory";
 import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
-import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
+import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall, Tip } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
 
@@ -59,7 +59,7 @@ export function Logs() {
   return (
     <Page title="Logs" sub="Who changed what, and when — grouped by type" detail={open && <Inspect title={open.action} row={{ when: open.at, who: open.who, action: open.action, record: open.target, kind: open.kind ?? "order" }} onClose={() => setOpen(null)} />}
       toolbar={<Pick title="Who" value={who} on={setWho} items={people} label={(p) => (p === "all" ? "Everyone" : p)} />}>
-      {!rows.length && <Card><Empty title="Nothing logged yet" hint="Every change made in Emerald is stamped here." /></Card>}
+      {!rows.length && <Card><Empty title="Nothing logged yet" /></Card>}
       <Waterfall min={340} max={3} items={keys.map((k) => {
         const [label, icon, hue] = LOG_GROUP[k] ?? LOG_EXTRA[k];
         const list = rows.filter((l) => groupOfLog(l) === k), shown = more[k] ? list : list.slice(0, 10);
@@ -96,7 +96,7 @@ export function Bin() {
       detail={open && <Inspect title={open.label} row={{ kind: open.kind, deleted: shortDate(open.deletedAt), by: open.by, daysLeft: left(open.deletedAt), ...(open.data && typeof open.data === "object" ? open.data as Record<string, unknown> : {}) }} onClose={() => setOpen(null)}>
       <Actions>{canRestore(open) && <Button onClick={() => restore(open)}>Restore</Button>}<Button variant="ghost" icon="bin" onClick={() => purge(open)}>Delete forever</Button></Actions></Inspect>}>
       {msg && <p role="status" class="rounded-xl px-4 py-2.5 text-[13px] font-semibold" style={{ color: "#6E9C7C", background: "color-mix(in srgb, #6E9C7C 12%, transparent)" }}>{msg}</p>}
-      {!items.length && <Card><Empty title="The Bin is empty" hint="Deleted records stay here for 7 days." /></Card>}
+      {!items.length && <Card><Empty title="The Bin is empty" /></Card>}
       <Waterfall min={320} max={4} items={kinds.map((k) => {
         const list = items.filter((b) => b.kind === k), [icon, hue] = BIN_ICON[k] ?? ["bin", "#8A93A3"];
         return [2 + list.length * 0.8, (
@@ -211,7 +211,7 @@ function BooksModeCard() {
             </button>
           ))}
         </div>
-        <p class="t-meta mt-2">Changes what Emerald shows for every user: orders, quotations, Mauny entries, expenses and bills. Books, GST desk, Tally and the year-end pack always include every record.</p>
+        <Tip>Changes what Emerald shows for every user: orders, quotations, Mauny entries, expenses and bills. Books, GST desk, Tally and the year-end pack always include every record.</Tip>
       </Card>
     </Section>
   );
@@ -225,7 +225,7 @@ export function Profile() {
       <BooksModeCard />
       <Section title="Account">
         <Card class="!py-1"><KV label="Name" value={u.name} /><KV label="Email" value={u.email} /><KV label="Access role" value={ROLE_LABEL[u.role]} /></Card>
-        <p class="t-meta px-1">Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</p>
+        <Tip>Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</Tip>
       </Section>
       <Disclosure title="Password & passkey">
         <div class="grid sm:grid-cols-2 gap-3">
@@ -261,7 +261,7 @@ export function Users() {
       </Disclosure>
       {cloudEnabled && owner && <Accounts />}
       <Section title="Team & users" note={`${usersSig.value.filter((u) => u.active).length} active`} action={owner && <Button variant="outline" icon="plus" onClick={() => setEdit({ id: crypto.randomUUID(), name: "", email: "", role: "operator", pass: "", active: true, login: false, job: "" })}>Add person</Button>}>
-        <p class="t-meta px-1">One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</p>
+        <Tip>One list: everyone on the floor fills the “who did this?” pickers. Turn on <b>Login</b> for people who use Emerald themselves. Retire — off every picker, old records keep the name.</Tip>
         {edit && (
           <Card class="grid gap-3 sm:grid-cols-3 xl:grid-cols-6 items-end">
             <Field label="Name"><input class={inputCls} value={edit.name} onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} /></Field>
@@ -298,7 +298,7 @@ export function Business() {
         {f("address", "Address", true)}{f("addressShort", "Short address (footer)")}{f("website", "Website")}
         {f("upi", "UPI ID")}{f("upiNumber", "UPI number")}{f("bankName", "Bank & branch")}{f("accName", "Account name")}{f("accNo", "Account no.")}{f("ifsc", "IFSC")}{f("jurisdiction", "Jurisdiction (terms)")}
         {f("bank", "Bank (one line, if fields above are blank)", true)}{f("series", "Invoice series")}{f("terms", "Terms printed on documents", true)}
-        <p class="sm:col-span-2 t-meta">Saved as you type · printed on every quotation, invoice and credit note.</p>
+        <Tip>Saved as you type · printed on every quotation, invoice and credit note.</Tip>
       </Card>
     </SettingsShell>
   );
@@ -316,7 +316,7 @@ function ImportE1() {
   const go = () => { if (!state.m) return; applyEmerald1(state.m); log("Imported Emerald 1 data", `${state.m.invoices.length} invoices · ${state.m.orders.length} orders`); setState({ done: true }); };
   return (
     <Card class="space-y-3">
-      <div><b>Import from Emerald 1</b><p class="t-meta">Choose the live-data export (.md — the full file, the parts, or both). Replaces sample data on this device; the old database is never contacted.</p></div>
+      <div><b>Import from Emerald 1</b><Tip>Choose the live-data export (.md — the full file, the parts, or both). Replaces sample data on this device; the old database is never contacted.</Tip></div>
       <input type="file" multiple accept=".md,text/markdown,text/plain" onChange={pick} />
       {state.busy && <p class="t-meta">Reading…</p>}
       {state.err && <p class="text-[var(--danger,red)]">{state.err}</p>}
@@ -374,7 +374,7 @@ export function Search() {
   const any = groups.some(([, l]) => l.length);
   return (
     <Page title="Search" sub="Orders, customers, invoice and quote numbers, bills, every page">
-      {!q ? <Empty title="Type in the search bar" hint="Ctrl / ⌘ K focuses it from anywhere." /> : !any ? <Empty title={`Nothing matches “${searchQ.value}”`} /> : (
+      {!q ? <Empty title="Type in the search bar" /> : !any ? <Empty title={`Nothing matches “${searchQ.value}”`} /> : (
         <div class="flex flex-col gap-2">
           {groups.filter(([, l]) => l.length).map(([g, l]) => (
             <Disclosure key={g} open title={g} meta={String(l.length)}>

@@ -5,7 +5,7 @@ import { useEffect, useState } from "preact/hooks";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
-import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
+import { Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table, Tip } from "../ui";
 import { fyWindow, inWin, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate, moduleOf } from "../data";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaFile } from "../ui/media";
@@ -95,7 +95,7 @@ function Ledger({ acc, upto }: { acc: string; upto: string }) {
   let bal = balanceOf(acc, upto);
   const withBal = rows.slice(0, n).map((m) => { const r = { m, bal }; bal -= m.amount; return r; });
   const cols = "grid grid-cols-[minmax(0,1fr)_88px_88px] md:grid-cols-[minmax(0,1fr)_110px_96px_96px] gap-x-3 items-center px-3";
-  if (!rows.length) return <p class="t-meta px-3 py-3">No entries on or before {shortDate(upto)}. Add one above.</p>;
+  if (!rows.length) return <p class="t-meta px-3 py-3">No entries on or before {shortDate(upto)}.</p>;
   let last = "";
   return (
     <div class="text-[13px]">
@@ -260,7 +260,7 @@ export function Goals() {
           <div class="flex flex-col gap-2">
             <Field label="Title"><input class={inputCls} value={edit.title} onInput={(e) => setEdit({ ...edit, title: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Metric"><select class={inputCls} value={edit.metric} onChange={(e) => setEdit({ ...edit, metric: (e.target as HTMLSelectElement).value as GoalMetric })}>{(Object.keys(GOAL_LABEL) as GoalMetric[]).map((m) => <option key={m} value={m}>{GOAL_LABEL[m]}</option>)}</select></Field>
-            <p class="text-xs text-c3">{GOAL_HINT[edit.metric]}</p>
+            <Tip>{GOAL_HINT[edit.metric]}</Tip>
             <Field label="Target"><input class={inputCls} type="number" value={edit.target} onInput={(e) => setEdit({ ...edit, target: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
             <div class="grid grid-cols-2 gap-2"><Field label="From"><input class={inputCls} type="date" value={edit.start} onInput={(e) => setEdit({ ...edit, start: (e.target as HTMLInputElement).value })} /></Field><Field label="To"><input class={inputCls} type="date" value={edit.end} onInput={(e) => setEdit({ ...edit, end: (e.target as HTMLInputElement).value })} /></Field></div>
             <Field label="Period name"><input class={inputCls} value={edit.period} placeholder="Q3 · Oct–Dec" onInput={(e) => setEdit({ ...edit, period: (e.target as HTMLInputElement).value })} /></Field>
@@ -303,21 +303,20 @@ export function Accounts() {
   const onFile = (fl: FileList | null) => { const file = fl?.[0]; if (!file) return; if (!/\.csv$/i.test(file.name)) { setMsg("PDF/XLSX statements (incl. password-protected) are read by the server — upload CSV for now."); return; }
     file.text().then((t) => { const r = parseStatementCsv(t, acc); setMsg(`${r.added} lines imported · ${r.dup} duplicates skipped`); }); };
   return (
-    <Shell title="Accounts & statements" sub="Upload a statement → lines matched → confirm or reject · duplicates never import twice"
+    <Shell title="Mauny settings" sub="CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense."
       actions={<><Button variant="outline" onClick={() => { const name = prompt("Account name"); if (name) accountsSig.value = [...accountsSig.value, { id: uid(), name, opening: Number(prompt("Opening balance ₹") || 0) }]; }}>Add account</Button>
-        <label class="inline-flex items-center justify-center h-9 md:h-10 px-4 rounded-full bg-c4 text-c0 text-sm font-medium cursor-pointer">Upload CSV statement<input type="file" accept=".csv,.pdf,.xlsx" class="sr-only" onChange={(e) => onFile((e.target as HTMLInputElement).files)} /></label></>}
+        <label class="inline-flex items-center justify-center h-9 md:h-10 px-4 rounded-full bg-c4 text-c0 text-sm font-medium cursor-pointer">Upload CSV statement<input id="mauny-statement" type="file" accept=".csv,.pdf,.xlsx" class="sr-only" onChange={(e) => onFile((e.target as HTMLInputElement).files)} /></label></>}
       toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={modeAccounts().map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
         {modeAccounts().map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} lines to review</div></button>)}
       </div>
-      <Disclosure title="CSV format & matching rules"><p class="t-meta">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p></Disclosure>
       <Card class="!py-1">
         {lines.length ? <Table rows={lines} rowKey={(l) => l.id} onRow={peek} cols={[
           { key: "t", label: "Narration", render: (l) => <b>{l.text}</b> }, { key: "d", label: "Date", render: (l) => shortDate(l.date) },
           { key: "a", label: "Amount", align: "right", render: (l) => inr(l.amount) }, { key: "g", label: "Suggested", render: (l) => l.match ?? suggest(l) },
           { key: "s", label: "", render: (l) => (l.state === "review" ? <span class="flex gap-1"><Button variant="outline" onClick={() => confirmLine(l)}>Confirm</Button><Button variant="ghost" onClick={() => rejectLine(l)}>Reject</Button></span> : <Status tone={l.state === "confirmed" ? "done" : "idle"}>{l.state}</Status>) },
-        ]} /> : <Empty title="No lines here" hint="Upload a CSV statement for this account." />}
+        ]} /> : <Empty title="No lines here" />}
       </Card>
     </Shell>
   );
@@ -364,7 +363,7 @@ export function Books() {
         {t === "bs" && <div class="grid gap-x-8 md:grid-cols-2"><div><div class="text-xs font-semibold text-c3 mb-1">Liabilities</div><Row l="Capital (incl. profit)" v={B.bs.capital} /><Row l="Loans" v={B.bs.loansOut} /><Row l="Creditors" v={B.bs.creditorsTot} /><Row l="Suspense" v={B.bs.suspense} /><Row l="Total" v={B.bs.total} b /></div><div><div class="text-xs font-semibold text-c3 mb-1">Assets</div><Row l="Fixed assets (WDV)" v={B.bs.fixed} /><Row l="Closing stock" v={B.bs.stock} /><Row l="Debtors" v={B.bs.debtorsTot} /><Row l="Bank + cash" v={B.bs.cash} /><Row l="Total" v={B.bs.total} b /></div></div>}
         {t === "cf" && <div class="max-w-lg"><Row l="Operating (receipts − expenses)" v={B.cashflow.operating} /><Row l="Investing (assets)" v={B.cashflow.investing} /><Row l="Financing (capital, drawings, loans)" v={B.cashflow.financing} /><Row l="Net change in cash" v={B.cashflow.operating + B.cashflow.investing + B.cashflow.financing} b /><p class="text-xs text-c3 mt-2">Direct method from Mauny entries. Transfers between own accounts cancel out.</p></div>}
         {t === "msme" && <Table rows={B.creditors.filter((c) => c.msme !== "—")} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "p", label: "Supplier", render: (r) => <b>{r.party}</b> }, { key: "c", label: "Class", render: (r) => r.msme }, { key: "d", label: "Bill date", render: (r) => shortDate(r.date) }, { key: "x", label: "S.15 deadline (45 d)", render: (r) => shortDate(r.due) }, { key: "l", label: "Days left", align: "right", render: (r) => r.left }, { key: "a", label: "Owed", align: "right", render: (r) => inr(r.total) }]} />}
-        {t === "parties" && <><p class="text-xs text-c3 mb-2">Built from invoices and expenses — matched by GSTIN first, then a normalised name (“ACME Pvt. Ltd.” = “acme private limited”). Re-runs on every view.</p><Table rows={parties()} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "n", label: "Party", render: (r) => <b>{r.name}</b> }, { key: "t", label: "Type", render: (r) => r.type }, { key: "g", label: "GSTIN", render: (r) => r.gstin || "—" }, { key: "b", label: "Balance", align: "right", render: (r) => inr(r.bal) }]} /></>}
+        {t === "parties" && <><Tip>Built from invoices and expenses — matched by GSTIN first, then a normalised name (“ACME Pvt. Ltd.” = “acme private limited”). Re-runs on every view.</Tip><Table rows={parties()} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "n", label: "Party", render: (r) => <b>{r.name}</b> }, { key: "t", label: "Type", render: (r) => r.type }, { key: "g", label: "GSTIN", render: (r) => r.gstin || "—" }, { key: "b", label: "Balance", align: "right", render: (r) => inr(r.bal) }]} /></>}
         {t === "opening" && <div class="grid gap-3 sm:grid-cols-3">
           {([["capital", "Opening capital"], ["stock", "Opening stock"], ["closingStock", "Closing stock (valued)"]] as const).map(([k, l]) => <Field key={k} label={l}><input class={inputCls} type="number" value={openingSig.value[k]} onInput={(e) => (openingSig.value = { ...openingSig.value, [k]: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>)}
           {accountsSig.value.map((a) => <Field key={a.id} label={`Opening · ${a.name}`}><input class={inputCls} type="number" value={a.opening} onInput={(e) => (accountsSig.value = accountsSig.value.map((x) => (x.id === a.id ? { ...x, opening: Number((e.target as HTMLInputElement).value) || 0 } : x)))} /></Field>)}
@@ -402,7 +401,7 @@ export function Gst() {
             {full && !m.filed.locked && <Button onClick={() => setGst(m.k, { r1: true, r3b: true, locked: true })}>Mark filed & lock</Button>}
             {full && m.filed.locked && !isExternal() && <Button variant="ghost" onClick={() => setGst(m.k, { locked: false })}>Unlock</Button>}
           </div>
-          {m.filed.locked && <p class="text-xs text-c3 mt-2">Locked — invoices in this month can't be edited or cancelled; corrections go through a credit note.</p>}
+          {m.filed.locked && <Tip>Locked — invoices in this month can't be edited or cancelled; corrections go through a credit note.</Tip>}
         </div>
       )}>
       <div class="strip grid grid-cols-3">
@@ -496,7 +495,7 @@ export function Reports() {
       {tab === "channels" && <Card><CardTitle>Channel attribution · sorted by rate, then margin</CardTitle>
         {!channels.length ? <NoData what={`No client orders in ${fyLabel} yet.`} /> :
           <Table rows={channels} rowKey={(x) => x.id} onRow={peek} cols={[{ key: "c", label: "Channel", render: (x) => <b>{x.m}</b> }, { key: "q", label: "Orders", align: "right", render: (x) => x.quotes }, { key: "w", label: "Won", align: "right", render: (x) => x.won }, { key: "r", label: "Rate", align: "right", render: (x) => `${x.rate}%` }, { key: "v", label: "Value won", align: "right", render: (x) => inr(x.value) }, { key: "m", label: "Margin", align: "right", render: (x) => (x.margin == null ? "—" : `${x.margin}%`) }]} />}
-        <p class="t-meta mt-2">Margin uses logged consumption where an order has it, else the line-item cost estimate; “—” means neither was recorded.</p></Card>}
+        <Tip>Margin uses logged consumption where an order has it, else the line-item cost estimate; “—” means neither was recorded.</Tip></Card>}
       {tab === "quality" && <div class="grid gap-2 lg:grid-cols-2">
         <Card><CardTitle>Failure rate by machine · floor {floor}%</CardTitle>{!byMachine.length ? <NoData what="No finished print jobs yet." /> :
           <Table rows={byMachine} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "k", label: "Machine", render: (r) => link("/work/production", <b>{r.k}</b>) }, { key: "j", label: "Jobs", align: "right", render: (r) => r.jobs }, { key: "f", label: "Failed", align: "right", render: (r) => r.failed }, { key: "p", label: "Rate", align: "right", render: (r) => r.pct > Math.max(floor * 1.5, rate("failRate")) ? <Status tone="blocked">{r.pct}%</Status> : `${r.pct}%` }]} />}</Card>

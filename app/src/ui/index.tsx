@@ -120,11 +120,20 @@ export function Progress({ value }: { value: number }) {
   );
 }
 
-export function Empty({ title, hint, action }: { title: string; hint?: string; action?: ComponentChildren }) {
+/** Small (i) next to a title; the explanation shows only on hover / focus. */
+export function Tip({ text, children }: { text?: string; children?: ComponentChildren }) {
+  return (
+    <span class="relative inline-flex group align-middle shrink-0" tabIndex={0} aria-label={text}>
+      <span class="w-4 h-4 grid place-items-center text-c3 hover:text-c4 cursor-help"><Icon name="info" size={14} /></span>
+      <span role="tooltip" class="pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 z-50 w-max max-w-[280px] rounded-lg bg-c4 text-c0 text-[12px] font-medium leading-snug px-2.5 py-1.5 shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus:opacity-100 group-focus:visible transition-opacity whitespace-normal normal-case tracking-normal">{text ?? children}</span>
+    </span>
+  );
+}
+
+export function Empty({ title, action }: { title: string; hint?: string; action?: ComponentChildren }) {
   return (
     <div class="flex flex-col items-center justify-center text-center py-4 gap-1.5">
       <div class="text-[13px] font-semibold">{title}</div>
-      {hint && <div class="t-meta max-w-xs">{hint}</div>}
       {action}
     </div>
   );
@@ -283,9 +292,9 @@ export function Page({ title, sub, actions, tabs, toolbar, strip, detail, childr
     <div class="flex flex-col h-full min-h-0">
       <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 bg-canvas">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
-          <div class="min-w-0 flex-1 flex items-baseline gap-3">
+          <div class="min-w-0 flex-1 flex items-center gap-2">
             <h1 class="t-title whitespace-nowrap shrink-0 flex items-center gap-2.5"><span aria-hidden="true" class="w-1.5 h-6 rounded-full bg-acc shrink-0" />{title}</h1>
-            {sub && <p class="hidden lg:block t-meta truncate">{sub}</p>}
+            {sub && <Tip text={sub} />}
           </div>
           {tabs && <div class="w-[46%] md:w-48 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}

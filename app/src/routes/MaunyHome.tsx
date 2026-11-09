@@ -3,7 +3,9 @@ import { useEffect, useState } from "preact/hooks";
 import { Icon, Page } from "../ui";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
-import { addMoney, can, inr, invoicesSig, invTax, isExternal, log, moduleOf, orderTotal, ordersSig, parseStatementCsv, statementSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
+import { shrinkImage, storeMedia } from "../data";
+import { MediaImg } from "../ui/media";
+import { addMoney, can, inr, invoicesSig, invTax, isExternal, log, moduleOf, orderTotal, ordersSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
 import { persisted } from "../data/store";
 import { booksModeSig, canSwitchMode, MODE_LABEL, modeAccounts } from "../data/mode";
 
@@ -73,6 +75,15 @@ export function MaunyHome() {
   const [editCats, setEditCats] = useState(false);
   const [editing, setEditing] = useState<Cat | null>(null);
   const [against, setAgainst] = useState("");
+  const [forWhat, setFor] = useState("");
+  const [photo, setPhoto] = useState<{ data: string; name: string } | null>(null);
+  const [drag, setDrag] = useState(false);
+  const takeFile = (f?: File | null) => { if (!f || !f.type.startsWith("image/")) return; shrinkImage(f).then((data) => setPhoto({ data, name: f.name || "photo.jpg" })); };
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => { const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith("image/")); if (f) { e.preventDefault(); takeFile(f); } };
+    addEventListener("paste", onPaste); return () => removeEventListener("paste", onPaste);
+  }, []);
+  const liveOrders = vOrders().filter((o) => o.stage !== "archived");
   const cats = catsSig.value.filter((c) => c.dir === (type === "in" ? "in" : "out"));
   const curCat = cats.find((x) => x.k === cat) ?? cats[0];
   const linkable = type === "in" && !!curCat && (curCat.kind === "receipt" || curCat.kind === "advance");
@@ -85,22 +96,21 @@ export function MaunyHome() {
   const save = () => {
     const a = Number(amt); if (!a || !acc) { setMsg("Enter an amount"); return; }
     if (type === "transfer") { if (!to || to === acc) { setMsg("Pick two different wallets"); return; } transfer(acc, to, a, date); }
+    else if (type === "out" && !forWhat) { setMsg("Pick what it's for"); return; }
     else {
       const c = curCat; const d = linkable ? dues.find((x) => x.ref === against) : undefined;
-      addMoney({ date, account: acc, kind: c.kind, amount: type === "in" ? a : -a, note: note || d?.who || c.label, cat: c.k, ref: d?.ref, source: "mauny_entry" });
+      const fo = type === "out" && forWhat && forWhat !== "inhouse" && forWhat !== "other" ? forWhat : undefined;
+      addMoney({ date, account: acc, kind: c.kind, amount: type === "in" ? a : -a, note: note || d?.who || c.label, cat: c.k, ref: d?.ref ?? fo, source: "mauny_entry",
+        ...(type === "out" && (forWhat === "inhouse" || forWhat === "other") ? { tag: forWhat } : {}), ...(photo ? { photo: storeMedia(photo.data, photo.name) } : {}) });
       if (d && a >= d.due - 1) {
         if (d.kind === "Invoice") { const inv = invoicesSig.value.find((i) => i.no === d.ref); if (inv) updateInvoice(inv, { paidOn: date, paidAccount: acc }, "Marked invoice paid"); }
         else { ordersSig.value = ordersSig.value.map((o) => (o.no === d.ref ? { ...o, paid: true } : o)); log("Marked order paid", d.ref); }
       }
-      setAgainst("");
+      setAgainst(""); setFor("");
     }
-    setMsg(`Saved ${inr(a)} · ${type === "transfer" ? "transfer" : curCat?.label}${against ? ` · against ${against}` : ""}`); setAmt(""); setNote(""); setMonth(ym(date));
+    setPhoto(null);
+    setMsg(`Saved ${inr(a)} · ${type === "transfer" ? "transfer" : curCat?.label}${against ? ` · against ${against}` : ""}${type === "out" && forWhat ? ` · ${forWhat === "inhouse" ? "In-house" : forWhat === "other" ? "Other" : forWhat}` : ""}`); setAmt(""); setNote(""); setMonth(ym(date));
     setTimeout(() => setMsg(""), 2500);
-  };
-  const onStatement = (fl: FileList | null) => {
-    const f = fl?.[0]; if (!f) return;
-    if (!/\.csv$/i.test(f.name)) { setMsg("Upload the statement as CSV (PDF/XLSX are read by the server)."); return; }
-    f.text().then((t) => { const r = parseStatementCsv(t, acc); setMsg(`${r.added} lines imported to ${accs.find((x) => x.id === acc)?.name} · ${r.dup} duplicates skipped — review in Accounts`); });
   };
   const shift = (n: number) => { const d = new Date(month + "-01T00:00:00"); d.setMonth(d.getMonth() + n); setMonth(d.toISOString().slice(0, 7)); };
   const rows = vMoney().filter((m) => ym(m.date) === month && (wallet === "all" || m.account === wallet));
@@ -108,12 +118,11 @@ export function MaunyHome() {
   const inflow = real.filter((m) => m.amount > 0).reduce((s, m) => s + m.amount, 0), outflow = -real.filter((m) => m.amount < 0).reduce((s, m) => s + m.amount, 0);
   const byCat = Object.entries(real.filter((m) => m.amount < 0).reduce<Record<string, number>>((o, m) => { const c = catOf(m).k; o[c] = (o[c] ?? 0) - m.amount; return o; }, {})).sort((a, b) => b[1] - a[1]);
   const days = [...new Set(rows.map((m) => m.date))].sort().reverse();
-  const review = statementSig.value.filter((l) => l.state === "review").length;
   const seg = (k: typeof type, l: string, hue: string) => <button key={k} onClick={() => { setType(k); setCat(catsSig.value.find((c) => c.dir === (k === "in" ? "in" : "out"))?.k ?? ""); setEditCats(false); setEditing(null); }} aria-pressed={type === k} class={`flex-1 h-9 rounded-lg text-[13px] font-bold cursor-pointer !min-h-0 ${type === k ? "bg-c0 shadow-sm" : "text-c3"}`} style={type === k ? { color: hue } : undefined}>{l}</button>;
   const hue = type === "in" ? GREEN : type === "out" ? RED : "#6B8DB5";
   const inp = "h-10 px-3 rounded-lg border border-line bg-c1 text-[14px] w-full min-w-0 outline-none focus:border-c3";
   return (
-    <Page title="Mauny" sub="Log money in and out — everything else lives in the tabs" tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))} detail={inspectSig.value ? <Peeked /> : null}>
+    <Page title="Mauny" tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))} detail={inspectSig.value ? <Peeked /> : null}>
       <div class="grid gap-4 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] items-start">
         {full && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 lg:sticky lg:top-0">
           <div class="text-[15px] font-bold">New entry</div>
@@ -146,7 +155,16 @@ export function MaunyHome() {
                 <option value="">Not linked</option>
                 {dues.map((x) => <option key={x.ref} value={x.ref}>{x.kind} {x.ref} · {x.who} · {inr(x.due)} due</option>)}
               </select>
-              {against && <span class="block mt-1 font-normal">Paying the full due marks it paid; less is recorded as a part payment.</span>}
+            </label>
+          )}
+          {type === "out" && (
+            <label class="text-[12px] font-semibold text-c3">For
+              <select id="mauny-for" class={inp} value={forWhat} onChange={(e) => setFor((e.target as HTMLSelectElement).value)}>
+                <option value="" disabled>Select…</option>
+                <option value="inhouse">In-house</option>
+                <option value="other">Other / general</option>
+                <optgroup label="Against order">{liveOrders.map((o) => <option key={o.no} value={o.no}>{o.no} · {o.customer}</option>)}</optgroup>
+              </select>
             </label>
           )}
           <div class="grid grid-cols-2 gap-2">
@@ -156,17 +174,22 @@ export function MaunyHome() {
               : <label class="text-[12px] font-semibold text-c3">Date<input type="date" class={inp} value={date} onInput={(e) => setDate((e.target as HTMLInputElement).value)} /></label>}
           </div>
           {type === "transfer" && <label class="text-[12px] font-semibold text-c3">Date<input type="date" class={inp} value={date} onInput={(e) => setDate((e.target as HTMLInputElement).value)} /></label>}
-          <input class={inp} placeholder="Note — party, bill no., what for" value={note} onInput={(e) => setNote((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && save()} />
+          <input class={inp} placeholder="Note" value={note} onInput={(e) => setNote((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && save()} />
+          {type !== "transfer" && (photo ? (
+            <div class="flex items-center gap-3 p-2 rounded-xl border border-line bg-c1">
+              <img src={photo.data} alt="Attached photo" class="w-14 h-14 rounded-lg object-cover" />
+              <span class="flex-1 min-w-0 text-[13px] font-semibold truncate">{photo.name}</span>
+              <button aria-label="Remove photo" onClick={() => setPhoto(null)} class="w-8 h-8 !min-h-0 rounded-lg hover:bg-c0 grid place-items-center cursor-pointer"><Icon name="close" size={14} /></button>
+            </div>
+          ) : (
+            <label onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); takeFile(e.dataTransfer?.files?.[0]); }}
+              class={`flex items-center gap-3 h-12 px-3 rounded-xl border-2 border-dashed cursor-pointer text-[13px] font-semibold text-c3 ${drag ? "border-c3 bg-c1" : "border-line hover:bg-c1"}`}>
+              <Icon name="image" size={18} /><span class="flex-1">Attach photo</span>
+              <input id="mauny-photo" type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => takeFile((e.target as HTMLInputElement).files?.[0])} />
+            </label>
+          ))}
           <button onClick={save} class="h-11 rounded-xl text-white text-[14px] font-bold cursor-pointer" style={{ background: hue }}>Save {type === "out" ? "expense" : type === "in" ? "income" : "transfer"}</button>
           {msg && <p role="status" class="text-[13px] font-semibold text-center">{msg}</p>}
-          <div class="border-t border-line pt-3 flex flex-col gap-2">
-            <div class="text-[13px] font-bold flex items-center justify-between">Bank statement sync {review > 0 && <a href="/mauny/accounts" class="text-[12px] font-semibold underline">{review} lines to review →</a>}</div>
-            <label class="flex items-center gap-3 h-12 px-3 rounded-xl border-2 border-dashed border-line hover:bg-c1 cursor-pointer text-[13px]">
-              <Icon name="doc" size={18} /><span class="flex-1"><b>Upload statement</b> <span class="text-c3">· CSV into {accs.find((a) => a.id === acc)?.name ?? "wallet"}</span></span>
-              <input id="mauny-statement" type="file" accept=".csv,.pdf,.xlsx" class="sr-only" onChange={(e) => onStatement((e.target as HTMLInputElement).files)} />
-            </label>
-            <p class="text-[11px] text-c3">Lines are matched to invoices and expenses; duplicates never import twice. Confirm them in Accounts.</p>
-          </div>
         </div>}
 
         <div class="flex flex-col gap-3 min-w-0">
@@ -190,7 +213,7 @@ export function MaunyHome() {
             </div>}
           </div>
 
-          {!days.length && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-8 text-center"><div class="text-[15px] font-semibold">No transactions in {monthName(month)}</div><div class="text-[13px] text-c3 mt-1">Add one with New entry.</div></div>}
+          {!days.length && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-8 text-center"><div class="text-[15px] font-semibold">No transactions in {monthName(month)}</div></div>}
           {days.map((d) => {
             const list = rows.filter((m) => m.date === d), net = list.filter((m) => !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0), dt = new Date(d + "T00:00:00");
             return (
@@ -203,7 +226,8 @@ export function MaunyHome() {
                 {list.map((m) => { const c = catOf(m); return (
                   <button key={m.id} onClick={() => peek(m)} class="w-full text-left flex items-center gap-3 px-4 min-h-[52px] py-2 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0">
                     <span class="w-9 h-9 rounded-full grid place-items-center text-white shrink-0" style={{ background: c.hue }}><Icon name={c.icon} size={16} /></span>
-                    <span class="min-w-0 flex-1"><span class="block text-[14px] font-semibold truncate">{c.label}</span><span class="block text-[12px] text-c3 truncate">{m.note}{m.ref ? ` · ${m.ref}` : ""} · {accs.find((a) => a.id === m.account)?.name}</span></span>
+                    <span class="min-w-0 flex-1"><span class="block text-[14px] font-semibold truncate">{c.label}</span><span class="block text-[12px] text-c3 truncate">{m.note}{m.ref ? ` · ${m.ref}` : ""}{m.tag ? ` · ${m.tag === "inhouse" ? "In-house" : "Other"}` : ""} · {accs.find((a) => a.id === m.account)?.name}</span></span>
+                    {m.photo && <MediaImg v={m.photo} alt="Photo" class="w-9 h-9 rounded-lg object-cover shrink-0" />}
                     <span class="num text-[14px] font-bold" style={{ color: m.kind.startsWith("transfer") ? "var(--c-3)" : m.amount > 0 ? GREEN : RED }}>{m.amount > 0 ? "+" : "−"}{inr(Math.abs(m.amount))}</span>
                   </button>); })}
               </div>

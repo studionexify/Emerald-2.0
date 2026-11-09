@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
 import { navigate } from "../router";
-import { Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
+import { Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col, Tip } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
 import {
@@ -118,7 +118,7 @@ export function Printers() {
           { key: "nz", label: "Nozzle", level: 2, render: (p) => p.nozzle ?? "—" },
         ]} />
       </Card>
-      <p class="text-xs text-c3">Tap a printer for details. Retire takes it off every picker; old jobs keep its name. Delete is only for a row typed by mistake — it goes to the Bin.</p>
+      <Tip>Tap a printer for details. Retire takes it off every picker; old jobs keep its name. Delete is only for a row typed by mistake — it goes to the Bin.</Tip>
     </Shell>
   );
 }
@@ -225,7 +225,7 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
   const tare = s.tare ?? 0, net = Math.max(0, g - tare), diff = net - s.grams;
   return (
     <PaneSection title="Weigh-in">
-      <p class="text-xs text-c3">Finished jobs already deducted their planned grams. Weigh to correct the record: net = gross − tare ({tare} g); the difference is logged as variance.</p>
+      <Tip>Finished jobs already deducted their planned grams. Weigh to correct the record: net = gross − tare ({tare} g); the difference is logged as variance.</Tip>
       <div class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
         <Field label="Gross on scale (g)"><input class={inputCls} type="number" value={g || ""} onInput={(e) => setG(num(e))} /></Field>
         <Button icon="scale" class="!h-10 md:!h-11" disabled={!g} onClick={() => {
@@ -457,7 +457,7 @@ export function Movements() {
         <div class="sm:col-span-2"><Field label="Notes"><input class={inputCls} value={d.notes} onInput={(e) => set({ notes: val(e) })} /></Field></div>
       </div>
       <div class="mt-4"><Actions><Button icon="check" disabled={!d.qty || !d.item} onClick={() => { applyMove(d); log(`Stock ${d.dir} ${d.qty} ${d.unit}`, d.item, "stock"); setOpen(d); setForm(false); setD(blank()); }}>Save movement</Button><Button variant="outline" onClick={() => setForm(false)}>Cancel</Button></Actions></div>
-      <p class="text-xs text-c3 mt-3">Prints and packing draw stock automatically — log here only purchases and manual adjustments.</p>
+      <Tip>Prints and packing draw stock automatically — log here only purchases and manual adjustments.</Tip>
     </div>
   ) : open && <Inspect title={`${open.dir === "in" ? "In" : "Out"} · ${open.item}`} row={{ date: open.date, category: open.cat, direction: open.dir, quantity: `${open.qty} ${open.unit}`, unitCost: `₹${open.unitCost}`, value: inr(open.qty * open.unitCost), vendor: open.vendor, colour: open.colour ?? "", brand: open.brand ?? "", notes: open.notes, loggedBy: open.by }} onClose={() => setOpen(null)} />;
   return (

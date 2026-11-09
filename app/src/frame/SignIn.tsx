@@ -19,7 +19,6 @@ export function SignIn() {
         <label class="grid gap-1"><span class="t-meta">Password</span><input class={input} type="password" autocomplete="current-password" value={p} onInput={(e) => setP((e.target as HTMLInputElement).value)} required /></label>
         <button class="h-11 rounded-2xl bg-c4 text-c0 font-semibold text-[15px] disabled:opacity-50 mt-1" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
         <p class="t-meta text-center min-h-4" role="status">{msg}</p>
-        <p class="t-meta text-center">Accounts are created by the owner.</p>
       </form>
     </main>
   );

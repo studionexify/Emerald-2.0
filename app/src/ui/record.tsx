@@ -4,6 +4,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { ask, Button, DetailHead, Field, inputCls } from "./index";
 import { Menu, Reveal } from "./disclose";
+import { MediaImg } from "./media";
 import { log, me, toBin, uid, type LogKind } from "../data";
 
 export type FType = "text" | "number" | "date" | "select" | "textarea" | "color";
@@ -158,8 +159,8 @@ const fmt = (v: unknown, suffix?: string): ComponentChildren => (v === undefined
 
 /** Read-only inspector for any row (ledgers, logs). */
 export function Inspect({ title, row, onClose, children }: { title: string; row: Record<string, unknown>; onClose: () => void; children?: ComponentChildren }) {
-  const items = Object.entries(row).filter(([k, v]) => k !== "id" && (typeof v !== "object" || v === null)).map(([k, v]) => [k.replace(/([A-Z])/g, " $1").replace(/^./, (x) => x.toUpperCase()), fmt(v)] as [string, ComponentChildren]);
-  return <div><DetailHead title={title} onClose={onClose} />{children && <div class="mb-4">{children}</div>}<Facts items={items} /></div>;
+  const items = Object.entries(row).filter(([k, v]) => k !== "id" && k !== "photo" && (typeof v !== "object" || v === null)).map(([k, v]) => [k.replace(/([A-Z])/g, " $1").replace(/^./, (x) => x.toUpperCase()), fmt(v)] as [string, ComponentChildren]);
+  return <div><DetailHead title={title} onClose={onClose} />{typeof row.photo === "string" && <a href="#" onClick={(e) => { e.preventDefault(); const i = (e.currentTarget as HTMLElement).querySelector("img"); if (i) window.open(i.src, "_blank"); }}><MediaImg v={row.photo} alt="Attached photo" class="w-full max-h-72 object-contain rounded-xl bg-c1 mb-4" /></a>}{children && <div class="mb-4">{children}</div>}<Facts items={items} /></div>;
 }
 
 /** Page-wide quick inspector: any table row can `peek` itself into the page's detail column. */

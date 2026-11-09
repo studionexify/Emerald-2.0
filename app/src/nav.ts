@@ -56,10 +56,10 @@ export const MAUNY_TABS = [
   { href: "/mauny/purchases", label: "Purchases" },
   { href: "/mauny/finance", label: "Finance" },
   { href: "/mauny/goals", label: "Goals" },
-  { href: "/mauny/accounts", label: "Accounts" },
   { href: "/mauny/books", label: "Books" },
   { href: "/mauny/gst", label: "GST desk" },
   { href: "/mauny/reports", label: "Reports" },
+  { href: "/mauny/accounts", label: "Settings" },
 ];
 
 export const WORKSHOP_TABS = [

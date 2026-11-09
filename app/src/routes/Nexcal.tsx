@@ -1,7 +1,7 @@
 /** Nexcal · FDM — the studio's pricing calculator, ported from Emerald 1 (same engine, same numbers). */
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Field, Icon, inputCls, Page, Sheet, SubTabs, Waterfall } from "../ui";
+import { Button, Card, CardTitle, Field, Icon, inputCls, Page, Sheet, SubTabs, Waterfall, Tip } from "../ui";
 import { navigate } from "../router";
 import { createOrder, inr } from "../data";
 import { nexcalSig, NEXCAL_DEFAULTS, type NexcalSettings } from "../data/pricing";
@@ -45,7 +45,7 @@ function UploadCard({ parts, onFiles, onPart, onUnit, onAxis, onSize, onReset, o
   return (
     <div class="flex flex-col h-full">
       <CardTitle>3D model</CardTitle>
-      <p class="t-meta -mt-1 mb-3">Upload a model to estimate its weight and print time automatically.</p>
+      <Tip>Upload a model to estimate its weight and print time automatically.</Tip>
       <label tabIndex={0} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         onDragEnter={(e) => { e.preventDefault(); setOver(true); }} onDragOver={(e) => e.preventDefault()} onDragLeave={(e) => { e.preventDefault(); setOver(false); }}
         onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer?.files ?? null); }}
@@ -108,7 +108,7 @@ function UploadCard({ parts, onFiles, onPart, onUnit, onAxis, onSize, onReset, o
           <Row strong label="Estimated filament" value={`${agg.totalWeightGrams.toFixed(2)} g`} />
           <Row strong label="Estimated print time" value={`${agg.totalTimeHours.toFixed(2)} hr`} />
         </div>
-        <div class="mt-2 flex items-center justify-between gap-2"><p class="t-meta">Auto-filled into Print parameters below — adjust by hand if needed.</p><Button variant="outline" onClick={onClear}>Clear all</Button></div>
+        <div class="mt-2 flex items-center justify-between gap-2"><Tip>Auto-filled into Print parameters below — adjust by hand if needed.</Tip><Button variant="outline" onClick={onClear}>Clear all</Button></div>
       </>}
     </div>
   );
@@ -150,7 +150,7 @@ function Advanced() {
           <SetNum label="Material efficiency factor" k="materialEfficiencyFactor" /><SetNum label="Labour rate (₹/hr)" k="labourHourlyRate" />
           <SetNum label="GST (%)" k="gstPercent" /><SetNum label="Default margin (%)" k="defaultMarginPercent" /><SetNum label="Margin floor (%)" k="marginFloorPct" />
         </div></div>
-        <div><div class="t-section mb-1">Model estimation</div><p class="t-meta mb-2">Slicer-like parameters for uploads. Unit, up-axis, walls, infill, support and size are set per part.</p><div class="grid grid-cols-2 gap-3">
+        <div><div class="t-section mb-1">Model estimation</div><Tip>Slicer-like parameters for uploads. Unit, up-axis, walls, infill, support and size are set per part.</Tip><div class="grid grid-cols-2 gap-3">
           <SetNum label="Nozzle diameter (mm)" k="nozzleDiameter" /><SetNum label="Layer height (mm)" k="layerHeight" />
           <SetNum label="Default wall loops" k="wallLoops" /><SetNum label="Default infill (%)" k="infillPercent" />
           <SetNum label="Outer wall speed (mm/s)" k="outerWallSpeed" /><SetNum label="Inner wall speed (mm/s)" k="innerWallSpeed" />
@@ -317,7 +317,7 @@ export function Nexcal() {
         </Card>],
         [7, <Card key="bulk">
           <CardTitle>Bulk pricing</CardTitle>
-          <p class="t-meta -mt-1 mb-3">Spool-count tiers, mapped automatically to a part-quantity range.</p>
+          <Tip>Spool-count tiers, mapped automatically to a part-quantity range.</Tip>
                         <div class="grid grid-cols-2 gap-3">
               <Field label="Order quantity"><input class={`${inputCls} num`} type="number" min={1} value={inputs.orderQty} onInput={(e) => patch({ orderQty: num(e) || 1 })} /></Field>
               <Field label="Spool weight (g)"><input class={`${inputCls} num`} type="number" value={settings.spoolWeightGrams} onInput={(e) => (nexcalSig.value = { ...settings, spoolWeightGrams: num(e) || 1 })} /></Field>

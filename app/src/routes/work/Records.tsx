@@ -2,7 +2,7 @@ import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { ordersSig } from "../../data";
 import { vOrders, vQuotes } from "../../data";
 import { useState } from "preact/hooks";
-import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
+import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table, Tip } from "../../ui";
 import {
   accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, photosSig, quotesSig, raiseInvoice,
   rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, log, patchOrder, nowS, consume,
@@ -165,7 +165,7 @@ export function Quotes() {
               <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
               {canSwitchMode() && <div class="flex flex-wrap items-center gap-2 mb-2"><span class="text-[12px] text-c3">Client will pay</span>{(["alpha", "beta"] as const).map((m) => <Chip key={m} active={(cur.pay ?? "alpha") === m} onClick={() => { upd(cur, { pay: m }); if (cur.orderNo) ordersSig.value = ordersSig.value.map((x) => (x.no === cur.orderNo ? { ...x, pay: m } : x)); }}>{PAY_LABEL[m]}</Chip>)}</div>}
               <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => { upd(cur, { outcome: o }); const ord = vOrders().find((x) => x.no === cur.orderNo); if (ord && o === "approved" && !ord.approved) patchOrder(ord, { approved: true }); }}>{o}</Chip>)}</div>
-              {cur.orderNo && <p class="text-xs text-c3">Linked to {cur.orderNo}. Approving here records the order's approval (its quotation gate); it doesn't move the stage.</p>}
+              {cur.orderNo && <Tip>Linked to {cur.orderNo}. Approving here records the order's approval (its quotation gate); it doesn't move the stage.</Tip>}
             </div>
           )}
         </div>
