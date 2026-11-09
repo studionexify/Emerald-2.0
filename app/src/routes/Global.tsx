@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import { clientsSig } from "../data/inventory";
 import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
-import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table , Disclosure } from "../ui";
+import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
 
@@ -109,10 +109,10 @@ export function Alerts() {
   );
 }
 
-function SettingsShell({ children }: { children: preact.ComponentChildren }) {
+function SettingsShell({ children, flow }: { children: preact.ComponentChildren; flow?: number }) {
   return (
     <Page title="Settings"  tabs={SETTINGS_TABS}>
-      <div class="max-w-5xl flex flex-col gap-4">{children}</div>
+      {flow ? <Flow w={flow}>{children}</Flow> : <div class="flex flex-col gap-4">{children}</div>}
     </Page>
   );
 }
@@ -165,7 +165,7 @@ export function Profile() {
   const [cur, setCur] = useState(""), [nx, setNx] = useState(""), [msg, setMsg] = useState("");
   const u = me.value!;
   return (
-    <SettingsShell>
+    <SettingsShell flow={420}>
       <Section title="Account">
         <Card class="!py-1"><KV label="Name" value={u.name} /><KV label="Email" value={u.email} /><KV label="Access role" value={ROLE_LABEL[u.role]} /></Card>
         <p class="t-meta px-1">Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</p>
@@ -280,7 +280,7 @@ export function Integrations() {
     { id: "4", n: "Email (password reset)", d: "Reset links go to the studio mailbox only", s: false, a: "Set up" },
   ];
   return (
-    <SettingsShell>
+    <SettingsShell flow={600}>
       <ImportE1 />
       <Card class="!py-1">
         <Table rows={rows} rowKey={(r) => r.id} cols={[

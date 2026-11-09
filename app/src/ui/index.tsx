@@ -401,3 +401,8 @@ export function Waterfall({ items, min = 340, max = 4, gap = "gap-4" }: { items:
   items.forEach(([w, node]) => { const i = h.indexOf(Math.min(...h)); cols[i].push(node); h[i] += w; });
   return <div ref={ref} class={`flex items-start ${gap}`}>{cols.map((c, i) => <div key={i} class={`flex-1 min-w-0 flex flex-col ${gap}`}>{c}</div>)}</div>;
 }
+
+/** Waterfall for cards of unknown height: CSS columns, each card kept whole. */
+export function Flow({ children, w = 380 }: { children: ComponentChildren; w?: number }) {
+  return <div style={{ columnWidth: `${w}px`, columnGap: "1rem" }} class="[&>*]:break-inside-avoid [&>*]:mb-4 [&>*]:block -mb-4">{children}</div>;
+}

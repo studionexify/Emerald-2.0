@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Field, Icon, inputCls, isPhone, KV, Page, Sheet } from "../ui";
+import { Button, Card, CardTitle, Field, Flow, Icon, inputCls, isPhone, KV, Page, Sheet } from "../ui";
 import { navigate } from "../router";
 import { Reveal } from "../ui/disclose";
 import { createOrder, type Delivery, inr, spoolsSig, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
@@ -197,15 +197,13 @@ export function NexRes() {
   );
 }
 
-export function RatesEditor() {
+export function RatesEditor({ bare }: { bare?: boolean }) {
   const groups = [...new Set(RATE_DEFS.map((r) => r.group))];
-  return (
-    <>
-      <p class="text-xs text-c3">Every price and rate used by the calculators, consumption costs, quotes and alerts. Changes apply immediately and are remembered on this device.</p>
+  const cards = <>
       {groups.map((g) => (
         <Card key={g}>
           <CardTitle>{g}</CardTitle>
-          <div class="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+          <div class="grid gap-3 grid-cols-2">
             {RATE_DEFS.filter((r) => r.group === g).map((r) => (
               <Field key={r.key} label={`${r.label} (${r.unit})`}>
                 <input class={inputCls} type="number" inputMode="decimal" value={ratesSig.value[r.key]} onInput={(e) => setRate(r.key, Number((e.target as HTMLInputElement).value) || 0)} />
@@ -214,6 +212,12 @@ export function RatesEditor() {
           </div>
         </Card>
       ))}
+    </>;
+  if (bare) return cards;
+  return (
+    <>
+      <p class="text-xs text-c3">Every price and rate used by the calculators, consumption costs, quotes and alerts. Changes apply immediately and are remembered on this device.</p>
+      <Flow w={420}>{cards}</Flow>
       <div><Button variant="outline" onClick={resetRates}>Reset to defaults</Button></div>
     </>
   );
@@ -224,7 +228,7 @@ function NumGrid<T extends Record<string, any>>({ sig, defaults, title }: { sig:
   return (
     <Card>
       <CardTitle>{title}</CardTitle>
-      <div class="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+      <div class="grid gap-3 grid-cols-2">
         {keys.map((k) => <Field key={k} label={k.replace(/([A-Z])/g, " $1").toLowerCase()}><input class={inputCls} type="number" inputMode="decimal" value={sig.value[k] ?? defaults[k]} onInput={(e) => (sig.value = { ...sig.value, [k]: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>)}
       </div>
       <Button class="mt-3" variant="outline" onClick={() => (sig.value = defaults)}>Reset {title}</Button>
@@ -236,9 +240,12 @@ export function PricingSettings() {
   return (
     <Page title="Nexcal" sub="Engine settings, then the rates every quote and consumption cost uses" tabs={CALC_TABS}>
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" checked={ns.printTimeRateMode === "manual"} onChange={() => (nexcalSig.value = { ...ns, printTimeRateMode: ns.printTimeRateMode === "manual" ? "auto" : "manual" })} /> Type the FDM machine rate by hand (otherwise derived: ₹{machineRate(ns)}/h)</label>
-      <NumGrid<NexcalSettings> sig={nexcalSig} defaults={NEXCAL_DEFAULTS} title="Nexcal · FDM" />
-      <NumGrid<NexResSettings> sig={nexresSig} defaults={NEXRES_DEFAULTS} title="NexRes · Resin" />
-      <RatesEditor />
+      <Flow w={420}>
+        <NumGrid<NexcalSettings> sig={nexcalSig} defaults={NEXCAL_DEFAULTS} title="Nexcal · FDM" />
+        <NumGrid<NexResSettings> sig={nexresSig} defaults={NEXRES_DEFAULTS} title="NexRes · Resin" />
+        <RatesEditor bare />
+      </Flow>
+      <div><Button variant="outline" onClick={resetRates}>Reset rates to defaults</Button></div>
     </Page>
   );
 }
