@@ -3,7 +3,7 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, type OrderSize, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
@@ -13,15 +13,15 @@ const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "acti
 const PAGE = 25;
 
 /** Pipeline tracker: one segmented strip, each stage a count + share bar. */
-function StageStrip({ list, active, onPick }: { list: Order[]; active: string; onPick: (k: string) => void }) {
+function StageStrip({ list, active, onPick, stages }: { list: Order[]; active: string; onPick: (k: string) => void; stages: typeof STAGES }) {
   const live = list.filter((o) => o.stage !== "archived");
-  const max = Math.max(1, ...STAGES.map((s) => list.filter((o) => o.stage === s.key).length));
+  const max = Math.max(1, ...stages.map((s) => list.filter((o) => o.stage === s.key).length));
   return (
-    <div class="grid grid-cols-4 md:grid-cols-8 rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden divide-x divide-line">
-      {STAGES.map((s) => {
+    <div class="grid rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden divide-x divide-line" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
+      {stages.map((s) => {
         const n = list.filter((o) => o.stage === s.key).length;
         return (
-          <button key={s.key} type="button" onClick={() => onPick(active === s.key ? "" : s.key)} aria-pressed={active === s.key} class={`px-3 py-2 min-w-0 text-left cursor-pointer !min-h-0 border-line max-md:[&:nth-child(n+5)]:border-t ${active === s.key ? "bg-c1" : "hover:bg-c1/60"}`}>
+          <button key={s.key} type="button" onClick={() => onPick(active === s.key ? "" : s.key)} aria-pressed={active === s.key} class={`px-3 py-2 min-w-0 text-left cursor-pointer !min-h-0 border-line ${active === s.key ? "bg-c1" : "hover:bg-c1/60"}`}>
             <div class="t-meta truncate">{s.label}</div>
             <div class="num text-[17px] font-semibold leading-tight">{n}</div>
             <div class="mt-1.5 h-1 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-c4 rounded-full" style={{ width: `${(n / max) * 100}%` }} /></div>
@@ -75,53 +75,62 @@ function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: O
 
 /** Live order row: client · type | items | stage | city | deadline | ⋯ */
 /* Live-orders table: fixed columns stay tight, flexible ones (client, items, city) share the extra width. */
-const COLS = "@lg:grid-cols-[minmax(130px,1.3fr)_minmax(104px,0.7fr)_minmax(150px,1.6fr)_minmax(100px,0.6fr)_minmax(70px,0.7fr)_80px_28px] @4xl:grid-cols-[minmax(140px,1.3fr)_minmax(110px,0.7fr)_minmax(160px,1.6fr)_minmax(150px,1fr)_minmax(104px,0.6fr)_minmax(80px,0.7fr)_84px_28px]";
-const TRACK: [Order["stage"], string][] = [["quotation", "doc"], ["production", "printer"], ["qc", "shield"], ["packing", "box"], ["invoice", "receipt"], ["shipping", "truck"]];
 const STAGE_HUE: Record<string, string> = { quotation: "#8A93A3", po: "#8C8FC4", production: "#6B8DB5", qc: "#C49A5A", packing: "#9A86B8", invoice: "#6FA39C", shipping: "#6E9C7C", archived: "#8A93A3", blocked: "#B97468" };
 const KIND_HUE = (k: string) => (k.startsWith("B2B") ? "#6B8DB5" : k === "Bulk" ? "#9A86B8" : k === "In-house" ? "#8A93A3" : "#6FA39C");
 const tint = (h: string) => ({ color: h, background: `color-mix(in srgb, ${h} 13%, transparent)` });
 
-function Track({ o }: { o: Order }) {
-  const at = TRACK.findIndex(([k]) => k === o.stage);
-  const hue = o.blocked ? STAGE_HUE.blocked : STAGE_HUE[o.stage];
-  return (
-    <div class="flex items-center" aria-label={`Stage ${at + 1} of ${TRACK.length}`}>
-      {TRACK.map(([k, ic], i) => (
-        <span key={k} class="contents">
-          {i > 0 && <span class="h-[2px] flex-1 min-w-1.5" style={{ background: i <= at ? hue : "color-mix(in srgb, var(--c-2) 30%, transparent)" }} />}
-          <span title={STAGE_LABEL[k]} class="w-[18px] h-[18px] shrink-0 rounded-full grid place-items-center"
-            style={i <= at ? { background: hue, color: "#fff" } : { background: "transparent", color: "color-mix(in srgb, var(--c-2) 70%, transparent)", boxShadow: "inset 0 0 0 1.5px color-mix(in srgb, var(--c-2) 45%, transparent)" }}>
-            <Icon name={ic} size={10} />
-          </span>
-        </span>
-      ))}
-    </div>
-  );
+/* ——— Per-tab layouts. Each production tab shows the columns that matter to it. ——— */
+const HEAD = "hidden @lg:grid gap-x-4 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3";
+const ROW = "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0";
+const SEG_COLS: Record<Segment, { cols: string; head: string[] }> = {
+  client: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(170px,1.6fr)_96px_110px_120px_84px_28px]", head: ["Client", "Items", "Amount", "Payment", "Stage", "Deadline", ""] },
+  bulk: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(104px,0.6fr)_minmax(160px,1.4fr)_minmax(180px,1.3fr)_120px_84px_28px]", head: ["Client", "Type", "Items", "Print progress", "Stage", "Deadline", ""] },
+  inhouse: { cols: "@lg:grid-cols-[minmax(150px,1.3fr)_minmax(170px,1.6fr)_minmax(120px,0.9fr)_120px_84px_28px]", head: ["Build", "Items", "Machine", "Stage", "Due", ""] },
+};
+const Items = ({ o }: { o: Order }) => <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
+  {o.items.slice(0, 2).map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
+  {o.items.length > 2 && <li class="pl-[84px] t-meta">+{o.items.length - 2} more</li>}
+</ul>;
+const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : o.stage; return <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>; };
+const Due = ({ o }: { o: Order }) => { const d = left(o.due); return <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
+  <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
+  <div class="text-[11px] whitespace-nowrap font-medium" style={{ color: d < 0 ? STAGE_HUE.blocked : d <= 2 ? STAGE_HUE.qc : "var(--c-3)" }}>{leftLabel(d)}</div></div>; };
+function Progress({ o }: { o: Order }) {
+  const t = orderProgress(o), pct = t.qty ? Math.min(100, (t.printed / t.qty) * 100) : 0, wp = t.qty ? Math.min(100 - pct, (t.failed / t.qty) * 100) : 0;
+  return <div class="@max-lg:col-span-2 min-w-0">
+    <div class="flex h-2 rounded-full bg-c1 overflow-hidden"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></div>
+    <div class="text-[11px] font-medium mt-1 whitespace-nowrap"><span class="text-grn">{t.printed}</span><span class="text-c3">/{t.qty} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></div>
+  </div>;
 }
-
-function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void }) {
+function SegRow({ seg, o, onOpen, onEdit }: { seg: Segment; o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void }) {
   const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
-  const d = left(o.due), kind = kindOf(o, c), st = o.blocked ? "blocked" : o.stage;
-  return (
-    <div role="button" tabIndex={0} onClick={() => onOpen(o)} onKeyDown={(e) => e.key === "Enter" && onOpen(o)}
-      class={`grid grid-cols-[minmax(0,1fr)_auto] ${COLS} items-center gap-x-4 @6xl:gap-x-6 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0`}>
-      <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
-      <div class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
-      <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
-        {o.items.slice(0, 2).map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
-        {o.items.length > 2 && <li class="pl-[84px] t-meta">+{o.items.length - 2} more</li>}
-        {(() => { const t = orderProgress(o); return (t.printed > 0 || t.failed > 0 || o.type === "bulk") && <li class="pl-[84px] text-[11px] font-medium whitespace-nowrap"><span class="text-grn">{t.printed} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></li>; })()}
-      </ul>
-      <div class="@max-4xl:hidden pr-2"><Track o={o} /></div>
-      <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>
-      <span class="@max-lg:hidden text-[13px] text-c3 truncate">{c?.city || "—"}</span>
-      <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
-        <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
-        <div class={`text-[11px] whitespace-nowrap font-medium`} style={{ color: d < 0 ? STAGE_HUE.blocked : d <= 2 ? STAGE_HUE.qc : "var(--c-3)" }}>{leftLabel(d)}</div>
-      </div>
-      <div class="@max-lg:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>
-    </div>
-  );
+  const kind = kindOf(o, c);
+  const open = { role: "button" as const, tabIndex: 0, onClick: () => onOpen(o), onKeyDown: (e: KeyboardEvent) => e.key === "Enter" && onOpen(o), class: `${ROW} ${SEG_COLS[seg].cols}` };
+  const menu = <div class="@max-lg:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>;
+  if (seg === "client") return <div {...open}>
+    <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug truncate">{o.customer}</div><div class="t-meta truncate">{[c?.city, c?.phone || o.medium].filter(Boolean).join(" · ")}</div></div>
+    <Items o={o} />
+    <span class="@max-lg:hidden num text-[13px] font-semibold">{inr(orderTotal(o))}</span>
+    <span class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold" style={tint(o.paid ? STAGE_HUE.shipping : STAGE_HUE.qc)}>{o.paid ? "Paid" : "Unpaid"}</span></span>
+    <StagePill o={o} /><Due o={o} />{menu}
+  </div>;
+  if (seg === "inhouse") { const ms = [...new Set(o.items.flatMap((i) => lineMachines(o, i).map((m) => m.name)))]; return <div {...open}>
+    <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug truncate">{o.customer}</div><div class="t-meta font-mono">{o.no}</div></div>
+    <Items o={o} />
+    <span class="@max-lg:hidden text-[13px] text-c3 truncate">{ms.join(", ") || "—"}</span>
+    <StagePill o={o} /><Due o={o} />{menu}
+  </div>; }
+  return <div {...open}>
+    <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
+    <div class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
+    <Items o={o} /><Progress o={o} />
+    <StagePill o={o} /><Due o={o} />{menu}
+  </div>;
+}
+function Kpis({ items }: { items: [string, string | number, string?][] }) {
+  return <div class="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))` }}>
+    {items.map(([k, v, cl]) => <div key={k} class="rounded-[var(--radius-card)] bg-c0 border border-line px-4 py-3"><div class="t-meta">{k}</div><div class={`num text-[22px] font-semibold leading-tight ${cl ?? ""}`}>{v}</div></div>)}
+  </div>;
 }
 
 /** Quick edit of the order header and line quantities. */
@@ -215,22 +224,32 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const nos = new Set(mine.map((o) => o.no));
   const myJobs = jobsSig.value.filter((j) => nos.has(j.orderNo));
   const busy = fleet.filter((p) => p.status === "printing").length;
+  const flow = SUGGESTED[seg === "client" ? "client" : seg === "inhouse" ? "inhouse" : "bulk"];
+  const stages = STAGES.filter((x) => flow.includes(x.key));
+  const all = mine.filter((o) => o.stage !== "archived");
+  const weekEnd = left(today()) + 7;
+  const kpis: [string, string | number, string?][] = seg === "client"
+    ? [["Live orders", all.length], ["Value in work", inr(all.reduce((t, o) => t + orderTotal(o), 0))], ["Unpaid", all.filter((o) => !o.paid).length, "text-red"], ["Due this week", all.filter((o) => left(o.due) <= weekEnd).length]]
+    : seg === "bulk" ? (() => { const t = all.reduce((a, o) => { const p = orderProgress(o); return { q: a.q + p.qty, p: a.p + p.printed, f: a.f + p.failed, n: a.n + p.pending }; }, { q: 0, p: 0, f: 0, n: 0 });
+        return [["Units ordered", t.q], ["Printed", t.p, "text-grn"], ["Wasted", t.f, "text-red"], ["Pending", t.n], ["Waste rate", t.p + t.f ? `${Math.round((t.f / (t.p + t.f)) * 100)}%` : "—"]] as [string, string | number, string?][]; })()
+    : [["Builds live", all.length], ["Units to print", all.reduce((t, o) => t + orderProgress(o).pending, 0)], ["Printing now", myJobs.filter((j) => j.status === "printing").length], ["Queued jobs", myJobs.filter((j) => j.status === "queued").length]];
   return (
     <>{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
-      <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} active={st} onPick={setSt} /></Section>
+      <Kpis items={kpis} />
+      <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} active={st} onPick={setSt} stages={stages} /></Section>
 
       <Section title={st ? `${STAGES.find((x) => x.key === st)?.label} orders` : "Live orders"} note={String(live.length)} action={st ? <button class="t-meta underline cursor-pointer !min-h-0" onClick={() => setSt("")}>Show all live</button> : undefined}>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
-            <div class={`hidden @lg:grid ${COLS} gap-x-4 @6xl:gap-x-6 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3`}><span>Client</span><span>Type</span><span>Items</span><span class="@max-4xl:hidden">Progress</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
-            {live.slice(0, n).map((o) => <OrderRow key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} />)}
+            <div class={`${HEAD} ${SEG_COLS[seg].cols}`}>{SEG_COLS[seg].head.map((h, i) => <span key={i}>{h}</span>)}</div>
+            {live.slice(0, n).map((o) => <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>
         </Section>
 
-      <Section title="Machine fleet" note={`${busy}/${fleet.length} busy`} action={<a href="/workshop/printers" class="t-meta">All →</a>}>
+      {seg !== "client" && <Section title="Machine fleet" note={`${busy}/${fleet.length} busy`} action={<a href="/workshop/printers" class="t-meta">All →</a>}>
         <Waterfall min={260} max={5} gap="gap-3" items={[
           ...fleet.map((p): [number, preact.ComponentChildren] => {
-            const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing");
+            const j = myJobs.find((x) => x.printer === p.name && x.status === "printing");
             const ord = j && mine.find((o) => o.no === j.orderNo);
             const hot = !!j || p.status === "printing";
             return [j ? 3 : 2,
@@ -248,11 +267,11 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
                     <div class="text-[13px] opacity-80">{j.item}</div>
                     <div class="text-[12px] opacity-70 num mt-1">{j.hours} h · {j.grams} g{j.operator ? ` · ${j.operator}` : ""}</div>
                   </div>
-                ) : <div class="mt-3 text-[13px] text-c3">{p.status === "down" ? "Out of service" : "Free — nothing printing"}</div>}
+                ) : <div class="mt-3 text-[13px] text-c3">{p.status === "down" ? "Out of service" : hot ? "Busy with another tab’s order" : "Free — nothing printing"}</div>}
               </a>];
           }),
         ]} />
-      </Section>
+      </Section>}
 
       <Section title="Queue" note={`${myJobs.filter((j) => j.status === "queued").length} queued`}>
         <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
@@ -262,7 +281,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
               <span class="num t-meta whitespace-nowrap">{j.hours} h · {j.grams} g</span>
               <Status tone={jobTone(j.status)}>{j.status}</Status>
             </button>); })}
-          {!jobsSig.value.some((j) => j.status !== "done") && <p class="t-meta px-4 py-3">Queue is empty.</p>}
+          {!myJobs.some((j) => j.status !== "done") && <p class="t-meta px-4 py-3">Queue is empty.</p>}
         </div>
       </Section>
     </WorkShell></>
