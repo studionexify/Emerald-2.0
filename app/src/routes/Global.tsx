@@ -1,7 +1,9 @@
+import { vOrders } from "../data";
 import { useState } from "preact/hooks";
 import { clientsSig } from "../data/inventory";
 import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
+import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
 import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
@@ -121,7 +123,7 @@ export function Bin() {
 
 export function Alerts() {
   const tone = { danger: "blocked", warn: "waiting", info: "idle" } as const;
-  const groups = Object.entries(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value));
+  const groups = Object.entries(attention(vOrders(), spoolsSig.value, packSig.value, batchesSig.value));
   return (
     <Page title="Attention" sub="What needs action — escalates on age, every row links to its record">
       <div class="flex flex-col gap-2">
@@ -192,11 +194,35 @@ function Accounts() {
   );
 }
 
+/** Alpha / Beta switch — owner and partner only. Decides which orders, quotes, money entries and expenses Emerald shows. */
+function BooksModeCard() {
+  if (!canSwitchMode()) return null;
+  const m = booksModeSig.value;
+  const opts: [BooksMode, string, string][] = [["alpha", "Alpha", "Bank and UPI — everything in the books"], ["beta", "Beta", "Cash transactions"], ["both", "Alpha + Beta", "Everything together"]];
+  return (
+    <Section title="Books view">
+      <Card>
+        <div class="flex flex-col gap-2" role="radiogroup" aria-label="Books view">
+          {opts.map(([k, l, d]) => (
+            <button key={k} role="radio" aria-checked={m === k} onClick={() => { booksModeSig.value = k; log("Switched books view", MODE_LABEL[k]); }}
+              class={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left cursor-pointer border ${m === k ? "border-c4 bg-c1" : "border-line hover:bg-c1/50"}`}>
+              <span class={`w-4 h-4 rounded-full border-2 grid place-items-center ${m === k ? "border-c4" : "border-c2"}`}>{m === k && <span class="w-2 h-2 rounded-full bg-c4" />}</span>
+              <span><span class="block text-[14px] font-bold">{l}</span><span class="block text-[12px] text-c3">{d}</span></span>
+            </button>
+          ))}
+        </div>
+        <p class="t-meta mt-2">Changes what Emerald shows for every user: orders, quotations, Mauny entries, expenses and bills. Books, GST desk, Tally and the year-end pack always include every record.</p>
+      </Card>
+    </Section>
+  );
+}
+
 export function Profile() {
   const [cur, setCur] = useState(""), [nx, setNx] = useState(""), [msg, setMsg] = useState("");
   const u = me.value!;
   return (
     <SettingsShell flow={420}>
+      <BooksModeCard />
       <Section title="Account">
         <Card class="!py-1"><KV label="Name" value={u.name} /><KV label="Email" value={u.email} /><KV label="Access role" value={ROLE_LABEL[u.role]} /></Card>
         <p class="t-meta px-1">Every audit field (approved by, checked by, packed by, logged by) is stamped with this account.</p>
@@ -331,15 +357,15 @@ import { bizSig, type Biz } from "../data/biz";
 export function Rates() { return <SettingsShell><RatesEditor /></SettingsShell>; }
 
 import { searchQ } from "../data/search";
-import { ordersSig, invoicesSig, quotesSig, expensesSig, billsSig } from "../data";
+import { invoicesSig, quotesSig, expensesSig, billsSig } from "../data";
 import { NAV, WORK_TABS, MAUNY_TABS, WORKSHOP_TABS, CALC_TABS } from "../nav";
 export function Search() {
   const q = searchQ.value.trim().toLowerCase();
   const hit = (...xs: (string | undefined)[]) => !!q && xs.some((x) => x?.toLowerCase().includes(q));
   const pages = [...NAV, ...WORK_TABS, ...MAUNY_TABS, ...WORKSHOP_TABS, ...CALC_TABS, ...SETTINGS_TABS].filter((p) => hit(p.label));
   const groups: [string, { k: string; t: string; d: string; href: string }[]][] = [
-    ["Orders", ordersSig.value.filter((o) => hit(o.no, o.customer, ...o.items.map((i) => i.name))).map((o) => ({ k: o.id, t: `${o.no} · ${o.customer}`, d: o.items.map((i) => i.name).join(", "), href: "/work/orders" }))],
-    ["Customers", [...new Set(ordersSig.value.map((o) => o.customer).concat(clientsSig.value.map((c) => c.name)))].filter((c) => hit(c)).map((c) => ({ k: c, t: c, d: "Client", href: "/work/clients" }))],
+    ["Orders", vOrders().filter((o) => hit(o.no, o.customer, ...o.items.map((i) => i.name))).map((o) => ({ k: o.id, t: `${o.no} · ${o.customer}`, d: o.items.map((i) => i.name).join(", "), href: "/work/orders" }))],
+    ["Customers", [...new Set(vOrders().map((o) => o.customer).concat(clientsSig.value.map((c) => c.name)))].filter((c) => hit(c)).map((c) => ({ k: c, t: c, d: "Client", href: "/work/clients" }))],
     ["Invoices", invoicesSig.value.filter((i) => hit(i.no, i.customer, i.orderNo)).map((i) => ({ k: i.id, t: `${i.no} · ${i.customer}`, d: i.kind, href: "/work/invoice" }))],
     ["Quotations", quotesSig.value.filter((x) => hit(x.no, x.customer)).map((x) => ({ k: x.id, t: `${x.no} · ${x.customer}`, d: x.outcome, href: "/work/quotes" }))],
     ["Bills & expenses", [...billsSig.value.filter((b) => hit(b.vendor, b.no)).map((b) => ({ k: b.id, t: `${b.vendor} ${b.no}`, d: "Bill", href: "/mauny/purchases" })), ...expensesSig.value.filter((e) => hit(e.vendor, e.head)).map((e) => ({ k: e.id, t: `${e.vendor} · ${e.head}`, d: "Expense", href: "/mauny/finance" }))]],

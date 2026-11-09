@@ -1,14 +1,17 @@
+import { canSwitchMode, PAY_LABEL } from "../../data/mode";
+import { ordersSig, log } from "../../data";
+import { vOrders } from "../../data";
 import { LinkedTasks } from "../Todo";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fact, Page, Status } from "../../ui";
-import { storeMedia, shrinkImage, can, ordersSig, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, FLOW_NOTE, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { MediaImg } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
 export function WorkShell({ title, sub, actions, toolbar, detail, children, stage }: { stage?: Stage; title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
-  return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={ordersSig.value} showValue={can("mauny")} active={stage} />}{children}</Page>;
+  return <Page title={title} sub={sub} actions={actions} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={vOrders()} showValue={can("mauny")} active={stage} />}{children}</Page>;
 }
 
 export type TypeFilter = "all" | OrderType;
@@ -55,7 +58,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
     const passing = STAGE_ORDER.slice(STAGE_ORDER.indexOf(order.stage), STAGE_ORDER.indexOf(to)).filter((s) => s === order.stage || SUGGESTED[order.type].includes(s));
     const block = back ? null : passing.map((s) => gateReason({ ...order, stage: s }, batchesSig.value)).find(Boolean) ?? null;
     if (block) {
-      if (!can("work") || !["owner", "manager"].includes(me.value?.role ?? "")) { setMsg(block); return; }
+      if (!can("work") || !["owner", "partner", "manager"].includes(me.value?.role ?? "")) { setMsg(block); return; }
       reason = prompt(`${block}\n\nOverride and move anyway? Give a reason:`) ?? ""; if (!reason.trim()) { setMsg(block); return; }
       reason = `override: ${reason}`;
     }
@@ -68,6 +71,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
     <div>
       <DetailHead title={`${order.no} · ${order.customer}`} onClose={() => { setMsg(""); onClose(); }} />
       <div class="text-xs text-c3 mb-2">{TYPE_LABEL[order.type]} · via {order.medium} · {FLOW_NOTE[order.type]}</div>
+      {canSwitchMode() && order.type !== "inhouse" && <div class="flex items-center gap-2 mb-2 text-[12px]"><span class="text-c3">Payment mode</span>{(["alpha", "beta"] as const).map((m) => <button key={m} onClick={() => { ordersSig.value = ordersSig.value.map((x) => (x.id === order.id ? { ...x, pay: m } : x)); log("Payment mode", `${order.no} → ${PAY_LABEL[m]}`); onOpen({ ...order, pay: m }); }} class={`h-7 px-2.5 rounded-full font-semibold cursor-pointer !min-h-0 ${(order.pay ?? "alpha") === m ? "bg-c4 text-c0" : "bg-c1 text-c3"}`}>{PAY_LABEL[m]}</button>)}</div>}
       <div class="text-[11px] text-c3 mb-1">Stage — tap any to move (outlined = usual path)</div>
       <ol class="flex flex-wrap gap-1 mb-2" aria-label="Stages">
         {STAGE_ORDER.map((s) => (

@@ -164,3 +164,21 @@ if (!done4 && ordersSig.value.some((o) => o.id.startsWith("demo-")) && !invoices
   const ym2 = (n: number) => { const x = new Date(); x.setMonth(x.getMonth() + n); return x.toISOString().slice(0, 7); };
   gstSig.value = { [ym2(-2)]: { r1: true, r3b: true, locked: true }, [ym2(-1)]: { r1: true, r3b: false, locked: false } };
 }
+
+/* Fifth pass (v5): Alpha / Beta tags so the books-view filter can be tested. Cash wallet = Beta. */
+import { expensesSig as _ex5, billsSig as _bl5, quotesSig as _qt5 } from "./ledger";
+let done5 = false;
+try { done5 = !!localStorage.getItem("emerald:demo5"); localStorage.setItem("emerald:demo5", "1"); } catch {}
+if (!done5 && ordersSig.value.some((o) => o.id.startsWith("demo-"))) {
+  const beta = new Set(["EM-2102", "EM-2108", "EM-2104"]);
+  ordersSig.value = ordersSig.value.map((o) => (o.id.startsWith("demo-") && o.type !== "inhouse" ? { ...o, pay: beta.has(o.no) ? "beta" : "alpha" } : o));
+  accountsSig.value = accountsSig.value.map((a) => ({ ...a, mode: /cash/i.test(a.name) ? "beta" : "alpha" }));
+  _qt5.value = _qt5.value.map((q) => (q.id.startsWith("demo-") ? { ...q, pay: q.customer === "Ravi Kumar" || q.orderNo === "EM-2104" ? "beta" : "alpha" } : q));
+  _ex5.value = _ex5.value.map((e) => (e.id === "demo-e7" ? { ...e, pay: "beta", account: accountsSig.value.find((a) => /cash/i.test(a.name))?.id } : e));
+  _bl5.value = _bl5.value.map((b) => (b.id === "demo-bl1" ? { ...b, pay: "beta" } : b));
+  const cash = accountsSig.value.find((a) => /cash/i.test(a.name))?.id;
+  if (cash) moneySig.value = [...moneySig.value,
+    { id: "demo-m20", date: d(-1), account: cash, kind: "receipt", amount: 480, cat: "Customer payment", note: "Ananya Rao", ref: "EM-2102", source: "mauny_entry" },
+    { id: "demo-m21", date: d(-3), account: cash, kind: "advance", amount: 5000, cat: "Advance", note: "Rohan Mehta", ref: "EM-2104", source: "mauny_entry" },
+    { id: "demo-m22", date: d(-2), account: cash, kind: "expense", amount: -450, cat: "Food & travel", note: "Team lunch", source: "mauny_entry" }];
+}

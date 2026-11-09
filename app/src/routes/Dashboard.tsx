@@ -1,3 +1,4 @@
+import { vMoney, vOrders } from "../data";
 import { useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { Card, Icon, KV, Page, Section, Status, Waterfall } from "../ui";
@@ -5,16 +6,16 @@ import { Initials, StageStrip } from "../ui/stage-strip";
 import { navigate } from "../router";
 import { openOrderSig, segmentOf, SEGMENT_HREF, SEGMENT_LABEL, type Segment } from "../data/inventory";
 import { STAGES } from "../data";
-import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
+import { financeSummary, windowFor, attention as attn, batchesSig, inr, logsSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
 
 export default function Dashboard() {
-  const open = ordersSig.value.filter((o) => o.stage !== "archived");
+  const open = vOrders().filter((o) => o.stage !== "archived");
   const paid = open.filter((o) => o.type !== "inhouse");
   const pipeline = paid.reduce((s, o) => s + orderTotal(o), 0);
   const margin = Math.round((1 - paid.reduce((s, o) => s + orderCost(o), 0) / pipeline) * 100);
-  const al = attn(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value);
-  const fm = financeSummary(windowFor("mtd", "2026-27"), ordersSig.value);
-  const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: moneySig.value.filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
+  const al = attn(vOrders(), spoolsSig.value, packSig.value, batchesSig.value);
+  const fm = financeSummary(windowFor("mtd", "2026-27"), vOrders());
+  const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: vMoney().filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
   const money = can("mauny");
   const today = new Date().toISOString().slice(0, 10);
   const late = open.filter((o) => o.due && o.due < today);
@@ -42,7 +43,7 @@ export default function Dashboard() {
       </div>
 
       <Section title="Pipeline" action={<a href="/work" class="t-meta">Production →</a>}>
-        <StageStrip orders={ordersSig.value} showValue={can("mauny")} />
+        <StageStrip orders={vOrders()} showValue={can("mauny")} />
       </Section>
 
       <Section title="Production by segment">
@@ -115,7 +116,7 @@ export default function Dashboard() {
 }
 
 /** Open an order on its production page. */
-const goOrder = (no: string) => { const o = ordersSig.value.find((x) => x.no === no); if (!o) return; openOrderSig.value = no; navigate(SEGMENT_HREF[segmentOf(o)]); };
+const goOrder = (no: string) => { const o = vOrders().find((x) => x.no === no); if (!o) return; openOrderSig.value = no; navigate(SEGMENT_HREF[segmentOf(o)]); };
 function Go({ href, onClick, children }: { href?: string; onClick?: () => void; children: ComponentChildren }) {
   return href ? <a href={href} class="block -mx-2 px-2 rounded-lg hover:bg-c1">{children}</a> : <button onClick={onClick} class="block w-[calc(100%+16px)] text-left -mx-2 px-2 rounded-lg hover:bg-c1 cursor-pointer !min-h-0">{children}</button>;
 }

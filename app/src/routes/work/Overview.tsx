@@ -1,9 +1,11 @@
+import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Card, DetailHead, Icon, Section, Status, KV, CardTitle, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell } from "./shared";
 import { Pick } from "../../ui";
+import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { openOrderSig, segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
 
 const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "active" : s === "failed" ? "blocked" : "waiting") as "done";
@@ -103,7 +105,7 @@ function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void;
     <div role="button" tabIndex={0} onClick={() => onOpen(o)} onKeyDown={(e) => e.key === "Enter" && onOpen(o)}
       class={`grid grid-cols-[minmax(0,1fr)_auto] ${COLS} items-center gap-x-4 2xl:gap-x-6 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0`}>
       <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
-      <div class="max-md:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span></div>
+      <div class="max-md:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
       <ul class="min-w-0 max-md:col-span-2 max-md:row-start-2 text-[13px] leading-[1.5]">
         {o.items.map((i, k) => <li key={k} class="flex items-baseline gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><span class="min-w-0 text-c3">{i.name}</span></li>)}
       </ul>
@@ -131,6 +133,7 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
         <label class="col-span-2">Client<input class={f} value={o.customer} onInput={(e) => { const v = (e.target as HTMLInputElement).value; setO({ ...o, customer: v, ...(b2bFor(v) ?? {}) }); }} /></label>
         <label>Type<select class={f} value={o.type} onChange={(e) => setO({ ...o, type: (e.target as HTMLSelectElement).value as Order["type"] })}>{Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label>Order type<select class={f} value={o.size ?? ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value as OrderSize; setO({ ...o, size: v || undefined, b2b: v === "b2b" ? o.b2b ?? B2B_TYPES[0] : undefined }); }}><option value="">—</option>{Object.entries(SIZE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        {canSwitchMode() && <label>Payment mode<select class={f} value={o.pay ?? "alpha"} onChange={(e) => setO({ ...o, pay: (e.target as HTMLSelectElement).value as "alpha" | "beta" })}><option value="alpha">{PAY_LABEL.alpha}</option><option value="beta">{PAY_LABEL.beta}</option></select></label>}
         {o.size === "b2b" && <label>B2B type<select class={f} value={o.b2b} onChange={(e) => setO({ ...o, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>}
         <label>Deadline<input type="date" class={f} value={o.due} onInput={(e) => setO({ ...o, due: (e.target as HTMLInputElement).value })} /></label>
         <label class="col-span-2">Medium<input class={f} value={o.medium} onInput={(e) => setO({ ...o, medium: (e.target as HTMLInputElement).value })} /></label>
@@ -157,17 +160,17 @@ export const InHouse = () => <Overview seg="inhouse" />;
 const SEG_SUB: Record<Segment, string> = { client: "Small orders from individual clients", bulk: "Bulk runs and business clients — stationery, gift shops, corporate", inhouse: "Our own builds, samples and stock prints" };
 export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [f, setF] = useState<string>("all");
-  const [open, setOpen] = useState<Order | null>(() => { const no = openOrderSig.value; openOrderSig.value = null; return no ? ordersSig.value.find((o) => o.no === no) ?? null : null; });
+  const [open, setOpen] = useState<Order | null>(() => { const no = openOrderSig.value; openOrderSig.value = null; return no ? vOrders().find((o) => o.no === no) ?? null : null; });
   const [edit, setEdit] = useState<Order | null>(null);
   const [n, setN] = useState(PAGE);
-  const mine = ordersSig.value.filter((o) => segmentOf(o) === seg);
+  const mine = vOrders().filter((o) => segmentOf(o) === seg);
   const subs = [...new Set(mine.map((o) => kindOf(o)))].sort();
   const list = mine.filter((o) => f === "all" || kindOf(o) === f);
   const live = list.filter((o) => o.stage !== "archived").sort((a, b) => Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const busy = fleet.filter((p) => p.status === "printing").length;
   return (
-    <WorkShell detail={edit ? <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} /> : open && <OrderDetail order={ordersSig.value.find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+    <WorkShell detail={edit ? <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} /> : open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} /></Section>
 
       <Section title="Live orders" note={String(live.length)} action={<a href="/work/orders" class="t-meta whitespace-nowrap">Board →</a>}>
@@ -182,7 +185,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         <Waterfall min={260} max={5} gap="gap-3" items={[
           ...fleet.map((p): [number, preact.ComponentChildren] => {
             const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing");
-            const ord = j && ordersSig.value.find((o) => o.no === j.orderNo);
+            const ord = j && vOrders().find((o) => o.no === j.orderNo);
             const hot = !!j || p.status === "printing";
             return [j ? 3 : 2,
               <a key={p.id} href="/work/production" onClick={(e) => { if (ord) { e.preventDefault(); setOpen(ord); } }}

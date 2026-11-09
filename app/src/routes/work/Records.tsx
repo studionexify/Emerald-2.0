@@ -1,7 +1,10 @@
+import { canSwitchMode, PAY_LABEL } from "../../data/mode";
+import { ordersSig } from "../../data";
+import { vOrders, vQuotes } from "../../data";
 import { useState } from "preact/hooks";
 import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
 import {
-  accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, ordersSig, photosSig, quotesSig, raiseInvoice,
+  accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, photosSig, quotesSig, raiseInvoice,
   rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, log, patchOrder, nowS, consume,
   type InvLine, type Invoice, type Order, type Quote, type Shipment,
 } from "../../data";
@@ -40,7 +43,7 @@ export function Invoice() {
   const [view, setView] = useState<"edit" | "doc">("edit");
   const [cn, setCn] = useState(0);
   const cur = open && (invoicesSig.value.find((i) => i.id === open.id) ?? open);
-  const waiting = ordersSig.value.filter((o) => o.stage === "invoice" && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && !i.batch));
+  const waiting = vOrders().filter((o) => o.stage === "invoice" && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && !i.batch));
   const bw = batchesSig.value.filter((b) => b.stage === "invoice" && !b.invoiceNo);
   const reg = [...invoicesSig.value].filter((i) => f === "all" || (f === "paid" ? !!i.paidOn : f === "credit" ? i.kind === "credit" : f === "cancelled" ? i.status === "cancelled" : !i.paidOn && i.kind === "invoice" && i.status === "issued")).sort((a, b) => b.no.localeCompare(a.no));
   const locked = !!cur && (monthLocked(cur.date) || cur.status === "cancelled");
@@ -103,7 +106,7 @@ export function Invoice() {
                 <Button variant="outline" class="!h-7" onClick={() => raise(o)}>Raise invoice</Button>
               </div>
             ))}
-            {bw.map((b) => { const o = ordersSig.value.find((x) => x.no === b.orderNo); return o && (
+            {bw.map((b) => { const o = vOrders().find((x) => x.no === b.orderNo); return o && (
               <div key={b.id} class="w-full grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_100px_auto] gap-x-3 items-center px-3 py-2 md:py-0 md:h-10 text-[13px]">
                 <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{b.orderNo}</span><span class="font-medium">{b.name}</span></span>
                 <span class="hidden md:block t-meta truncate">Batch dispatch · {b.customer} · {b.units} units</span>
@@ -135,14 +138,14 @@ export function Quotes() {
   const [f, setF] = useState("all");
   const [open, setOpen] = useState<Quote | null>(null);
   const [view, setView] = useState<"edit" | "doc">("edit");
-  const cur = open && (quotesSig.value.find((q) => q.id === open.id) ?? open);
+  const cur = open && (vQuotes().find((q) => q.id === open.id) ?? open);
   const upd = (q: Quote, p: Partial<Quote>) => { quotesSig.value = quotesSig.value.map((x) => (x.id === q.id ? { ...x, ...p } : x)); if (p.outcome) log(`Quote ${p.outcome}`, q.no); };
-  const rows = [...quotesSig.value].filter((q) => f === "all" || q.outcome === f).sort((a, b) => b.no.localeCompare(a.no));
+  const rows = [...vQuotes()].filter((q) => f === "all" || q.outcome === f).sort((a, b) => b.no.localeCompare(a.no));
   const make = (o?: Order) => { const valid = new Date(Date.now() + rate("quoteValid") * 864e5).toISOString().slice(0, 10);
-    const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: o?.customer ?? "", orderNo: o?.no, lines: o ? linesOf(o) : [{ desc: "", hsn: "491199", qty: 1, rate: 0 }], gstRate: rate("gst"), valid, outcome: "open" };
+    const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: o?.customer ?? "", orderNo: o?.no, lines: o ? linesOf(o) : [{ desc: "", hsn: "491199", qty: 1, rate: 0 }], gstRate: rate("gst"), valid, outcome: "open", pay: o?.pay };
     quotesSig.value = [...quotesSig.value, q]; log("Created quotation", q.no); setOpen(q); setView("edit"); };
-  const pending = ordersSig.value.filter((o) => o.stage === "quotation" && !quotesSig.value.some((q) => q.orderNo === o.no));
-  const cnt = (s: string) => quotesSig.value.filter((q) => q.outcome === s);
+  const pending = vOrders().filter((o) => o.stage === "quotation" && !vQuotes().some((q) => q.orderNo === o.no));
+  const cnt = (s: string) => vQuotes().filter((q) => q.outcome === s);
   return (
     <WorkShell title="Quotation register" sub="Every quote and its outcome — unknown is never folded into lost" actions={<Button icon="plus" onClick={() => make()}>New quotation</Button>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "open", "approved", "lost", "unrecorded"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
@@ -160,7 +163,8 @@ export function Quotes() {
               <Field label="Technical data (one per line — print time, weight, finish, delivery)"><textarea class={inputCls} rows={3} value={cur.tech ?? ""} onInput={(e) => upd(cur, { tech: (e.target as HTMLTextAreaElement).value || undefined })} /></Field>
               <LinesEditor lines={cur.lines} on={(l) => upd(cur, { lines: l })} />
               <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
-              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => { upd(cur, { outcome: o }); const ord = ordersSig.value.find((x) => x.no === cur.orderNo); if (ord && o === "approved" && !ord.approved) patchOrder(ord, { approved: true }); }}>{o}</Chip>)}</div>
+              {canSwitchMode() && <div class="flex flex-wrap items-center gap-2 mb-2"><span class="text-[12px] text-c3">Client will pay</span>{(["alpha", "beta"] as const).map((m) => <Chip key={m} active={(cur.pay ?? "alpha") === m} onClick={() => { upd(cur, { pay: m }); if (cur.orderNo) ordersSig.value = ordersSig.value.map((x) => (x.no === cur.orderNo ? { ...x, pay: m } : x)); }}>{PAY_LABEL[m]}</Chip>)}</div>}
+              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => { upd(cur, { outcome: o }); const ord = vOrders().find((x) => x.no === cur.orderNo); if (ord && o === "approved" && !ord.approved) patchOrder(ord, { approved: true }); }}>{o}</Chip>)}</div>
               {cur.orderNo && <p class="text-xs text-c3">Linked to {cur.orderNo}. Approving here records the order's approval (its quotation gate); it doesn't move the stage.</p>}
             </div>
           )}
@@ -189,10 +193,10 @@ export function Documents() {
   const [sel, setSel] = useState<DocData | null>(null);
   const [kind, setKind] = useState("all");
   const docs = [
-    ...quotesSig.value.map((q) => ({ id: q.id, kind: "Quotation", no: q.no, party: q.customer, date: q.date, d: () => fromQuote(q) })),
+    ...vQuotes().map((q) => ({ id: q.id, kind: "Quotation", no: q.no, party: q.customer, date: q.date, d: () => fromQuote(q) })),
     ...invoicesSig.value.map((i) => ({ id: i.id, kind: i.kind === "credit" ? "Credit note" : "Tax invoice", no: i.no, party: i.customer, date: i.date, d: () => fromInvoice(i) })),
-    ...shipmentsSig.value.map((s) => ({ id: s.id, kind: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? s.orderNo, date: s.date,
-      d: (): DocData => ({ kind: "challan", title: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, date: s.date, party: ordersSig.value.find((o) => o.no === s.orderNo)?.customer ?? "", lines: s.lines.map((l) => ({ desc: l.name, hsn: "491199", qty: l.qty, rate: 0 })), gstRate: 0, interstate: false, extra: [["Order", s.orderNo], ["Courier", `${s.courier} ${s.tracking}`]], note: "Not a tax invoice — goods sent for delivery." }) })),
+    ...shipmentsSig.value.map((s) => ({ id: s.id, kind: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, party: vOrders().find((o) => o.no === s.orderNo)?.customer ?? s.orderNo, date: s.date,
+      d: (): DocData => ({ kind: "challan", title: "Delivery challan", no: `DC-${s.id.slice(0, 4).toUpperCase()}`, date: s.date, party: vOrders().find((o) => o.no === s.orderNo)?.customer ?? "", lines: s.lines.map((l) => ({ desc: l.name, hsn: "491199", qty: l.qty, rate: 0 })), gstRate: 0, interstate: false, extra: [["Order", s.orderNo], ["Courier", `${s.courier} ${s.tracking}`]], note: "Not a tax invoice — goods sent for delivery." }) })),
   ].filter((d) => kind === "all" || d.kind === kind).sort((a, b) => b.date.localeCompare(a.date));
   return (
     <WorkShell title="Documents" sub="The generator — every quotation, invoice, credit note and challan, printable"
@@ -211,9 +215,9 @@ export function Documents() {
 /* ======================================================= Shipping · partial dispatch */
 export function Shipping() {
   const [sel, setSel] = useState<Shipment | null>(null);
-  const ships = ordersSig.value.filter((o) => o.stage === "shipping" || o.stage === "invoice" || o.stage === "packing");
+  const ships = vOrders().filter((o) => o.stage === "shipping" || o.stage === "invoice" || o.stage === "packing");
   const [orderNo, setOrderNo] = useState(ships[0]?.no ?? "");
-  const o = ordersSig.value.find((x) => x.no === orderNo);
+  const o = vOrders().find((x) => x.no === orderNo);
   const sent = (name: string) => shipmentsSig.value.filter((s) => s.orderNo === orderNo).reduce((a, s) => a + (s.lines.find((l) => l.name === name)?.qty ?? 0), 0);
   const [d, setD] = useState({ courier: "Delhivery", service: "Surface", tracking: "", paid: rate("freight"), rec: 0, qty: {} as Record<string, number>, photo: "" });
   const save = () => {
@@ -240,7 +244,7 @@ export function Shipping() {
       <Section title="New dispatch">
         <Card class="flex flex-col gap-2">
           <div class="grid gap-2 grid-cols-2 md:grid-cols-3 xl:grid-cols-6 items-end">
-            <Field label="Order"><select class={inputCls} value={orderNo} onChange={(e) => setOrderNo((e.target as HTMLSelectElement).value)}>{ordersSig.value.filter((x) => x.stage !== "archived").map((x) => <option key={x.id} value={x.no}>{x.no} · {x.customer}</option>)}</select></Field>
+            <Field label="Order"><select class={inputCls} value={orderNo} onChange={(e) => setOrderNo((e.target as HTMLSelectElement).value)}>{vOrders().filter((x) => x.stage !== "archived").map((x) => <option key={x.id} value={x.no}>{x.no} · {x.customer}</option>)}</select></Field>
             <Field label="Courier"><select class={inputCls} value={d.courier} onChange={(e) => setD({ ...d, courier: (e.target as HTMLSelectElement).value })}>{["Delhivery", "DTDC", "Blue Dart", "India Post", "Shiprocket", "Hand delivery"].map((c) => <option key={c}>{c}</option>)}</select></Field>
             <Field label="Service"><input class={inputCls} value={d.service} onInput={(e) => setD({ ...d, service: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Tracking no."><input class={inputCls} value={d.tracking} onInput={(e) => setD({ ...d, tracking: (e.target as HTMLInputElement).value })} /></Field>
@@ -282,8 +286,8 @@ const cFields: FDef<Client>[] = [
 export function Clients() {
   const [q, setQ] = useState("");
   const known = new Set(clientsSig.value.map((c) => c.name));
-  const extra: Client[] = [...new Set(ordersSig.value.filter((o) => o.type !== "inhouse" && !known.has(o.customer)).map((o) => o.customer))].map((n) => ({ id: `o:${n}`, name: n, kind: "Individual", phone: "", city: "", gstin: "", medium: ordersSig.value.find((o) => o.customer === n)?.medium ?? "", active: true }));
-  const stats = (n: string) => { const os = ordersSig.value.filter((o) => o.customer === n); const inv = invoicesSig.value.filter((i) => i.customer === n && i.status === "issued");
+  const extra: Client[] = [...new Set(vOrders().filter((o) => o.type !== "inhouse" && !known.has(o.customer)).map((o) => o.customer))].map((n) => ({ id: `o:${n}`, name: n, kind: "Individual", phone: "", city: "", gstin: "", medium: vOrders().find((o) => o.customer === n)?.medium ?? "", active: true }));
+  const stats = (n: string) => { const os = vOrders().filter((o) => o.customer === n); const inv = invoicesSig.value.filter((i) => i.customer === n && i.status === "issued");
     return { os, orders: os.length, value: os.reduce((s, o) => s + o.items.reduce((a, i) => a + i.qty * i.price, 0), 0), owed: inv.filter((i) => !i.paidOn && i.kind === "invoice").reduce((s, i) => s + invTax(i).total, 0), inv }; };
   const r = useRecord<Client>({ sig: clientsSig, kind: "Client", title: (c) => c.name, fields: cFields, logKind: "order",
     blank: () => ({ id: uid(), name: "", kind: "Individual", phone: "", email: "", city: "", gstin: "", medium: "Instagram", address: "", notes: "", active: true }),

@@ -1,16 +1,18 @@
+import { modeAccounts } from "../data/mode";
+import { vBills, vExpenses, vMoney, vOrders, vQuotes } from "../data";
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
 import { Disclosure, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
-import { fyWindow, inWin, quotesSig, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate, moduleOf } from "../data";
+import { fyWindow, inWin, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate, moduleOf } from "../data";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaFile } from "../ui/media";
 import { books, csv, download, GOAL_HINT, GOAL_LABEL, goalProgress, gstMonths, parties, setGst, tallyXml } from "../data/books";
 import {
   accountsSig, addBill, addExpense, addMoney, balanceOf, billChecks, billsSig, can, confirmBill, confirmLine, consSig, daySummary, expensesSig,
-  financeSummary, fyOf, goalsSig, inr, invoicesSig, invTax, isExternal, loansSig, monthly, moneySig, openingSig, ordersSig,
+  financeSummary, fyOf, goalsSig, inr, invoicesSig, invTax, isExternal, loansSig, monthly, openingSig, 
   parseStatementCsv, rejectLine, shortDate, statementSig, suggest, today, transfer, uid, windowFor,
   type Bill, type Goal, type GoalMetric, type MoneyKind,
 } from "../data";
@@ -40,7 +42,7 @@ function Fig({ label, value, note, dark, rule, inputs }: { label: string; value:
 const KINDS: [MoneyKind, string, 1 | -1][] = [["receipt", "Customer receipt", 1], ["advance", "Customer advance", 1], ["other_income", "Other income", 1], ["capital_in", "Capital introduced", 1], ["loan_taken", "Loan taken", 1],
   ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1], ["tax_payment", "GST / tax paid", -1]];
 export function DayBook() {
-  const accs = accountsSig.value;
+  const accs = modeAccounts();
   const [acc, setAcc] = useState(accs[0]?.id ?? "");
   const [day, setDay] = useState(today());
   const [form, setForm] = useState<null | "in" | "out" | "transfer">(null);
@@ -89,7 +91,7 @@ export function DayBook() {
 /** Running ledger for one account up to a day: date dividers, debit/credit split, running balance. Paged. */
 function Ledger({ acc, upto }: { acc: string; upto: string }) {
   const [n, setN] = useState(30);
-  const rows = moneySig.value.filter((m) => m.account === acc && m.date <= upto).sort((a, b) => b.date.localeCompare(a.date));
+  const rows = vMoney().filter((m) => m.account === acc && m.date <= upto).sort((a, b) => b.date.localeCompare(a.date));
   let bal = balanceOf(acc, upto);
   const withBal = rows.slice(0, n).map((m) => { const r = { m, bal }; bal -= m.amount; return r; });
   const cols = "grid grid-cols-[minmax(0,1fr)_88px_88px] md:grid-cols-[minmax(0,1fr)_110px_96px_96px] gap-x-3 items-center px-3";
@@ -119,7 +121,7 @@ export function Purchases() {
   const [f, setF] = useState("all");
   const [open, setOpen] = useState<Bill | null>(null);
   const [paidFrom, setPaidFrom] = useState("");
-  const rows = billsSig.value.filter((b) => f === "all" || b.status === f);
+  const rows = vBills().filter((b) => f === "all" || b.status === f);
   const tone = (s: string) => (s === "logged" ? "done" : s === "failed" ? "blocked" : s === "rejected" ? "idle" : "waiting") as "done";
   const upd = (p: Partial<Bill>) => { if (!open) return; const n = { ...open, ...p }; setOpen(n); billsSig.value = billsSig.value.map((b) => (b.id === n.id ? n : b)); };
   const onFiles = (fl: FileList | null) => [...(fl ?? [])].forEach((file) => { if (file.type.startsWith("image/")) shrinkImage(file).then((data) => setOpen(addBill({ name: file.name, data: storeMedia(data, file.name) }))); else { const r = new FileReader(); r.onload = () => setOpen(addBill({ name: file.name, data: file.size < 8e6 ? storeMedia(String(r.result), file.name) : undefined })); r.readAsDataURL(file); } });
@@ -128,7 +130,7 @@ export function Purchases() {
   const txt = (k: keyof Bill) => ({ class: inputCls, value: String(open?.[k] ?? ""), onInput: (e: Event) => upd({ [k]: (e.target as HTMLInputElement).value } as Partial<Bill>) });
   return (
     <Shell title="Purchases" sub="Bill vault — filed by the bill's own FY, figures confirmed by a person"
-      toolbar={<Pick title="Show" value={f} on={setF} items={["all", "needs_review", "logged", "failed", "rejected"]} label={(k) => `${({ all: "All", needs_review: "To review", logged: "Logged", failed: "Unreadable", rejected: "Rejected" } as Record<string, string>)[k]} (${k === "all" ? billsSig.value.length : billsSig.value.filter((b) => b.status === k).length})`} />}
+      toolbar={<Pick title="Show" value={f} on={setF} items={["all", "needs_review", "logged", "failed", "rejected"]} label={(k) => `${({ all: "All", needs_review: "To review", logged: "Logged", failed: "Unreadable", rejected: "Rejected" } as Record<string, string>)[k]} (${k === "all" ? vBills().length : vBills().filter((b) => b.status === k).length})`} />}
       detail={open && chk && (
         <div>
           <DetailHead title={`Review · ${open.vendor || "new bill"}`} onClose={() => setOpen(null)} />
@@ -156,7 +158,7 @@ export function Purchases() {
           <div class="text-xs text-c3 mt-2">Filed in Drive → “Emerald — Purchase Documents / FY {fyOf(open.date || today())}”</div>
           {[...chk.block.map((t) => ["Blocks", t]), ...chk.warn.map((t) => ["Check", t])].map(([k, t]) => <div key={t} class={`mt-2 rounded-xl p-2 text-xs ${k === "Blocks" ? "bg-c4 text-c0" : "bg-c1"}`}><b>{k}:</b> {t}</div>)}
           {open.status !== "logged" && <>
-            <Field label="Paid from"><select class={`${inputCls} mt-2`} value={paidFrom} onChange={(e) => setPaidFrom((e.target as HTMLSelectElement).value)}><option value="">Not paid yet</option>{accountsSig.value.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+            <Field label="Paid from"><select class={`${inputCls} mt-2`} value={paidFrom} onChange={(e) => setPaidFrom((e.target as HTMLSelectElement).value)}><option value="">Not paid yet</option>{modeAccounts().map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
             <div class="flex gap-2 mt-3"><Button variant="outline" onClick={() => { upd({ status: "rejected" }); setOpen(null); }}>Reject</Button><Button disabled={chk.block.length > 0} onClick={() => { confirmBill(open, paidFrom); setOpen(null); }}>Log expense</Button></div>
           </>}
           {open.status === "logged" && <p class="text-xs mt-3">Logged. Deleting this document would bin the file but leave its expense alone.</p>}
@@ -187,17 +189,17 @@ export function Finance() {
   const [tab, setTab] = useState<"expenses" | "outstanding" | "receipts" | "today">("today");
   const [add, setAdd] = useState(false);
   const [e, setE] = useState({ head: "Filament", vendor: "", amount: 0, tax: 0, account: "" });
-  const win = windowFor(p, fy), o = ordersSig.value;
+  const win = windowFor(p, fy), o = vOrders();
   const f = financeSummary(win, o);
   const prevWin: [string, string] = [`${Number(win[0].slice(0, 4)) - 1}${win[0].slice(4)}`, `${Number(win[1].slice(0, 4)) - 1}${win[1].slice(4)}`];
   const ly = financeSummary(prevWin, o);
   const delta = (a: number, b: number) => (b ? `${a >= b ? "+" : ""}${Math.round(((a - b) / b) * 100)}% vs last year` : "no prior-year data");
   const mo = monthly(fy);
-  const heads = new Map<string, number>(); expensesSig.value.filter((x) => x.date >= win[0] && x.date <= win[1]).forEach((x) => heads.set(x.head, (heads.get(x.head) ?? 0) + x.amount));
+  const heads = new Map<string, number>(); vExpenses().filter((x) => x.date >= win[0] && x.date <= win[1]).forEach((x) => heads.set(x.head, (heads.get(x.head) ?? 0) + x.amount));
   const doToday = [
     ...invoicesSig.value.filter((i) => !i.paidOn && i.kind === "invoice" && i.status === "issued").map((i) => `Chase ${i.no} · ${i.customer} · ${inr(invTax(i).total)}`),
-    ...expensesSig.value.filter((x) => !x.paid).map((x) => `Pay ${x.vendor} ${inr(x.amount)}${x.msme ? " (MSME — 45-day rule)" : ""}`),
-    ...billsSig.value.filter((b) => b.status === "needs_review").map((b) => `Review bill ${b.vendor || b.no}`),
+    ...vExpenses().filter((x) => !x.paid).map((x) => `Pay ${x.vendor} ${inr(x.amount)}${x.msme ? " (MSME — 45-day rule)" : ""}`),
+    ...vBills().filter((b) => b.status === "needs_review").map((b) => `Review bill ${b.vendor || b.no}`),
   ];
   return (
     <Shell title="Finance" sub="Five figures, one rule each · everything narrows to the window"
@@ -209,7 +211,7 @@ export function Finance() {
           <Field label="Vendor"><input class={inputCls} value={e.vendor} onInput={(x) => setE({ ...e, vendor: (x.target as HTMLInputElement).value })} /></Field>
           <Field label="Amount ₹"><input class={inputCls} type="number" value={e.amount || ""} onInput={(x) => setE({ ...e, amount: Number((x.target as HTMLInputElement).value) || 0 })} /></Field>
           <Field label="GST in it ₹"><input class={inputCls} type="number" value={e.tax || ""} onInput={(x) => setE({ ...e, tax: Number((x.target as HTMLInputElement).value) || 0 })} /></Field>
-          <Field label="Paid from"><select class={inputCls} value={e.account} onChange={(x) => setE({ ...e, account: (x.target as HTMLSelectElement).value })}><option value="">Not paid yet</option>{accountsSig.value.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+          <Field label="Paid from"><select class={inputCls} value={e.account} onChange={(x) => setE({ ...e, account: (x.target as HTMLSelectElement).value })}><option value="">Not paid yet</option>{modeAccounts().map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
           <Button onClick={() => { if (!e.amount) return; addExpense({ date: today(), head: e.head, vendor: e.vendor || e.head, amount: e.amount, tax: e.tax, paid: !!e.account, account: e.account || undefined }); setAdd(false); }}>Save</Button>
         </Card>
       )}
@@ -227,14 +229,14 @@ export function Finance() {
       <SubTabs value={tab} onChange={setTab} items={[["today", `Do today (${doToday.length})`], ["expenses", "Expenses"], ["outstanding", "Outstanding by age"], ["receipts", "Receipts"]]} />
       <Card>
         {tab === "today" && (doToday.length ? <ul class="text-[13px] -my-1">{doToday.map((t) => <li key={t} class="min-h-9 py-1.5 flex items-center border-t border-line first:border-0 truncate">{t}</li>)}</ul> : <Empty title="Nothing to do" />)}
-        {tab === "expenses" && <Table rows={[...expensesSig.value].filter((x) => x.date >= win[0] && x.date <= win[1]).sort((a, b) => b.date.localeCompare(a.date))} rowKey={(x) => x.id} onRow={peek} cols={[
+        {tab === "expenses" && <Table rows={[...vExpenses()].filter((x) => x.date >= win[0] && x.date <= win[1]).sort((a, b) => b.date.localeCompare(a.date))} rowKey={(x) => x.id} onRow={peek} cols={[
           { key: "h", label: "Head", render: (x) => <b>{x.head}</b> }, { key: "d", label: "Date", render: (x) => shortDate(x.date) }, { key: "v", label: "Vendor", render: (x) => x.vendor },
           { key: "p", label: "Paid", card: "status", render: (x) => <Status tone={x.paid ? "done" : "waiting"}>{x.paid ? "Paid" : "Unpaid"}</Status> },
           { key: "b", label: "Bill", render: (x) => (x.billId ? <a class="underline" href="/mauny/purchases">View</a> : "—") }, { key: "a", label: "Amount", align: "right", render: (x) => inr(x.amount) }]} />}
         {tab === "outstanding" && <Table rows={invoicesSig.value.filter((i) => !i.paidOn && i.kind === "invoice" && i.status === "issued").map((i) => ({ ...i, age: Math.round((Date.now() - Date.parse(i.date)) / 864e5) })).sort((a, b) => b.age - a.age)} rowKey={(i) => i.id} onRow={peek} cols={[
           { key: "n", label: "Invoice", render: (i) => <b>{i.no}</b> }, { key: "c", label: "Customer", render: (i) => i.customer },
           { key: "a", label: "Age", card: "status", render: (i) => <Status tone={i.age > 75 ? "blocked" : "waiting"}>{i.age} days</Status> }, { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) }]} />}
-        {tab === "receipts" && <Table rows={moneySig.value.filter((m) => m.kind === "receipt" || m.kind === "advance")} rowKey={(m) => m.id} onRow={peek} cols={[
+        {tab === "receipts" && <Table rows={vMoney().filter((m) => m.kind === "receipt" || m.kind === "advance")} rowKey={(m) => m.id} onRow={peek} cols={[
           { key: "n", label: "From", render: (m) => <b>{m.note}</b> }, { key: "r", label: "Against", render: (m) => m.ref ?? "—" }, { key: "d", label: "Date", render: (m) => shortDate(m.date) }, { key: "v", label: "Amount", align: "right", render: (m) => inr(m.amount) }]} />}
       </Card>
     </Shell>
@@ -271,7 +273,7 @@ export function Goals() {
       {!list.length ? <Empty title={arch ? "No archived goals" : "No active goals"} /> : (
         <div class="listbox">
           {list.map((g) => {
-            const p = goalProgress(g, ordersSig.value);
+            const p = goalProgress(g, vOrders());
             const fmt = (n: number) => (money(g.metric) ? inr(n) : g.metric === "margin_pct" ? `${n}%` : String(n));
             return (
               <div key={g.id} class="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_minmax(0,170px)_110px_auto] gap-x-4 gap-y-1 items-center px-3 py-2 text-[13px]">
@@ -294,7 +296,7 @@ export function Goals() {
 
 /* ======================================================= Accounts & statements */
 export function Accounts() {
-  const [acc, setAcc] = useState(accountsSig.value[0]?.id ?? "");
+  const [acc, setAcc] = useState(modeAccounts()[0]?.id ?? "");
   const [msg, setMsg] = useState("");
   const [f, setF] = useState("review");
   const lines = statementSig.value.filter((l) => l.account === acc && (f === "all" || l.state === f));
@@ -304,10 +306,10 @@ export function Accounts() {
     <Shell title="Accounts & statements" sub="Upload a statement → lines matched → confirm or reject · duplicates never import twice"
       actions={<><Button variant="outline" onClick={() => { const name = prompt("Account name"); if (name) accountsSig.value = [...accountsSig.value, { id: uid(), name, opening: Number(prompt("Opening balance ₹") || 0) }]; }}>Add account</Button>
         <label class="inline-flex items-center justify-center h-9 md:h-10 px-4 rounded-full bg-c4 text-c0 text-sm font-medium cursor-pointer">Upload CSV statement<input type="file" accept=".csv,.pdf,.xlsx" class="sr-only" onChange={(e) => onFile((e.target as HTMLInputElement).files)} /></label></>}
-      toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
+      toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={modeAccounts().map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-        {accountsSig.value.map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} lines to review</div></button>)}
+        {modeAccounts().map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} lines to review</div></button>)}
       </div>
       <Disclosure title="CSV format & matching rules"><p class="t-meta">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p></Disclosure>
       <Card class="!py-1">
@@ -327,15 +329,15 @@ const BOOK_TABS: [string, string][] = [["sales", "Sales Book"], ["purchase", "Pu
 export function Books() {
   const [t, setT] = useState("sales");
   const [fy, setFy] = useState(fyOf(today()));
-  const [acc, setAcc] = useState(accountsSig.value[0]?.id ?? "");
+  const [acc, setAcc] = useState(modeAccounts()[0]?.id ?? "");
   const B = books(fy);
   const tax = [{ key: "n", label: "No.", render: (r: any) => <b>{r.no}{r.status === "cancelled" ? " (cancelled)" : ""}</b> }, { key: "d", label: "Date", render: (r: any) => shortDate(r.date) }, { key: "p", label: "Party", render: (r: any) => r.party },
     { key: "t", label: "Taxable", align: "right" as const, render: (r: any) => inr(r.taxable) }, { key: "c", label: "CGST", align: "right" as const, render: (r: any) => inr(r.cgst), hideTablet: true },
     { key: "s", label: "SGST", align: "right" as const, render: (r: any) => inr(r.sgst), hideTablet: true }, { key: "i", label: "IGST", align: "right" as const, render: (r: any) => inr(r.igst), hideTablet: true },
     { key: "v", label: "Total", align: "right" as const, render: (r: any) => inr(r.total) }];
   const Row = ({ l, v, b }: { l: string; v: number; b?: boolean }) => <div class={`flex justify-between py-1.5 border-t border-line text-sm ${b ? "font-semibold" : ""}`}><span>{l}</span><span class="num">{inr(v)}</span></div>;
-  let running = accountsSig.value.find((a) => a.id === acc)?.opening ?? 0;
-  const bank = [...moneySig.value].filter((m) => m.account === acc).sort((a, b) => a.date.localeCompare(b.date)).map((m) => ({ ...m, bal: (running += m.amount) }));
+  let running = modeAccounts().find((a) => a.id === acc)?.opening ?? 0;
+  const bank = [...vMoney()].filter((m) => m.account === acc).sort((a, b) => a.date.localeCompare(b.date)).map((m) => ({ ...m, bal: (running += m.amount) }));
   const pack = () => {
     download(`Emerald-CA-pack-FY${fy}-sales.csv`, csv(B.sales.map(({ id, ...r }) => r)), "text/csv");
     download(`Emerald-CA-pack-FY${fy}-purchases.csv`, csv(B.purchase.map(({ id, ...r }) => r)), "text/csv");
@@ -352,10 +354,10 @@ export function Books() {
         {t === "purchase" && <Table rows={B.purchase} rowKey={(r) => r.id} onRow={peek} cols={tax} />}
         {t === "debtors" && <Table rows={B.debtors} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "p", label: "Party", render: (r) => <b>{r.party}</b> }, { key: "a", label: "0–30", align: "right", render: (r) => inr(r.b0) }, { key: "b", label: "31–60", align: "right", render: (r) => inr(r.b30) }, { key: "c", label: "61–90", align: "right", render: (r) => inr(r.b60) }, { key: "d", label: "90+", align: "right", render: (r) => inr(r.b90) }, { key: "t", label: "Total", align: "right", render: (r) => inr(r.total) }]} />}
         {t === "creditors" && <Table rows={B.creditors} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "p", label: "Party", render: (r) => <b>{r.party}</b> }, { key: "m", label: "MSME", render: (r) => r.msme }, { key: "d", label: "Pay by", render: (r) => (r.due ? shortDate(r.due) : "—") }, { key: "h", label: "43B(h)", render: (r) => (r.h ? <Status tone="blocked">Disallowed if unpaid</Status> : r.msme !== "—" ? <Status tone="waiting">Watch</Status> : "—") }, { key: "t", label: "Owed", align: "right", render: (r) => inr(r.total) }]} />}
-        {t === "bank" && <><div class="mb-2"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /></div><Table rows={bank} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Particulars", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "r", label: "Receipt", align: "right", render: (r) => (r.amount > 0 ? inr(r.amount) : "—") }, { key: "p", label: "Payment", align: "right", render: (r) => (r.amount < 0 ? inr(-r.amount) : "—") }]} /></>}
+        {t === "bank" && <><div class="mb-2"><SubTabs value={acc} onChange={setAcc} items={modeAccounts().map((a) => [a.id, a.name] as [string, string])} /></div><Table rows={bank} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Particulars", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "r", label: "Receipt", align: "right", render: (r) => (r.amount > 0 ? inr(r.amount) : "—") }, { key: "p", label: "Payment", align: "right", render: (r) => (r.amount < 0 ? inr(-r.amount) : "—") }]} /></>}
         {t === "expense" && <><Table rows={B.heads} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "h", label: "Head", render: (r) => <b>{r.head}</b> }, { key: "a", label: "FY", align: "right", render: (r) => inr(r.amount) }]} />
           <h3 class="font-semibold text-sm mt-4 mb-1">Wastage log</h3><Table rows={consSig.value.filter((c) => c.kind === "scrap")} rowKey={(c) => c.id} onRow={peek} cols={[{ key: "i", label: "Scrap", render: (c) => <b>{c.item}</b> }, { key: "o", label: "Order", render: (c) => c.orderNo ?? "—" }, { key: "q", label: "Grams", align: "right", render: (c) => c.qty }, { key: "v", label: "Cost", align: "right", render: (c) => inr(c.cost) }]} /></>}
-        {t === "capital" && <><Table rows={moneySig.value.filter((m) => ["capital_in", "drawings"].includes(m.kind))} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Entry", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "a", label: "Amount", align: "right", render: (r) => inr(r.amount) }]} />
+        {t === "capital" && <><Table rows={vMoney().filter((m) => ["capital_in", "drawings"].includes(m.kind))} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Entry", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "a", label: "Amount", align: "right", render: (r) => inr(r.amount) }]} />
           <h3 class="font-semibold text-sm mt-4 mb-1">Loans</h3>{loansSig.value.length ? <Table rows={loansSig.value} rowKey={(l) => l.id} onRow={peek} cols={[{ key: "l", label: "Lender", render: (l) => <b>{l.lender}</b> }, { key: "p", label: "Principal", align: "right", render: (l) => inr(l.principal) }, { key: "o", label: "Outstanding", align: "right", render: (l) => inr(l.principal - l.repaid) }, { key: "i", label: "Interest/yr", align: "right", render: (l) => inr((l.principal - l.repaid) * l.rate / 100) }]} /> : <p class="text-xs text-c3">No loans — printers were bought outright. A "Loan taken" entry in Mauny creates one here.</p>}</>}
         {t === "assets" && <Table rows={B.deps} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "n", label: "Asset", render: (r) => <b>{r.name}</b> }, { key: "m", label: "Machine", render: (r) => r.machine }, { key: "b", label: "IT block", render: (r) => `${r.block} ${r.blockRate}%`, hideTablet: true }, { key: "c", label: "Cost", align: "right", render: (r) => inr(r.cost) }, { key: "o", label: "Opening WDV", align: "right", render: (r) => inr(r.open), hideTablet: true }, { key: "d", label: "Dep. FY", align: "right", render: (r) => inr(r.dep) }, { key: "w", label: "Closing WDV", align: "right", render: (r) => inr(r.wdv) }]} />}
         {t === "pl" && <div class="grid gap-x-8 md:grid-cols-2"><div><div class="text-xs font-semibold text-c3 mb-1">Trading account</div><Row l="Sales (net of credit notes)" v={B.pl.salesTot} /><Row l="Opening stock" v={-B.pl.opening} /><Row l="Direct purchases" v={-B.pl.direct} /><Row l="Closing stock" v={B.pl.closing} /><Row l="Gross profit" v={B.pl.gross} b /></div><div><div class="text-xs font-semibold text-c3 mb-1">Profit & loss</div><Row l="Gross profit" v={B.pl.gross} /><Row l="Indirect expenses" v={-B.pl.indirect} /><Row l="Depreciation" v={-B.pl.depTot} /><Row l="Interest" v={-B.pl.interest} /><Row l="Net profit" v={B.pl.net} b /></div></div>}
@@ -431,8 +433,8 @@ export function Reports() {
   const [tab, setTab] = useState("funnel");
   const win = fyWindow(fy), inFy = (d: string) => inWin(d, win);
   const fyLabel = `FY ${fy}`;
-  const orders = ordersSig.value.filter((x) => inFy(x.created));
-  const quotes = quotesSig.value.filter((x) => inFy(x.date));
+  const orders = vOrders().filter((x) => inFy(x.created));
+  const quotes = vQuotes().filter((x) => inFy(x.date));
   const qVal = (q: (typeof quotes)[number]) => q.lines.reduce((s, l) => s + l.qty * l.rate, 0);
   const val = (x: (typeof orders)[number]) => x.items.reduce((s, i) => s + i.qty * i.price, 0);
   const cost = (x: (typeof orders)[number]) => x.items.reduce((s, i) => s + i.qty * i.cost, 0);
@@ -458,7 +460,7 @@ export function Reports() {
   const jobs = jobsSig.value.filter((j) => j.status === "done" || j.status === "failed");
   const rateBy = (key: (j: (typeof jobs)[number]) => string) => [...new Set(jobs.map(key))].map((k) => { const l = jobs.filter((j) => key(j) === k), f = l.filter((j) => j.status === "failed").length; return { id: k, k, jobs: l.length, failed: f, pct: Math.round((f / l.length) * 100) }; }).sort((a, b) => b.pct - a.pct);
   const floor = jobs.length ? Math.round((jobs.filter((j) => j.status === "failed").length / jobs.length) * 100) : 0;
-  const matOf = (j: (typeof jobs)[number]) => ordersSig.value.find((o) => o.no === j.orderNo)?.items.find((i) => i.name === j.item)?.material ?? "Unknown";
+  const matOf = (j: (typeof jobs)[number]) => vOrders().find((o) => o.no === j.orderNo)?.items.find((i) => i.name === j.item)?.material ?? "Unknown";
   const byMachine = rateBy((j) => j.printer || "—"), byMaterial = rateBy(matOf);
   const qc = qcSig.value.filter((x) => inFy(x.date));
   const perG = rate("pla") / 1000;

@@ -114,12 +114,12 @@ export function addBatch(o: Order) {
   batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: `Batch ${n}`, units: 50, done: 0, stage: "production" }];
 }
 
-export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string; delivery?: Order["delivery"]; supports?: boolean; material?: string; colour?: string; size?: Order["size"]; b2b?: string }): Order {
+export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string; delivery?: Order["delivery"]; supports?: boolean; material?: string; colour?: string; size?: Order["size"]; b2b?: string; pay?: Order["pay"] }): Order {
   const max = nextOrderBase();
   const today = new Date().toISOString().slice(0, 10);
   const o: Order = { id: crypto.randomUUID(), no: `EM-${max + 1}`, type: d.type, customer: d.type === "inhouse" ? "Studio Nexify" : d.customer || "New client",
     medium: d.type === "inhouse" ? "Internal" : d.medium, stage: d.type === "inhouse" ? "production" : "quotation", created: today, due: d.due || today,
-    delivery: d.delivery, supports: d.supports, size: d.type === "inhouse" ? undefined : d.size ?? (d.type === "bulk" ? "bulk" : "small"), b2b: d.size === "b2b" ? d.b2b : undefined,
+    delivery: d.delivery, supports: d.supports, size: d.type === "inhouse" ? undefined : d.size ?? (d.type === "bulk" ? "bulk" : "small"), b2b: d.size === "b2b" ? d.b2b : undefined, pay: d.pay ?? "alpha",
     items: [{ name: d.item || "Item", material: d.material || "PLA", colour: d.colour || "Black", qty: d.qty || 1, price: d.type === "inhouse" ? 0 : d.price, cost: Math.round((d.price || 100) * 0.3) }] };
   ordersSig.value = [o, ...ordersSig.value]; log("Created order", `${o.no} · ${o.customer}`); return o;
 }
@@ -133,3 +133,12 @@ export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
 import { purgeSample } from "./store";
 purgeSample();
 registerBin("Order", ordersSig);
+export * from "./mode";
+import { shown as _shown, shownMoney as _sm, shownExp as _se } from "./mode";
+import { moneySig as _money, expensesSig as _exp, billsSig as _bills, quotesSig as _quotes } from "./ledger";
+/** View-filtered reads (Alpha / Beta). Writes always go to the full signals. */
+export const vOrders = () => ordersSig.value.filter((o) => _shown(o.pay));
+export const vMoney = () => _money.value.filter(_sm);
+export const vExpenses = () => _exp.value.filter(_se);
+export const vBills = () => _bills.value.filter((b) => _shown(b.pay));
+export const vQuotes = () => _quotes.value.filter((q) => _shown(q.pay ?? ordersSig.value.find((o) => o.no === q.orderNo)?.pay));

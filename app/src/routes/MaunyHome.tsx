@@ -1,9 +1,11 @@
+import { vMoney, vOrders } from "../data";
 import { useEffect, useState } from "preact/hooks";
 import { Icon, Page } from "../ui";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
-import { accountsSig, addMoney, can, inr, invoicesSig, invTax, isExternal, log, moduleOf, moneySig, orderTotal, ordersSig, parseStatementCsv, statementSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
+import { addMoney, can, inr, invoicesSig, invTax, isExternal, log, moduleOf, orderTotal, ordersSig, parseStatementCsv, statementSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
 import { persisted } from "../data/store";
+import { booksModeSig, canSwitchMode, MODE_LABEL, modeAccounts } from "../data/mode";
 
 /* Mauny entry: a money-tracker home. Log an entry in seconds (type → amount → category → wallet),
    see wallets, the month's in/out, where money went, and every transaction grouped by day. */
@@ -56,7 +58,7 @@ const monthName = (m: string) => new Date(m + "-01T00:00:00").toLocaleDateString
 
 export function MaunyHome() {
   useEffect(() => () => { inspectSig.value = null; }, []);
-  const accs = accountsSig.value;
+  const accs = modeAccounts();
   const [type, setType] = useState<"out" | "in" | "transfer">("out");
   const [amt, setAmt] = useState("");
   const [cat, setCat] = useState(catsSig.value.find((c) => c.dir === "out")?.k ?? "");
@@ -74,10 +76,10 @@ export function MaunyHome() {
   const cats = catsSig.value.filter((c) => c.dir === (type === "in" ? "in" : "out"));
   const curCat = cats.find((x) => x.k === cat) ?? cats[0];
   const linkable = type === "in" && !!curCat && (curCat.kind === "receipt" || curCat.kind === "advance");
-  const paidSoFar = (ref: string) => moneySig.value.filter((m) => m.ref === ref && m.amount > 0).reduce((s, m) => s + m.amount, 0);
+  const paidSoFar = (ref: string) => vMoney().filter((m) => m.ref === ref && m.amount > 0).reduce((s, m) => s + m.amount, 0);
   const dues = [
     ...invoicesSig.value.filter((i) => i.kind === "invoice" && i.status === "issued" && !i.paidOn).map((i) => ({ ref: i.no, who: i.customer, due: invTax(i).total - paidSoFar(i.no), kind: "Invoice" as const })),
-    ...ordersSig.value.filter((o) => o.type !== "inhouse" && !o.paid && o.stage !== "archived" && !invoicesSig.value.some((i) => i.orderNo === o.no)).map((o) => ({ ref: o.no, who: o.customer, due: orderTotal(o) - paidSoFar(o.no), kind: "Order" as const })),
+    ...vOrders().filter((o) => o.type !== "inhouse" && !o.paid && o.stage !== "archived" && !invoicesSig.value.some((i) => i.orderNo === o.no)).map((o) => ({ ref: o.no, who: o.customer, due: orderTotal(o) - paidSoFar(o.no), kind: "Order" as const })),
   ].filter((x) => x.due > 0);
   const pick = (ref: string) => { setAgainst(ref); const d = dues.find((x) => x.ref === ref); if (d) { if (!amt) setAmt(String(Math.round(d.due))); if (!note) setNote(d.who); } };
   const save = () => {
@@ -101,7 +103,7 @@ export function MaunyHome() {
     f.text().then((t) => { const r = parseStatementCsv(t, acc); setMsg(`${r.added} lines imported to ${accs.find((x) => x.id === acc)?.name} · ${r.dup} duplicates skipped — review in Accounts`); });
   };
   const shift = (n: number) => { const d = new Date(month + "-01T00:00:00"); d.setMonth(d.getMonth() + n); setMonth(d.toISOString().slice(0, 7)); };
-  const rows = moneySig.value.filter((m) => ym(m.date) === month && (wallet === "all" || m.account === wallet));
+  const rows = vMoney().filter((m) => ym(m.date) === month && (wallet === "all" || m.account === wallet));
   const real = rows.filter((m) => !m.kind.startsWith("transfer"));
   const inflow = real.filter((m) => m.amount > 0).reduce((s, m) => s + m.amount, 0), outflow = -real.filter((m) => m.amount < 0).reduce((s, m) => s + m.amount, 0);
   const byCat = Object.entries(real.filter((m) => m.amount < 0).reduce<Record<string, number>>((o, m) => { const c = catOf(m).k; o[c] = (o[c] ?? 0) - m.amount; return o; }, {})).sort((a, b) => b[1] - a[1]);
@@ -112,19 +114,6 @@ export function MaunyHome() {
   const inp = "h-10 px-3 rounded-lg border border-line bg-c1 text-[14px] w-full min-w-0 outline-none focus:border-c3";
   return (
     <Page title="Mauny" sub="Log money in and out — everything else lives in the tabs" tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))} detail={inspectSig.value ? <Peeked /> : null}>
-      <div class="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
-        <button onClick={() => setWallet("all")} aria-pressed={wallet === "all"} class={`shrink-0 min-w-[170px] text-left rounded-[var(--radius-card)] px-4 py-3 cursor-pointer ${wallet === "all" ? "bg-c4 text-c0" : "bg-c0 border border-line"}`}>
-          <div class="text-[14px] font-bold flex items-center gap-2"><Icon name="wallet" size={15} />All wallets</div>
-          <div class="text-[12px] opacity-70 mt-0.5">{accs.length} accounts</div>
-        </button>
-        {accs.map((a) => (
-          <button key={a.id} onClick={() => { setWallet(a.id); setAcc(a.id); }} aria-pressed={wallet === a.id} class={`shrink-0 min-w-[170px] text-left rounded-[var(--radius-card)] px-4 py-3 cursor-pointer border ${wallet === a.id ? "bg-c0 border-c4 ring-1 ring-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
-            <div class="text-[14px] font-bold flex items-center justify-between gap-2"><span class="truncate">{a.name}</span>{statementSig.value.some((l) => l.account === a.id && l.state === "review") && <span class="text-[10px] font-bold rounded-full px-1.5 bg-[#fde68a] text-black">review</span>}</div>
-            <div class="text-[12px] text-c3 mt-0.5">{moneySig.value.filter((m) => m.account === a.id && ym(m.date) === month).length} entries this month</div>
-          </button>
-        ))}
-      </div>
-
       <div class="grid gap-4 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] items-start">
         {full && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 lg:sticky lg:top-0">
           <div class="text-[15px] font-bold">New entry</div>
@@ -184,7 +173,11 @@ export function MaunyHome() {
           <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
             <div class="flex items-center justify-between px-4 h-12 border-b border-line">
               <button aria-label="Previous month" onClick={() => shift(-1)} class="w-8 h-8 !min-h-0 rounded-lg hover:bg-c1 grid place-items-center cursor-pointer rotate-180"><Icon name="right" size={15} /></button>
-              <span class="text-[15px] font-bold">{monthName(month)}{wallet !== "all" && <span class="text-c3 font-medium"> · {accs.find((a) => a.id === wallet)?.name}</span>}</span>
+              <span class="flex items-center gap-2 min-w-0"><span class="text-[15px] font-bold whitespace-nowrap">{monthName(month)}</span>
+                <select aria-label="Wallet" class="h-8 px-2 rounded-lg border border-line bg-c1 text-[13px] font-semibold min-w-0" value={wallet} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; setWallet(v); if (v !== "all") setAcc(v); }}>
+                  <option value="all">All wallets</option>{accs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {canSwitchMode() && <a href="/settings" class="text-[11px] font-bold rounded-full px-2 h-6 leading-6 bg-c1 text-c3 whitespace-nowrap">{MODE_LABEL[booksModeSig.value]}</a>}</span>
               <button aria-label="Next month" onClick={() => shift(1)} class="w-8 h-8 !min-h-0 rounded-lg hover:bg-c1 grid place-items-center cursor-pointer"><Icon name="right" size={15} /></button>
             </div>
             <div class="grid grid-cols-3 divide-x divide-line">

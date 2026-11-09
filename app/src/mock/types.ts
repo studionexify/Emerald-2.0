@@ -6,6 +6,7 @@ export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bu
 export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number };
 export type Order = {
+  /** Alpha = bank/UPI, Beta = cash. One mode per order. */ pay?: "alpha" | "beta";
   id: string; no: string; type: OrderType; customer: string; medium: string;
   stage: Stage; created: string; due: string; items: LineItem[]; blocked?: string; invoiced?: boolean;
   approved?: boolean; buildSheet?: boolean; jobsDone?: boolean; qcLogged?: boolean; packed?: boolean; tracking?: string;
@@ -25,6 +26,7 @@ export type PackItem = { id: string; name: string; unit: string; qty: number; re
 export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";
 export type TaskStep = { id: string; title: string; done: boolean };
+export type PayMode = "alpha" | "beta";
 export type Task = { id: string; title: string; due: string; done: boolean; who: string; link?: { kind: string; ref: string }; repeat?: string; notes?: string; priority?: string; important?: boolean; myDay?: string; steps?: TaskStep[]; list?: string; doneAt?: string; created?: string };
 export type Log = { id: string; at: string; who: string; action: string; target: string; kind?: LogKind };
 export type LogKind = "order" | "stock" | "consumption" | "money";

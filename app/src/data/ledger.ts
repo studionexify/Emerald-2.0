@@ -13,10 +13,10 @@ export type Invoice = {
   status: "issued" | "cancelled"; paidOn?: string; paidAccount?: string; against?: string; note?: string;
   shipTo?: string; contact?: string; pos?: string; shipping?: number;
 };
-export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string };
-export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string };
-export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number; qty?: number; unit?: string }[]; stockApplied?: string };
-export type Account = { id: string; name: string; opening: number };
+export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string; pay?: "alpha" | "beta" };
+export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string; pay?: "alpha" | "beta" };
+export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number; qty?: number; unit?: string }[]; stockApplied?: string; pay?: "alpha" | "beta" };
+export type Account = { id: string; name: string; opening: number; mode?: "alpha" | "beta" };
 export type MoneyKind = "receipt" | "expense" | "transfer_out" | "transfer_in" | "capital_in" | "drawings" | "loan_taken" | "loan_repayment" | "asset_purchase" | "other_income" | "advance" | "tax_payment";
 export type MoneyEntry = { id: string; date: string; account: string; kind: MoneyKind; amount: number; note: string; ref?: string; pair?: string; source?: string; cat?: string };
 export type Goal = { id: string; title: string; metric: GoalMetric; start: string; end: string; period: string; target: number; manual?: number; note: string; archived: boolean };

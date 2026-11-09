@@ -1,9 +1,10 @@
+import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
 import { signal } from "@preact/signals";
 import { navigate } from "../../router";
 import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { Menu, MetaRow } from "../../ui/disclose";
-import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, ordersSig, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
+import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
 import { ConsumeForm, OrderDetail, WorkShell } from "./shared";
 
@@ -11,7 +12,7 @@ const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "acti
 const sel = (opts: string[]) => <select class={inputCls}>{opts.map((o) => <option key={o}>{o}</option>)}</select>;
 
 const jFields: FDef<Job>[] = [
-  { k: "orderNo", label: "Order", type: "select", options: () => ordersSig.value.filter((o) => o.stage !== "archived").map((o) => o.no) },
+  { k: "orderNo", label: "Order", type: "select", options: () => vOrders().filter((o) => o.stage !== "archived").map((o) => o.no) },
   { k: "item", label: "Item · run" },
   { k: "printer", label: "Printer", type: "select", options: () => ["—", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
   { k: "operator", label: "Operator", type: "select", options: () => ["—", ...teamNames()] },
@@ -79,8 +80,8 @@ export function Production() {
   const [f, setF] = useState("all");
   const r = useRecord<Job>({
     sig: jobsSig, kind: "Job", title: (j) => `${j.orderNo} · ${j.item}`, fields: jFields, logKind: "order",
-    blank: () => ({ id: uid(), orderNo: ordersSig.value.find((o) => o.stage === "production")?.no ?? ordersSig.value[0]?.no ?? "", item: "", printer: printersSig.value[0]?.name ?? "—", operator: me.value?.name ?? "—", status: "queued", hours: 1, grams: 100 }),
-    facts: (j) => { const o = ordersSig.value.find((x) => x.no === j.orderNo); return [["Status", <Status tone={jobTone(j.status)}>{j.status}</Status>], ["Customer", o?.customer ?? "—"], ["Printer · operator", `${j.printer} · ${j.operator}`], ["Estimate", `${j.grams} g · ${j.hours} h`]]; },
+    blank: () => ({ id: uid(), orderNo: vOrders().find((o) => o.stage === "production")?.no ?? vOrders()[0]?.no ?? "", item: "", printer: printersSig.value[0]?.name ?? "—", operator: me.value?.name ?? "—", status: "queued", hours: 1, grams: 100 }),
+    facts: (j) => { const o = vOrders().find((x) => x.no === j.orderNo); return [["Status", <Status tone={jobTone(j.status)}>{j.status}</Status>], ["Customer", o?.customer ?? "—"], ["Printer · operator", `${j.printer} · ${j.operator}`], ["Estimate", `${j.grams} g · ${j.hours} h`]]; },
     extra: (j, put) => <JobRun j={j} put={put} />,
   });
   const jobs = jobsSig.value.filter((j) => f === "all" || j.status === f);
@@ -96,7 +97,7 @@ export function Production() {
             { key: "e", label: "Est.", card: "foot", align: "right", render: (j) => `${j.hours} h` },
             { key: "op", label: "Operator", level: 2, render: (j) => j.operator },
             { key: "sp", label: "Spool", level: 2, render: (j) => { const s = jobSpool(j); return s ? `${spoolLabel(s)} · ${s.grams.toLocaleString("en-IN")} g left` : "—"; } },
-            { key: "c", label: "Customer", level: 2, render: (j) => ordersSig.value.find((o) => o.no === j.orderNo)?.customer ?? "—" },
+            { key: "c", label: "Customer", level: 2, render: (j) => vOrders().find((o) => o.no === j.orderNo)?.customer ?? "—" },
           ]} />
         </Card>
       </Section>
@@ -128,7 +129,7 @@ export function Production() {
           <Field label="Estimate (g · h)"><input class={inputCls} defaultValue="410 g · 4 h" /></Field>
           <Field label="Finishing notes"><input class={inputCls} placeholder="Sand seams, prime" /></Field>
         </div>
-        <div class="mt-3"><Button variant="outline" onClick={() => log("Saved build sheet", ordersSig.value.find((o) => o.stage === "production")?.no ?? "—")}>Save build sheet</Button></div>
+        <div class="mt-3"><Button variant="outline" onClick={() => log("Saved build sheet", vOrders().find((o) => o.stage === "production")?.no ?? "—")}>Save build sheet</Button></div>
       </Disclosure>
     </WorkShell>
   );
@@ -240,7 +241,7 @@ function PackCard({ o }: { o: Order }) {
 }
 
 export function Packing() {
-  const list = ordersSig.value.filter((o) => o.stage === "packing");
+  const list = vOrders().filter((o) => o.stage === "packing");
   const r = useRecord<PackRecord>({ sig: packRecSig, kind: "Packing record", title: (p) => `${p.order} · ${p.box || "packing"}`, fields: pkFields, logKind: "order",
     blank: () => ({ id: uid(), order: "", box: "", weight: "", materials: "", cost: 0, by: me.value?.name ?? "You", notes: "", date: today() }) });
   return (
@@ -276,9 +277,9 @@ export function Packing() {
 }
 
 export function Archive() {
-  const list = ordersSig.value.filter((o) => o.stage === "archived");
+  const list = vOrders().filter((o) => o.stage === "archived");
   const [open, setOpen] = useState<Order | null>(null);
-  const cur = open && (ordersSig.value.find((o) => o.id === open.id) ?? open);
+  const cur = open && (vOrders().find((o) => o.id === open.id) ?? open);
   return (
     <WorkShell stage="archived" title="Archive" sub="Final cost rollup · tap an order to see its cost lines or reopen it" detail={cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}>
       <Card class="!py-1">

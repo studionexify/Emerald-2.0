@@ -1,8 +1,9 @@
+import { vOrders } from "../data";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { navigate } from "../router";
 import { Icon } from "../ui";
 import { ask } from "../ui";
-import { clientsSig, log, me, openOrderSig, ordersSig, printersSig, segmentOf, SEGMENT_HREF, shortDate, STAGE_LABEL, taskListsSig, tasksSig, teamNames, toBin, today, uid, type Task } from "../data";
+import { clientsSig, log, me, openOrderSig, printersSig, segmentOf, SEGMENT_HREF, shortDate, STAGE_LABEL, taskListsSig, tasksSig, teamNames, toBin, today, uid, type Task } from "../data";
 
 /* A to-do app: smart lists on the left, the list in the middle, the task's details on the right.
    Every task can link to an order, a quotation, a client or a printer, and the link opens that record. */
@@ -26,17 +27,17 @@ const toggle = (t: Task) => { put(t.id, { done: !t.done, doneAt: t.done ? undefi
 
 /** Where a link goes. Orders and quotations open in their production page. */
 export function openLink(l: NonNullable<Task["link"]>) {
-  if (l.kind === "Order" || l.kind === "Quotation") { const o = ordersSig.value.find((x) => x.no === l.ref); if (o) { openOrderSig.value = o.no; navigate(SEGMENT_HREF[segmentOf(o)]); return; } navigate("/work/orders"); }
+  if (l.kind === "Order" || l.kind === "Quotation") { const o = vOrders().find((x) => x.no === l.ref); if (o) { openOrderSig.value = o.no; navigate(SEGMENT_HREF[segmentOf(o)]); return; } navigate("/work/orders"); }
   else if (l.kind === "Client") navigate("/work/clients");
   else if (l.kind === "Printer") navigate("/workshop/printers");
 }
 function linkOptions(kind: string): { ref: string; label: string }[] {
-  if (kind === "Order") return ordersSig.value.filter((o) => o.stage !== "quotation" && o.stage !== "archived").map((o) => ({ ref: o.no, label: `${o.no} · ${o.customer} · ${STAGE_LABEL[o.stage]}` }));
-  if (kind === "Quotation") return ordersSig.value.filter((o) => o.stage === "quotation").map((o) => ({ ref: o.no, label: `${o.no} · ${o.customer}` }));
+  if (kind === "Order") return vOrders().filter((o) => o.stage !== "quotation" && o.stage !== "archived").map((o) => ({ ref: o.no, label: `${o.no} · ${o.customer} · ${STAGE_LABEL[o.stage]}` }));
+  if (kind === "Quotation") return vOrders().filter((o) => o.stage === "quotation").map((o) => ({ ref: o.no, label: `${o.no} · ${o.customer}` }));
   if (kind === "Client") return clientsSig.value.map((c) => ({ ref: c.name, label: c.name }));
   return printersSig.value.map((p) => ({ ref: p.name, label: p.name }));
 }
-const linkLabel = (l: NonNullable<Task["link"]>) => { const o = (l.kind === "Order" || l.kind === "Quotation") && ordersSig.value.find((x) => x.no === l.ref); return o ? `${l.ref} · ${o.customer}` : l.ref; };
+const linkLabel = (l: NonNullable<Task["link"]>) => { const o = (l.kind === "Order" || l.kind === "Quotation") && vOrders().find((x) => x.no === l.ref); return o ? `${l.ref} · ${o.customer}` : l.ref; };
 const dueTone = (d: string) => (d < today() ? "#B97468" : d === today() ? "#6B8DB5" : "var(--c-3)");
 const dueText = (d: string) => (d === today() ? "Today" : d < today() ? `Overdue · ${shortDate(d)}` : shortDate(d));
 

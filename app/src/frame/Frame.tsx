@@ -1,3 +1,4 @@
+import { vOrders } from "../data";
 import type { ComponentChildren } from "preact";
 import { signal } from "@preact/signals";
 import { useEffect, useState } from "preact/hooks";
@@ -7,7 +8,7 @@ import { NAV, NAV_GROUPS, type NavItem } from "../nav";
 import { AskHost, Icon } from "../ui";
 import { searchQ } from "../data/search";
 import { segmentOf } from "../data/inventory";
-import { attention, batchesSig, binSig, tasksSig, can, isExternal, me, moduleOf, ordersSig, packSig, spoolsSig } from "../data";
+import { attention, batchesSig, binSig, tasksSig, can, isExternal, me, moduleOf, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
 
 /** Module key for the themed accent: first path segment; home-like pages share the brand emerald. */
@@ -36,12 +37,12 @@ const SEG_HREFS = ["/work", "/work/b2b", "/work/inhouse"];
 const navOn = (path: string, href: string) => (SEG_HREFS.includes(href) ? path === href || (href === "/work" && path.startsWith("/work/") && !SEG_HREFS.includes(path)) : isActive(path, href));
 
 function navCount(href: string) {
-  const live = ordersSig.value.filter((o) => o.stage !== "archived");
+  const live = vOrders().filter((o) => o.stage !== "archived");
   if (href === "/work") return live.filter((o) => segmentOf(o) === "client").length;
   if (href === "/work/b2b") return live.filter((o) => segmentOf(o) === "bulk").length;
   if (href === "/work/inhouse") return live.filter((o) => segmentOf(o) === "inhouse").length;
   if (href === "/todo") return tasksSig.value.filter((t) => !t.done).length;
-  if (href === "/alerts") return Object.values(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
+  if (href === "/alerts") return Object.values(attention(vOrders(), spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
   if (href === "/bin") return binSig.value.length;
   return 0;
 }
@@ -84,7 +85,7 @@ function Sidebar() {
 
 /** Bell: a link to the Attention page (inline, never a popup). Badge counts urgent items only. */
 function Bell() {
-  const n = Object.values(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
+  const n = Object.values(attention(vOrders(), spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
   return (
     <a href="/alerts" aria-label={`Attention (${n} urgent)`} class="w-11 h-11 md:w-8 md:h-8 rounded-lg hover:bg-c1 flex items-center justify-center relative shrink-0">
       <Icon name="bell" size={16} />
@@ -190,7 +191,7 @@ function NewMenu({ path }: { path: string }) {
 /** Phone-only dock (< 768px): 5 thumb-zone tabs, in layout flow so it never covers content. */
 function Dock() {
   const { path } = useLocation();
-  const urgent = Object.values(attention(ordersSig.value, spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
+  const urgent = Object.values(attention(vOrders(), spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
   const items = isExternal()
     ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }, { href: "/settings", label: "Settings", icon: "settings" }]
     : [NAV[0], NAV[1], NAV[2], NAV[4], { href: "/more", label: "More", icon: "grid" }].filter((n) => n.href === "/more" || can(moduleOf(n.href)));

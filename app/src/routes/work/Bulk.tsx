@@ -1,15 +1,16 @@
+import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
 import { Button, Card, CardTitle, Meter, Section } from "../../ui";
-import { BATCH_LABEL, BATCH_STAGES, batchesSig, inr, orderTotal, orderUnits, ordersSig, shortDate, STAGE_LABEL, type Order } from "../../data";
+import { BATCH_LABEL, BATCH_STAGES, batchesSig, inr, orderTotal, orderUnits, shortDate, STAGE_LABEL, type Order } from "../../data";
 import { BatchRow, OrderDetail, WorkShell } from "./shared";
 
 export default function Bulk() {
   const [open, setOpen] = useState<Order | null>(null);
-  const orders = ordersSig.value.filter((o) => o.type === "bulk" && o.stage !== "archived");
+  const orders = vOrders().filter((o) => o.type === "bulk" && o.stage !== "archived");
   const batches = batchesSig.value.filter((b) => orders.some((o) => o.no === b.orderNo));
   return (
     <WorkShell title="Bulk orders" sub="PO → batches, each with its own QC, packing, invoice and dispatch" actions={<Button icon="plus">New bulk order</Button>}
-      detail={open && <OrderDetail order={ordersSig.value.find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />}>
+      detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />}>
       <Section title="Orders" note={String(orders.length)}>
         <div class="listbox">
           {orders.map((o) => {
