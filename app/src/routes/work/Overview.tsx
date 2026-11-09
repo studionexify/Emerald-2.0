@@ -87,10 +87,14 @@ const SEG_COLS: Record<Segment, { cols: string; head: string[] }> = {
   bulk: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(104px,0.6fr)_minmax(160px,1.4fr)_minmax(180px,1.3fr)_120px_84px_28px]", head: ["Client", "Type", "Items", "Print progress", "Stage", "Deadline", ""] },
   inhouse: { cols: "@lg:grid-cols-[minmax(150px,1.3fr)_minmax(170px,1.6fr)_minmax(120px,0.9fr)_120px_84px_28px]", head: ["Build", "Items", "Machine", "Stage", "Due", ""] },
 };
-const Items = ({ o }: { o: Order }) => <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
-  {o.items.slice(0, 2).map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
-  {o.items.length > 2 && <li class="pl-[84px] t-meta">+{o.items.length - 2} more</li>}
-</ul>;
+function Items({ o }: { o: Order }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? o.items : o.items.slice(0, 2);
+  return <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
+    {shown.map((i, k) => { const p = all && o.type !== "inhouse" ? lineProgress(o, i) : null; return <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate flex-1">{i.name}</span>{p && (p.printed > 0 || p.failed > 0) && <span class="text-[11px] whitespace-nowrap"><span class="text-grn">{p.printed}</span>/<span class="text-red">{p.failed}</span></span>}</li>; })}
+    {o.items.length > 2 && <li class="pl-[48px]"><button class="t-meta underline cursor-pointer !min-h-0" onClick={(e) => { e.stopPropagation(); setAll(!all); }} aria-expanded={all}>{all ? "Show less" : `+${o.items.length - 2} more — show all`}</button></li>}
+  </ul>;
+}
 const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : o.stage; return <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>; };
 const Due = ({ o }: { o: Order }) => { const d = left(o.due); return <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
   <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
