@@ -1,6 +1,7 @@
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
 import { persisted, today, uid } from "./store";
+import { B2B_TYPES } from "../mock/types";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
 
 /** Persisted list that fills new fields from the seed (by id) so old saved rows gain them. */
@@ -31,6 +32,12 @@ export const BIN_DAYS = 7;
 { const cut = new Date(Date.now() - BIN_DAYS * 864e5).toISOString().slice(0, 10); if (binSig.value.some((b) => b.deletedAt < cut)) binSig.value = binSig.value.filter((b) => b.deletedAt >= cut); }
 export type Client = { id: string; name: string; kind: string; phone: string; email?: string; city: string; address?: string; gstin: string; medium: string; notes?: string; active?: boolean };
 export const clientsSig = list<Client>("clients", []);
+/** A client with a GSTIN is a business: their orders default to B2B, typed by the client's business kind. */
+export function b2bFor(name: string): { size: "b2b"; b2b: string } | null {
+  const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (!c?.gstin?.trim()) return null;
+  return { size: "b2b", b2b: B2B_TYPES.find((t) => t.toLowerCase() === c.medium?.trim().toLowerCase()) ?? "Other" };
+}
 
 /** Bin registry: kind → list it came from, so Restore puts it back. */
 const REG: Record<string, Signal<{ id: string }[]>> = {};

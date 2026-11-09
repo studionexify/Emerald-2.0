@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
 import { MetaRow } from "../../ui/disclose";
 import { Initials, StagePill, StageStrip } from "../../ui/stage-strip";
+import { b2bFor } from "../../data/inventory";
 import { batchesSig, can, createOrder, duplicateOrder, FLOW_NOTE, inr, orderTotal, ordersSig, type OrderType, shortDate, STAGES, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Order, type Stage } from "../../data";
 import { OrderCard, OrderDetail, stageLabel, TypeChips, WorkShell, type TypeFilter } from "./shared";
 
@@ -113,7 +114,7 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
       </div>
       <p class="text-xs text-c3 mb-3">{FLOW_NOTE[t]}</p>
       <div class="grid grid-cols-2 gap-2.5">
-        {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} /></Field></div>}
+        {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} onInput={(e) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, customer: v, ...(b2bFor(v) ?? {}) }); }} /></Field></div>}
         <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} /></Field></div>
         <Field label="Quantity"><input type="number" {...f("qty")} /></Field>
         {t !== "inhouse" ? <Field label="Unit price (₹)"><input type="number" {...f("price")} /></Field> : <Field label="Purpose"><select class={inputCls}><option>Jig / tool</option><option>Sample</option><option>R&D</option><option>Display</option></select></Field>}
