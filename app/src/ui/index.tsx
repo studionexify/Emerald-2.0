@@ -302,7 +302,7 @@ export function Page({ title, sub, actions, tabs, toolbar, strip, detail, childr
       <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 bg-canvas">
         <header class="flex items-center gap-2 md:gap-3 min-w-0">
           <div class="min-w-0 flex-1 flex items-center gap-2">
-            <h1 class="t-title whitespace-nowrap shrink-0 flex items-center gap-2.5"><span aria-hidden="true" class="w-1.5 h-6 rounded-full bg-acc shrink-0" />{title}</h1>
+            <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2.5 max-md:text-[19px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
             {sub && <Tip text={sub} />}
           </div>
           {tabs && <div class="w-[46%] md:w-48 shrink-0"><Tabs tabs={tabs} /></div>}
