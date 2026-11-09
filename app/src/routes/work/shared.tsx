@@ -252,7 +252,7 @@ function SpoolPick({ value, onChange, taken, n }: { value: string; onChange: (id
   return <div class="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,1fr)] gap-1.5 flex-1 min-w-0">
     <select class={c} value={mat} onChange={(e) => pickMat((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n} material`}><option value="">Type…</option>{mats.map((m) => <option key={m}>{m}</option>)}</select>
     <select class={c} value={col} disabled={!mat} onChange={(e) => pickCol((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n} colour`}><option value="">Colour…</option>{cols.map((x) => <option key={x}>{x}</option>)}</select>
-    <select class={c} value={value} disabled={!col} onChange={(e) => onChange((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n}`}><option value="">Spool no…</option>{nums.map((x) => <option key={x.id} value={x.id}>#{x.spoolNo} · {x.grams} g</option>)}</select>
+    <select class={c} value={value} disabled={!col} onChange={(e) => onChange((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n}`}><option value="">Spool no…</option>{nums.map((x) => <option key={x.id} value={x.id}>#{x.slot ?? x.spoolNo}{x.brand ? ` · ${x.brand}` : ""} · {x.grams} g</option>)}</select>
   </div>;
 }
 

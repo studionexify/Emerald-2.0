@@ -7,8 +7,9 @@ import { Menu, Reveal } from "./disclose";
 import { MediaImg } from "./media";
 import { log, me, toBin, uid, type LogKind } from "../data";
 
-export type FType = "text" | "number" | "date" | "select" | "textarea" | "color";
-export type FDef<T> = { k: keyof T & string; label: string; type?: FType; options?: string[] | (() => string[]); wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string;
+export type FType = "text" | "number" | "date" | "select" | "textarea" | "color" | "combo";
+export type FDef<T> = { k: keyof T & string; label: string; type?: FType; /** select / combo choices; may depend on the draft */ options?: string[] | ((r: T) => string[]);
+  /** Fields to fill in when this one changes (e.g. suggest a number from the picks so far). */ then?: (v: unknown, r: T) => Partial<T>; wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string;
   /** Form chunk. The first group is open; later groups sit behind a toggle. */ group?: string;
   /** Conditional input: rendered only when true for the current draft. */ when?: (r: T) => boolean };
 
@@ -39,11 +40,12 @@ export const PaneSection = ({ title, children }: { title: string; children: Comp
   </section>
 );
 
-export function Input<T>({ f, value, on }: { f: FDef<T>; value: unknown; on: (v: unknown) => void }) {
+export function Input<T>({ f, value, on, row }: { f: FDef<T>; value: unknown; on: (v: unknown) => void; row?: T }) {
   const t = f.type ?? "text";
   const v = value ?? "";
+  const opts = typeof f.options === "function" ? f.options(row as T) : f.options ?? [];
+  if (t === "combo") { const id = `dl-${f.k}`; return <><input class={inputCls} list={id} value={String(v)} onInput={(e) => on((e.target as HTMLInputElement).value)} placeholder="Pick or type new" /><datalist id={id}>{opts.map((o) => <option key={o} value={o} />)}</datalist></>; }
   if (t === "select") {
-    const opts = typeof f.options === "function" ? f.options() : f.options ?? [];
     return <select class={inputCls} value={String(v)} onChange={(e) => { const x = (e.target as HTMLSelectElement).value; on(typeof value === "number" && x !== "" && !isNaN(Number(x)) ? Number(x) : x); }}>{!opts.includes(String(v)) && <option value={String(v)}>{String(v) || "—"}</option>}{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
   }
   if (t === "textarea") return <textarea class={`${inputCls} h-20 py-2`} value={String(v)} onInput={(e) => on((e.target as HTMLTextAreaElement).value)} />;
@@ -66,7 +68,7 @@ export function FormGrid<T>({ fields, draft, set }: { fields: FDef<T>[]; draft: 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {fs.map((f) => (
         <div key={f.k} class={f.wide || f.type === "textarea" ? "sm:col-span-2" : ""}>
-          <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}><Input f={f} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v } as Partial<T>)} /></Field>
+          <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}><Input f={f} row={draft} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v, ...(f.then?.(v, { ...draft, [f.k]: v } as T) ?? {}) } as Partial<T>)} /></Field>
         </div>
       ))}
     </div>

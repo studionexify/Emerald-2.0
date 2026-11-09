@@ -221,16 +221,30 @@ const Swatch = ({ hex }: { hex?: string }) => <span class="inline-block w-3.5 h-
 const MATS = () => filMasterSig.value.materials.map((m) => m.name).sort(abc);
 const lowG = () => filMasterSig.value.lowG || 250;
 const SP_STATUS = ["sealed", "open", "loaded", "empty"];
+const lc = (x?: string) => (x ?? "").trim().toLowerCase();
+/** Values already used on spools, for closed-loop dropdowns (most used first). */
+const seen = (k: "vendor" | "location" | "lot" | "finish" | "brand" | "colour", only?: (s: Spool) => boolean) => {
+  const m = new Map<string, number>(); for (const s of spoolsSig.value) { const v = String(s[k] ?? "").trim(); if (v && (!only || only(s))) m.set(v, (m.get(v) ?? 0) + 1); }
+  return [...m].sort((a, b) => b[1] - a[1] || abc(a[0], b[0])).map(([v]) => v);
+};
+/** Colours for a material: ones already stocked in it first, then every other colour from Filament settings. */
+const coloursFor = (r: Spool) => { const used = seen("colour", (s) => lc(s.material) === lc(r.material)); const all = filMasterSig.value.colours.map((c) => c.name).sort(abc); return [...used, ...all.filter((c) => !used.some((u) => lc(u) === lc(c)))]; };
+const brandsFor = (r: Spool) => { const used = seen("brand", (s) => lc(s.material) === lc(r.material) && lc(s.colour) === lc(r.colour)); const all = [...new Set([...filMasterSig.value.brands, ...seen("brand")])].sort(abc); return ["", ...used, ...all.filter((b) => !used.includes(b))]; };
+/** Next free spool no. within the same material + colour + brand. */
+const nextSlot = (r: Spool) => { const g = spoolsSig.value.filter((s) => s.id !== r.id && lc(s.material) === lc(r.material) && lc(s.colour) === lc(r.colour) && lc(s.brand) === lc(r.brand)); const used = new Set(g.map((s) => s.slot ?? Number(spN(s.spoolNo)))); let n = 1; while (used.has(n)) n++; return n; };
+const reslot = (_v: unknown, r: Spool): Partial<Spool> => ({ slot: nextSlot(r) });
 const sFields: FDef<Spool>[] = [
-  { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS }, { k: "colour", group: "Essentials", label: "Colour", type: "select", options: () => filMasterSig.value.colours.map((c) => c.name).sort(abc) },
-  { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" }, { k: "brand", group: "Essentials", label: "Brand", type: "select", options: () => ["", ...[...filMasterSig.value.brands].sort(abc)] },
+  { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS, then: (v, r) => ({ ...(coloursFor(r).some((c) => lc(c) === lc(r.colour)) ? {} : { colour: "" }), slot: nextSlot(r), ...(masterMat(String(v))?.costKg ? { costKg: masterMat(String(v))!.costKg } : {}) }) },
+  { k: "colour", group: "Essentials", label: "Colour", type: "select", options: coloursFor, then: (v, r) => ({ slot: nextSlot(r), ...(masterColour(String(v))?.hex ? { hex: masterColour(String(v))!.hex } : {}) }) },
+  { k: "brand", group: "Essentials", label: "Brand", type: "select", options: brandsFor, then: reslot },
+  { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" },
   { k: "diameter", group: "Spec", label: "Diameter (mm)", type: "select", options: () => filMasterSig.value.diameters.map(String) }, { k: "spoolMat", group: "Weight", label: "Spool type", type: "select", options: () => filMasterSig.value.bodies.map((b) => b.name).sort(abc) },
-  { k: "slot", group: "Essentials", label: "Spool no.", type: "number" }, { k: "lot", group: "Purchase", label: "Batch / lot" },
+  { k: "slot", group: "Essentials", label: "Spool no. (suggested)", type: "number" }, { k: "lot", group: "Purchase", label: "Batch / lot", type: "combo", options: () => seen("lot") },
   { k: "size", group: "Weight", label: "Spool size (g net)", type: "select", options: () => filMasterSig.value.sizes.map(String) }, { k: "tare", group: "Weight", label: "Empty spool (tare)", type: "number", suffix: "g" },
   { k: "gross", group: "Weight", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", group: "Essentials", label: "Net remaining", type: "number", suffix: "g" },
-  { k: "costKg", group: "Purchase", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", group: "Purchase", label: "Vendor" },
+  { k: "costKg", group: "Purchase", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", group: "Purchase", label: "Vendor", type: "combo", options: () => seen("vendor") },
   { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "opened", group: "Care", label: "Opened on", type: "date" },
-  { k: "dried", group: "Care", label: "Last dried", type: "date" }, { k: "location", group: "Essentials", label: "Storage / dry box" },
+  { k: "dried", group: "Care", label: "Last dried", type: "date" }, { k: "location", group: "Essentials", label: "Storage / dry box", type: "combo", options: () => seen("location") },
   { k: "nozzle", group: "Print settings", label: "Nozzle temp" }, { k: "bed", group: "Print settings", label: "Bed temp" },
   { k: "status", group: "Essentials", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", group: "Essentials", when: (r) => r.status === "loaded", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
   { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
@@ -272,7 +286,8 @@ export function Filament() {
   const r = useRecord<Spool>({
     sig: spoolsSig, kind: "Spool", title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
     blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, spoolMat: M.body, tare: t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
-    onSave: (s, isNew) => { if (isNew) { const t = bodyTare(s.spoolMat), c = masterMat(s.material)?.costKg; if (t != null || c) spoolsSig.value = spoolsSig.value.map((x) => x.id === s.id ? { ...x, ...(t != null ? { tare: t } : {}), ...(c && x.costKg === filMasterSig.value.costKg ? { costKg: c } : {}) } : x); }
+    onSave: (s, isNew) => { if (isNew && !s.slot) spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? { ...x, slot: nextSlot(s) } : x));
+      if (isNew) { const t = bodyTare(s.spoolMat), c = masterMat(s.material)?.costKg; if (t != null || c) spoolsSig.value = spoolsSig.value.map((x) => x.id === s.id ? { ...x, ...(t != null ? { tare: t } : {}), ...(c && x.costKg === filMasterSig.value.costKg ? { costKg: c } : {}) } : x); }
       if (isNew) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "in", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: s.vendor ?? "", colour: s.colour, brand: s.brand, notes: "New spool", by: who() }, ...movesSig.value]; },
     facts: (s) => [
       ["Net remaining", <span class="text-lg font-extrabold num">{s.grams.toLocaleString("en-IN")} g</span>], ["Remaining", <span class="flex items-center gap-2"><span class="num">{spoolPct(s)}%</span><span class="flex-1"><Progress value={spoolPct(s)} /></span></span>],
