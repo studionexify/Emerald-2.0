@@ -1,6 +1,6 @@
 import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
-import { Button, Card, DetailHead, Icon, Section, Status, KV, CardTitle, Waterfall } from "../../ui";
+import { Button, DetailHead, Icon, Section, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell } from "./shared";
@@ -181,7 +181,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
           </div>
         </Section>
 
-      <Section title="Machine fleet & queue" note={`${busy}/${fleet.length} busy`} action={<a href="/workshop/printers" class="t-meta">All →</a>}>
+      <Section title="Machine fleet" note={`${busy}/${fleet.length} busy`} action={<a href="/workshop/printers" class="t-meta">All →</a>}>
         <Waterfall min={260} max={5} gap="gap-3" items={[
           ...fleet.map((p): [number, preact.ComponentChildren] => {
             const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing");
@@ -205,11 +205,19 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
                 ) : <div class="mt-3 text-[13px] text-c3">{p.status === "down" ? "Out of service" : "Free — nothing printing"}</div>}
               </a>];
           }),
-          [1 + jobsSig.value.filter((j) => j.status !== "done").slice(0, 6).length * 0.5, <Card key="queue">
-            <CardTitle>Queue · {jobsSig.value.filter((j) => j.status === "queued").length}</CardTitle>
-            {jobsSig.value.filter((j) => j.status !== "done").slice(0, 6).map((j) => <KV key={j.id} label={<span>{j.item} <span class="t-meta">· {j.printer}</span></span>} value={<Status tone={jobTone(j.status)}>{j.status}</Status>} />)}
-          </Card>],
         ]} />
+      </Section>
+
+      <Section title="Queue" note={`${jobsSig.value.filter((j) => j.status === "queued").length} queued`} action={<a href="/work/production" class="t-meta">All →</a>}>
+        <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
+          {jobsSig.value.filter((j) => j.status !== "done").map((j) => { const ord = vOrders().find((o) => o.no === j.orderNo); return (
+            <button key={j.id} onClick={() => ord && setOpen(ord)} class="w-full text-left flex items-center gap-3 px-4 py-2.5 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0">
+              <span class="min-w-0 flex-1"><span class="block text-[14px] font-semibold truncate">{j.item}</span><span class="block t-meta truncate">{j.orderNo}{ord ? ` · ${ord.customer}` : ""} · {j.printer || "Unassigned"}</span></span>
+              <span class="num t-meta whitespace-nowrap">{j.hours} h · {j.grams} g</span>
+              <Status tone={jobTone(j.status)}>{j.status}</Status>
+            </button>); })}
+          {!jobsSig.value.some((j) => j.status !== "done") && <p class="t-meta px-4 py-3">Queue is empty.</p>}
+        </div>
       </Section>
     </WorkShell>
   );
