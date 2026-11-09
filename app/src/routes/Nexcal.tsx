@@ -12,7 +12,7 @@ import {
 import { estimate as estimatePart } from "../data/nexcal/estimator";
 import { analyzeMesh, detectFormatAndParse, scaleMeshAnalysis, type Triangle, type UpAxis } from "../data/nexcal/geometry";
 import { renderDataURL } from "../data/nexcal/thumbnail";
-import { blankQ, ClientFields, DeliveryFields, SpoolPick, type Quote } from "./Calculator";
+import { blankQ, SpoolPick, type Quote } from "./Calculator";
 
 const UP_AXES: UpAxis[] = ["Z", "-Z", "X", "-X", "Y", "-Y"];
 const UNITS: [MeshUnit, string][] = [["mm", "mm"], ["cm", "cm"], ["inch", "in"]];
@@ -77,7 +77,7 @@ function UploadCard({ parts, onFiles, onPart, onUnit, onAxis, onSize, onReset, o
                   </div>
                   <button type="button" aria-label="Remove" onClick={() => onRemove(p.id)} class="w-7 h-7 shrink-0 grid place-items-center rounded-full text-c3 hover:bg-c1 cursor-pointer"><Icon name="close" size={14} /></button>
                 </div>
-                <div class="mt-3 grid grid-cols-3 sm:grid-cols-5 gap-2">
+                <div class="mt-3 grid grid-cols-3 gap-2">
                   <Field label="Unit"><select class={sm} value={p.unit} onChange={(e) => onUnit(p, (e.target as HTMLSelectElement).value as MeshUnit)}>{UNITS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
                   <Field label="Size (mm)">
                     <span class="flex items-center gap-1">
@@ -118,21 +118,21 @@ function UploadCard({ parts, onFiles, onPart, onUnit, onAxis, onSize, onReset, o
 function Lines({ title, rows, locked, total, onChange, add }: { title: string; rows: NexcalLineRow[]; locked?: [string, number]; total: number; onChange: (r: NexcalLineRow[]) => void; add: string }) {
   const up = (id: number, p: Partial<NexcalLineRow>) => onChange(rows.map((r) => (r.id === id ? { ...r, ...p } : r)));
   return (
-    <Card>
-      <CardTitle action={<Button variant="outline" icon="plus" onClick={() => onChange([...rows, { id: rid(), name: "", qty: 1, unitCost: 0 }])}>{add}</Button>}>{title}</CardTitle>
-      <div class="hidden sm:grid grid-cols-[minmax(0,1fr)_64px_96px_90px_28px] gap-2 t-meta uppercase tracking-[0.06em] pb-1 border-b border-line"><span>Item</span><span class="text-right">Qty</span><span class="text-right">Unit ₹</span><span class="text-right">Total</span><span /></div>
-      {locked && <div class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_64px_96px_90px_28px] gap-2 items-center py-1.5 text-[13px] border-b border-line"><span class="font-medium text-c3">{locked[0]}</span><span class="hidden sm:block" /><span class="hidden sm:block" /><span class="num text-right font-semibold">{dec(locked[1])}</span><span class="hidden sm:block" /></div>}
+    <div class="mb-4 last:mb-0">
+      <div class="flex items-center justify-between mb-1.5"><span class="t-section">{title}</span><Button variant="outline" icon="plus" onClick={() => onChange([...rows, { id: rid(), name: "", qty: 1, unitCost: 0 }])}>{add}</Button></div>
+      <div class="hidden 2xl:grid grid-cols-[minmax(0,1fr)_64px_96px_90px_28px] gap-2 t-meta uppercase tracking-[0.06em] pb-1 border-b border-line"><span>Item</span><span class="text-right">Qty</span><span class="text-right">Unit ₹</span><span class="text-right">Total</span><span /></div>
+      {locked && <div class="grid grid-cols-[minmax(0,1fr)_auto] 2xl:grid-cols-[minmax(0,1fr)_56px_80px_76px_28px] gap-2 items-center py-1.5 text-[13px] border-b border-line"><span class="font-medium text-c3">{locked[0]}</span><span class="hidden 2xl:block" /><span class="hidden 2xl:block" /><span class="num text-right font-semibold">{dec(locked[1])}</span><span class="hidden 2xl:block" /></div>}
       {rows.map((r) => (
-        <div key={r.id} class="grid grid-cols-[minmax(0,1fr)_56px_80px_28px] sm:grid-cols-[minmax(0,1fr)_64px_96px_90px_28px] gap-2 items-center py-1.5 border-b border-line">
+        <div key={r.id} class="grid grid-cols-[minmax(0,1fr)_56px_80px_28px] 2xl:grid-cols-[minmax(0,1fr)_56px_80px_76px_28px] gap-2 items-center py-1.5 border-b border-line">
           <input class={sm} placeholder="Name" value={r.name} onInput={(e) => up(r.id, { name: (e.target as HTMLInputElement).value })} />
           <input class={`${sm} text-right`} type="number" min={0} value={r.qty} onInput={(e) => up(r.id, { qty: num(e) })} aria-label="Qty" />
           <input class={`${sm} text-right`} type="number" min={0} value={r.unitCost} onInput={(e) => up(r.id, { unitCost: num(e) })} aria-label="Unit cost" />
-          <span class="hidden sm:block num text-right text-[13px]">{dec(r.qty * r.unitCost)}</span>
+          <span class="hidden 2xl:block num text-right text-[13px]">{dec(r.qty * r.unitCost)}</span>
           <button type="button" aria-label="Remove row" onClick={() => onChange(rows.filter((x) => x.id !== r.id))} class="w-7 h-7 grid place-items-center rounded-full text-c3 hover:bg-c1 cursor-pointer"><Icon name="close" size={12} /></button>
         </div>
       ))}
       <div class="flex justify-between pt-2 text-[13px] font-semibold"><span>Total</span><span class="num">{dec(total)}</span></div>
-    </Card>
+    </div>
   );
 }
 
@@ -241,65 +241,63 @@ export function Nexcal() {
 
   const hrs = Math.floor(inputs.printHours), minsRaw = Math.round((inputs.printHours - hrs) * 60);
   const H = minsRaw === 60 ? hrs + 1 : hrs, M = minsRaw === 60 ? 0 : minsRaw;
-  const freight = q.delivery.method === "courier" ? q.delivery.freight ?? 0 : 0;
   const below = result.marginSafe < settings.marginFloorPct;
 
   const summary = () => [
     "Studio Nexify — Price Estimate", "--------------------------------",
-    ...(q.customer ? [`Client: ${q.customer}`] : []), ...(q.item ? [`Item: ${q.item}`] : []),
+    ...(q.item ? [`Item: ${q.item}`] : []),
     `Material: ${inputs.material}`, `Filament: ${inputs.filamentGrams} g @ ₹${inputs.filamentCostPerKg}/kg`, `Print time: ${H} hr ${M} min`, `Labour: ${inputs.labourMinutes} min`, "",
     `Total materials cost: ${dec(result.totalMaterialsCost)}`, `Total labour cost: ${dec(result.totalLabourCost)}`, `Machine / printer cost: ${dec(result.machineCost)}`, `Total packaging cost: ${dec(result.totalPackagingCost)}`,
     `Order quantity: ${result.orderQty} ${result.orderQty === 1 ? "unit" : "units"}`, `Bulk discount: ${result.bulkDiscount ? `${result.bulkDiscount}% off margin` : "—"}`,
     `Total landed cost: ${dec(result.totalLandedCost)}`, `Calculated price (pre-tax): ${dec(result.calcPrice)}`, `GST (${settings.gstPercent}%): ${dec(result.gstAmount)}`, "",
-    `FINAL PRICE (rounded): ${inr(result.finalPriceRounded)}`, `Exact: ${dec(result.finalPrice)}`, ...(result.perUnitPrice !== null ? [`Per unit: ${dec(result.perUnitPrice)}`] : []), ...(freight ? [`Freight: ${inr(freight)}`] : []),
+    `FINAL PRICE (rounded): ${inr(result.finalPriceRounded)}`, `Exact: ${dec(result.finalPrice)}`, ...(result.perUnitPrice !== null ? [`Per unit: ${dec(result.perUnitPrice)}`] : []),
   ].join("\n");
   const copy = async () => { try { await navigator.clipboard.writeText(summary()); setToast("Summary copied"); } catch { setToast("Could not copy — clipboard blocked"); } };
   const quote = () => {
     const qty = result.orderQty;
-    createOrder({ type: "client", customer: q.customer.trim() || "New client", item: q.item.trim() || "Calculated item", qty, price: Math.round(result.finalPriceRounded / qty), medium: "Instagram", due: q.due,
-      delivery: q.delivery.method === "courier" ? q.delivery : { method: q.delivery.method }, supports: files.some((f) => f.supportEnabled), material: q.material ?? inputs.material, colour: q.colour });
+    createOrder({ type: "client", customer: "New client", item: q.item.trim() || "Calculated item", qty, price: Math.round(result.finalPriceRounded / qty), medium: "Instagram", due: "",
+      supports: files.some((f) => f.supportEnabled), material: q.material ?? inputs.material, colour: q.colour });
     navigate("/work/orders");
   };
 
   return (
-    <Page title="Calculator" sub="Nexcal · cost-plus pricing, machine-time economics and bulk tiers" tabs={CALC_TABS}
+    <Page title="Nexcal" sub="Cost-plus pricing, machine-time economics and bulk tiers" tabs={CALC_TABS}
       actions={<><Button variant="outline" icon="copy" onClick={copy}>Copy summary</Button><Button variant="outline" icon="printer" onClick={() => print()}>Print</Button><Button variant="outline" onClick={reset}>Reset</Button></>}>
       {toast && <div class="mb-3 rounded-xl bg-c1 px-3.5 py-2 text-[13px] font-medium" role="status">{toast}</div>}
-      <div class="grid gap-4 lg:grid-cols-12 items-start">
-        <div class="flex flex-col gap-4 lg:col-span-7 min-w-0">
-          <Card><CardTitle>Client & delivery</CardTitle><ClientFields q={q} setQ={setQ} /><DeliveryFields q={q} setQ={setQ} /></Card>
+      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
+        <div class="flex flex-col gap-4 min-w-0">
           <UploadCard parts={parts} agg={agg} busy={busy} onFiles={onFiles} onPart={upd} onClear={clear} onRemove={remove} onView={openView} onSize={onSize}
             onUnit={(p, unit) => upd(p.id, { unit, scalePercent: 100, ...analyse({ ...p, unit, scalePercent: 100 }) })}
             onAxis={(p, upAxis) => upd(p.id, { upAxis, ...analyse({ ...p, upAxis }) })}
             onReset={(p) => p.baseMeshAnalysis && upd(p.id, { scalePercent: 100, meshAnalysis: scaleMeshAnalysis(p.baseMeshAnalysis, 1) })} />
+        </div>
+        <div class="flex flex-col gap-4 min-w-0">
           <Card>
-            <CardTitle>Print parameters</CardTitle>
-            <div class="grid gap-3 sm:grid-cols-2">
-              <div class="sm:col-span-2"><SpoolPick onPick={(c, m, col) => { patch({ filamentCostPerKg: c, ...(m && (NEXCAL_MATERIALS as readonly string[]).includes(m) ? { material: m } : {}) }); setQ({ ...q, material: m, colour: col }); }} /></div>
+            <CardTitle>Print & pricing</CardTitle>
+            <div class="grid gap-3 grid-cols-2">
+              <div class="col-span-2"><SpoolPick onPick={(c, m, col) => { patch({ filamentCostPerKg: c, ...(m && (NEXCAL_MATERIALS as readonly string[]).includes(m) ? { material: m } : {}) }); setQ({ ...q, material: m, colour: col }); }} /></div>
               <Field label="Material used"><select class={inputCls} value={inputs.material} onChange={(e) => patch({ material: (e.target as HTMLSelectElement).value })}>{NEXCAL_MATERIALS.map((m) => <option key={m}>{m}</option>)}</select></Field>
               <Field label="Filament cost (₹ / kg)"><input class={`${inputCls} num`} type="number" value={inputs.filamentCostPerKg} onInput={(e) => patch({ filamentCostPerKg: num(e) })} /></Field>
               <Field label="Filament per part (g)"><input class={`${inputCls} num`} type="number" step="any" value={inputs.filamentGrams} onInput={(e) => patch({ filamentGrams: num(e) })} /></Field>
               <Field label="Print time per part">
                 <span class="flex gap-1.5">
-                  <span class="relative flex-1"><input class={`${inputCls} num pr-9 text-right`} type="number" aria-label="Hours" value={H} onInput={(e) => patch({ printHours: Math.max(0, Math.round(num(e))) + M / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">hr</span></span>
-                  <span class="relative flex-1"><input class={`${inputCls} num pr-10 text-right`} type="number" aria-label="Minutes" value={M} onInput={(e) => patch({ printHours: (Math.max(0, Math.round(num(e))) + H * 60) / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">min</span></span>
+                  <span class="relative flex-1"><input class={`${inputCls} num !pr-8 !pl-2 text-right`} type="number" aria-label="Hours" value={H} onInput={(e) => patch({ printHours: Math.max(0, Math.round(num(e))) + M / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">hr</span></span>
+                  <span class="relative flex-1"><input class={`${inputCls} num !pr-9 !pl-2 text-right`} type="number" aria-label="Minutes" value={M} onInput={(e) => patch({ printHours: (Math.max(0, Math.round(num(e))) + H * 60) / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">min</span></span>
                 </span>
               </Field>
               <Field label="Labour per part (min)"><input class={`${inputCls} num`} type="number" value={inputs.labourMinutes} onInput={(e) => patch({ labourMinutes: num(e) })} /></Field>
+              <Field label="Margin (%)"><input class={`${inputCls} num`} type="number" value={inputs.marginPercent} onInput={(e) => patch({ marginPercent: num(e) })} /></Field>
             </div>
+            <p class="t-meta mt-3">GST <b class="text-c4">{settings.gstPercent}%</b> · machine <b class="text-c4">{dec(result.printTimeRate)}/hr</b> · <button type="button" class="underline cursor-pointer" onClick={() => setAdv(true)}>Advanced settings</button></p>
           </Card>
-          <Lines title="Materials" rows={inputs.materialRows} locked={["Printed part (auto)", result.printedPartCost]} total={result.totalMaterialsCost} onChange={(r) => patch({ materialRows: r })} add="Add material" />
-          <Lines title="Packaging & shipping" rows={inputs.packagingRows} total={result.totalPackagingCost} onChange={(r) => patch({ packagingRows: r })} add="Add item" />
           <Card>
-            <CardTitle>Pricing</CardTitle>
-            <div class="flex flex-wrap items-end justify-between gap-3">
-              <Field label="Margin (%)"><span class="flex items-center gap-2"><input class={`${inputCls} num w-28`} type="number" value={inputs.marginPercent} onInput={(e) => patch({ marginPercent: num(e) })} /><span class="t-meta">before bulk discount</span></span></Field>
-              <p class="t-meta">GST <b class="text-c4">{settings.gstPercent}%</b> · machine <b class="text-c4">{dec(result.printTimeRate)}/hr</b> · <button type="button" class="underline cursor-pointer" onClick={() => setAdv(true)}>Advanced settings</button></p>
-            </div>
+            <CardTitle>Bill of materials</CardTitle>
+            <Lines title="Materials" rows={inputs.materialRows} locked={["Printed part (auto)", result.printedPartCost]} total={result.totalMaterialsCost} onChange={(r) => patch({ materialRows: r })} add="Add material" />
+          <Lines title="Packaging & shipping" rows={inputs.packagingRows} total={result.totalPackagingCost} onChange={(r) => patch({ packagingRows: r })} add="Add item" />
           </Card>
         </div>
 
-        <div class="flex flex-col gap-4 lg:col-span-5 lg:sticky lg:top-0 min-w-0">
+        <div class="flex flex-col gap-4 min-w-0 md:col-span-2 xl:col-span-1 xl:sticky xl:top-0">
           <Card>
             <CardTitle>Cost summary</CardTitle>
             <Row label="Total materials" value={dec(result.totalMaterialsCost)} />
@@ -312,7 +310,6 @@ export function Nexcal() {
             <Row strong label="Total landed cost" value={dec(result.totalLandedCost)} />
             <Row label={`Calculated price (pre-tax) · ${result.marginSafe}% margin`} value={dec(result.calcPrice)} />
             <Row label={`GST ${settings.gstPercent}%`} value={dec(result.gstAmount)} />
-            {freight > 0 && <Row label="Freight (charged separately)" value={inr(freight)} />}
             <div class="mt-3 rounded-2xl bg-c4 text-c0 px-4 py-4 text-center">
               <p class="text-[11px] font-semibold uppercase tracking-[0.08em] opacity-70">Final price <span class="normal-case font-normal">(rounded to ₹10)</span></p>
               <p class="num text-[32px] leading-none font-semibold tracking-tight mt-1">{inr(result.finalPriceRounded)}</p>

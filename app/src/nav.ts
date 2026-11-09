@@ -4,7 +4,7 @@ export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "home" },
   { href: "/work", label: "Production", icon: "work" },
   { href: "/workshop", label: "Store", icon: "box" },
-  { href: "/calculator", label: "Calculator", icon: "calc" },
+  { href: "/calculator", label: "Nexcal", icon: "calc" },
   { href: "/mauny", label: "Mauny", icon: "money" },
   { href: "/alerts", label: "Attention", icon: "bell" },
   { href: "/todo", label: "To-do", icon: "check" },

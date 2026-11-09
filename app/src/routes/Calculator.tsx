@@ -144,7 +144,7 @@ export function DeliveryFields({ q, setQ }: { q: Quote; setQ: (q: Quote) => void
 
 function Shell({ children, bar }: { children: preact.ComponentChildren; bar: preact.ComponentChildren }) {
   return (
-    <Page title="Calculator" sub="Price a job before you quote it" tabs={CALC_TABS} actions={isPhone.value ? bar : undefined}>
+    <Page title="Nexcal" sub="Price a job before you quote it" tabs={CALC_TABS} actions={isPhone.value ? bar : undefined}>
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] items-start">{children}</div>
     </Page>
   );
@@ -234,7 +234,7 @@ function NumGrid<T extends Record<string, any>>({ sig, defaults, title }: { sig:
 export function PricingSettings() {
   const ns = nexcalSig.value;
   return (
-    <Page title="Calculator" sub="Engine settings, then the rates every quote and consumption cost uses" tabs={CALC_TABS}>
+    <Page title="Nexcal" sub="Engine settings, then the rates every quote and consumption cost uses" tabs={CALC_TABS}>
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" checked={ns.printTimeRateMode === "manual"} onChange={() => (nexcalSig.value = { ...ns, printTimeRateMode: ns.printTimeRateMode === "manual" ? "auto" : "manual" })} /> Type the FDM machine rate by hand (otherwise derived: ₹{machineRate(ns)}/h)</label>
       <NumGrid<NexcalSettings> sig={nexcalSig} defaults={NEXCAL_DEFAULTS} title="Nexcal · FDM" />
       <NumGrid<NexResSettings> sig={nexresSig} defaults={NEXRES_DEFAULTS} title="NexRes · Resin" />
