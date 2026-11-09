@@ -8,7 +8,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
-import { lineProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { lineProgress, lineMachines, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -109,6 +109,16 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       </Fold>
 
       <Fold id={F("order")} hue={H.order} open title={`2 · Order details · ${order.items.length} line${order.items.length === 1 ? "" : "s"}`} meta={total ? inr(total) : "Internal"}>
+        {(() => { const t = orderProgress(order); if (!(t.printed || t.failed || order.type === "bulk")) return null;
+          const ms = [...new Set(order.items.flatMap((i) => lineMachines(order, i).map((m) => m.name)))];
+          const done = order.items.filter((i) => lineProgress(order, i).pending === 0).length;
+          const cell = (k: string, v: number, c = "") => <div class="rounded-lg bg-c1 px-2 py-1.5"><div class="t-meta">{k}</div><div class={`num font-bold text-sm ${c}`}>{v}</div></div>;
+          return <div class="mb-2">
+            <div class="grid grid-cols-4 gap-1.5">{cell("Ordered", t.qty)}{cell("Printed", t.printed, "text-grn")}{cell("Wasted", t.failed, "text-red")}{cell("Pending", t.pending)}</div>
+            <div class="flex h-2 rounded-full bg-c1 overflow-hidden mt-2"><span class="bg-grn" style={{ width: `${t.qty ? Math.min(100, t.printed / t.qty * 100) : 0}%` }} /><span class="bg-red" style={{ width: `${t.qty ? Math.min(100, t.failed / t.qty * 100) : 0}%` }} /></div>
+            <div class="t-meta mt-1">{t.qty ? Math.round(t.printed / t.qty * 100) : 0}% printed · {done}/{order.items.length} lines complete{t.printed + t.failed ? ` · ${Math.round(t.failed / (t.printed + t.failed) * 100)}% waste rate` : ""}</div>
+            <div class="t-meta">Machines: {ms.length ? ms.join(", ") : "none logged yet"}</div>
+          </div>; })()}
         <ul class="flex flex-col">{order.items.map((i, k) => <LineRow key={k} order={order} i={i} k={k} onOpen={onOpen} filG={filG} />)}</ul>
         <div class="flex justify-between text-[13px] pt-2 mt-1 border-t border-line"><span class="text-c3">Total · due {shortDate(order.due)}</span><b class="num">{total ? inr(total) : "Internal"}</b></div>
       </Fold>
@@ -184,7 +194,13 @@ function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"
       <button class="flex-1 min-w-0 text-left cursor-pointer !min-h-0" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span class="font-medium text-sm block truncate">{i.name}</span>
         <span class="t-meta">{i.material} · {i.colour} · ×{i.qty}</span>
-        {(() => { const p = lineProgress(order, i); return (p.printed > 0 || p.failed > 0) && <span class="block text-[11px] font-medium"><span class="text-grn">{p.printed} printed</span> · <span class="text-red">{p.failed} wasted</span> · <span class="text-c3">{p.pending} pending</span></span>; })()}
+        {(() => { const p = lineProgress(order, i); const ms = lineMachines(order, i); if (!(p.printed || p.failed || ms.length || order.type === "bulk")) return null;
+          const pct = i.qty ? Math.min(100, (p.printed / i.qty) * 100) : 0, wp = i.qty ? Math.min(100 - pct, (p.failed / i.qty) * 100) : 0;
+          return <>
+            <span class="flex h-1.5 rounded-full bg-c1 overflow-hidden mt-1 mb-0.5" aria-hidden="true"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></span>
+            <span class="block text-[11px] font-medium"><span class="text-grn">{p.printed} printed</span> · <span class="text-red">{p.failed} wasted</span> · <span class="text-c3">{p.pending} pending</span></span>
+            {ms.length > 0 && <span class="block text-[11px] text-c3 truncate">On {ms.map((m) => m.units ? `${m.name} (${m.units})` : m.name).join(", ")}</span>}
+          </>; })()}
       </button>
       <span class="num text-sm text-right whitespace-nowrap">{i.price ? inr(i.price * i.qty) : "—"}</span>
       <button class="w-7 h-7 !min-h-0 grid place-items-center rounded-lg text-c3 cursor-pointer" style={{ transform: open ? "rotate(90deg)" : undefined }} onClick={() => setOpen(!open)} aria-label="More"><Icon name="right" size={12} /></button>

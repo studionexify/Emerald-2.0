@@ -39,7 +39,8 @@ export function mergeEmerald1(m: Migrated) {
       return touched ? { ...o, items } : o;
     });
     const bById = new Map(m.batches.map((b) => [b.id, b]));
-    batchesSig.value = batchesSig.value.map((b) => (b.failed === undefined && bById.get(b.id)?.failed !== undefined ? { ...b, failed: bById.get(b.id)!.failed } : b));
+    batchesSig.value = batchesSig.value.map((b) => { const n = bById.get(b.id); if (!n) return b;
+      return { ...b, failed: b.failed ?? n.failed, printer: b.printer ?? n.printer }; });
 
     added.clients = add(clientsSig, m.clients); added.invoices = add(invoicesSig, m.invoices); added.quotes = add(quotesSig, m.quotes);
     added.orders = add(ordersSig, m.orders); added.batches = add(batchesSig, m.batches); added.jobs = add(jobsSig, m.jobs); added.qc = add(qcSig, m.qc);

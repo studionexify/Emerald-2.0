@@ -84,7 +84,7 @@ export function mapEmerald1(t: Tables): Migrated {
   const bulkName = (oid: string, lid: string) => json<{ id: string; name: string }[]>(T("bulk_orders").find((b) => b.id === oid)?.lines, []).find((l) => l.id === lid)?.name ?? "Batch";
   const batches: Batch[] = T("bulk_print_batches").map((b) => ({
     id: str(b.id), orderNo: str(b.order_id), customer: str(T("bulk_orders").find((o) => o.id === b.order_id)?.party_name), name: bulkName(str(b.order_id), str(b.line_id)),
-    units: num(b.good) + num(b.failed), done: num(b.good), failed: num(b.failed), stage: (b.status === "done" ? "qc" : "production") as BatchStage,
+    units: num(b.good) + num(b.failed), done: num(b.good), failed: num(b.failed), printer: (machines.get(str(b.machine_id)) ?? str(b.machine_id || b.machine || b.printer)) || undefined, stage: (b.status === "done" ? "qc" : "production") as BatchStage,
   }));
 
   const jobs: Job[] = T("production_jobs").map((j) => {

@@ -9,7 +9,7 @@ export const ordersSig = P<Order[]>("orders", []);
 export const batchesSig = P<Batch[]>("batches", []);
 export const logsSig = P<Log[]>("logs", []);
 export const consSig = P<Consumption[]>("consumption", []);
-import { spoolsSig, packSig, isSpoolItem, nextSpoolNo } from "./inventory";
+import { spoolsSig, packSig, jobsSig, isSpoolItem, nextSpoolNo } from "./inventory";
 export * from "./inventory";
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
@@ -149,6 +149,13 @@ export function lineProgress(o: Order, i: Order["items"][number], batches = batc
   const printed = i.printed ?? mine.reduce((s, b) => s + (b.done || 0), 0);
   const failed = i.failed ?? mine.reduce((s, b) => s + (b.failed ?? (b.stage !== "production" ? Math.max(0, b.units - b.done) : 0)), 0);
   return { printed, failed, pending: Math.max(0, i.qty - printed) };
+}
+/** Machines a line was printed on, from print batches and production jobs. */
+export function lineMachines(o: Order, i: Order["items"][number], batches = batchesSig.value, jobs = jobsSig.value) {
+  const m = new Map<string, number>();
+  for (const b of batches) if (b.orderNo === o.no && b.name === i.name && b.printer) m.set(b.printer, (m.get(b.printer) ?? 0) + (b.done || 0));
+  for (const j of jobs) if (j.orderNo === o.no && j.item === i.name && j.printer && !m.has(j.printer)) m.set(j.printer, 0);
+  return [...m].map(([name, units]) => ({ name, units }));
 }
 export function orderProgress(o: Order, batches = batchesSig.value) {
   return o.items.reduce((t, i) => { const p = lineProgress(o, i, batches); return { qty: t.qty + i.qty, printed: t.printed + p.printed, failed: t.failed + p.failed, pending: t.pending + p.pending }; }, { qty: 0, printed: 0, failed: 0, pending: 0 });
