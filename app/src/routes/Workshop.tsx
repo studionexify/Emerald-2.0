@@ -160,7 +160,10 @@ const MAT_C: [RegExp, string][] = [
   [/rainbow|multi|dual|tri/i, "#fda4af"], [/high.?speed|hs\b|hyper/i, "#22d3ee"], [/pla\s*\+|pla.?plus|pla.?pro/i, "#86efac"],
   [/cf|carbon|gf|glass/i, "#a1a1aa"], [/petg/i, "#60a5fa"], [/pla/i, "#8FC29E"], [/abs/i, "#fb923c"], [/asa/i, "#f87171"], [/tpu|tpe|flex/i, "#c084fc"], [/pa|nylon/i, "#facc15"], [/pc|polycarb/i, "#2dd4bf"]];
 const hashC = (m: string) => { let h = 0; for (const c of m) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 70% 65%)`; };
-const matC = (m: string) => MAT_C.find(([r]) => r.test(m))?.[1] ?? hashC(m);
+const matC = (m: string) => `color-mix(in srgb, ${MAT_C.find(([r]) => r.test(m))?.[1] ?? hashC(m)} 68%, #000)`;
+/** Spool number shown as a plain number: "SP-007" → "7". */
+const spN = (no: string) => { const d = (no.match(/\d+/g) ?? []).pop(); return d ? String(Number(d)) : no; };
+const lightHex = (h: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(h); if (!m) return false; const n = parseInt(m[1], 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 160; };
 const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 /** Waterfall: each card goes to the currently shortest column (height ≈ header + spool rows), so reading order stays left→right. */
 function Masonry({ cols, items }: { cols: number; items: Spool[][] }) {
@@ -172,10 +175,10 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
   const mc = matC(h.material);
   return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col" style={{ borderLeft: `3px solid ${mc}` }}>
-    <div class="flex items-center gap-2.5">
-      <button class="w-9 h-5 !min-h-0 rounded-md border border-line shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
-      <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="t-meta truncate">{h.brand || "—"}</div></div>
-      <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md" style={{ color: mc, background: `color-mix(in srgb, ${mc} 14%, transparent)` }}>{h.material}</span>
+    <div class="flex items-center gap-2.5 -mx-3 -mt-2.5 px-3 py-2.5 rounded-t-[var(--radius-card)]" style={{ background: hex, color: lightHex(hex) ? "#1a1a1a" : "#fff" }}>
+      <button class="w-9 h-5 !min-h-0 rounded-md border border-current/30 shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
+      <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="text-[11px] opacity-75 truncate">{h.brand || "—"}</div></div>
+      <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md bg-c0" style={{ color: mc }}>{h.material}</span>
     </div>
     {hexOpen && <div class="flex items-center gap-2 mt-2 pop-in">
       <input type="color" class="w-6 h-6 !min-h-0 p-0 border-0 bg-transparent cursor-pointer" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#888888"} onChange={(e) => setHex(list, (e.target as HTMLInputElement).value)} aria-label="Pick colour" />
@@ -185,9 +188,9 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
     <div class="mt-2 flex flex-col">
       {list.map((s) => <div key={s.id} class="border-t border-line">
         <div class="flex items-center gap-3 py-2">
-          <span class="text-[20px] font-extrabold num leading-none w-7 shrink-0">{s.spoolNo}</span>
+          <span class="text-[20px] font-extrabold num leading-none w-7 shrink-0">{spN(s.spoolNo)}</span>
           <div class="flex-1 min-w-0">
-            <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class={`h-full rounded-full bg-c4`} style={{ width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
+            <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined, width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
             <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net</span><b class="num">{s.grams.toLocaleString("en-IN")} g</b></div>
           </div>
           <button class={`h-7 !min-h-0 px-2.5 rounded-lg border text-[11px] font-semibold ${ed === s.id ? "bg-c4 text-c0 border-c4" : "border-line"}`} onClick={() => setEd(ed === s.id ? null : s.id)}>{ed === s.id ? "Done" : "Edit"}</button>
