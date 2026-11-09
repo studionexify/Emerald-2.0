@@ -4,7 +4,7 @@ import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, type OrderSize, type Client } from "../../data";
-import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
+import { OrderDetail, PrintRuns, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
@@ -87,13 +87,34 @@ const SEG_COLS: Record<Segment, { cols: string; head: string[] }> = {
   bulk: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(104px,0.6fr)_minmax(160px,1.4fr)_minmax(180px,1.3fr)_120px_84px_28px]", head: ["Client", "Type", "Items", "Print progress", "Stage", "Deadline", ""] },
   inhouse: { cols: "@lg:grid-cols-[minmax(150px,1.3fr)_minmax(170px,1.6fr)_minmax(120px,0.9fr)_120px_84px_28px]", head: ["Build", "Items", "Machine", "Stage", "Due", ""] },
 };
-function Items({ o }: { o: Order }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? o.items : o.items.slice(0, 2);
+function Items({ o, seg, all, setAll }: { o: Order; seg?: Segment; all?: boolean; setAll?: (v: boolean) => void }) {
+  const [more, setMore] = useState(false);
+  const bulk = seg === "bulk", open = bulk ? !!all : more;
+  const shown = open && !bulk ? o.items : o.items.slice(0, 2);
   return <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
-    {shown.map((i, k) => { const p = all && o.type !== "inhouse" ? lineProgress(o, i) : null; return <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate flex-1">{i.name}</span>{p && (p.printed > 0 || p.failed > 0) && <span class="text-[11px] whitespace-nowrap"><span class="text-grn">{p.printed}</span>/<span class="text-red">{p.failed}</span></span>}</li>; })}
-    {o.items.length > 2 && <li class="pl-[48px]"><button class="t-meta underline cursor-pointer !min-h-0" onClick={(e) => { e.stopPropagation(); setAll(!all); }} aria-expanded={all}>{all ? "Show less" : `+${o.items.length - 2} more — show all`}</button></li>}
+    {shown.map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
+    {(o.items.length > 2 || bulk) && <li class="pl-[48px]"><button class={`cursor-pointer !min-h-0 ${bulk ? `mt-1 h-7 px-2.5 rounded-md text-[12px] font-semibold ${open ? "bg-c4 text-c0" : "bg-c1 text-c4"}` : "t-meta underline"}`} onClick={(e) => { e.stopPropagation(); bulk ? setAll?.(!open) : setMore(!more); }} aria-expanded={open}>
+      {bulk ? (open ? "Close print desk" : `${o.items.length > 2 ? `All ${o.items.length} items · ` : ""}Log printing ▾`) : more ? "Show less" : `+${o.items.length - 2} more — show all`}</button></li>}
   </ul>;
+}
+/** Bulk print desk: every line of the order, with start / finish print right on the main screen. */
+function PrintDesk({ o }: { o: Order }) {
+  const [pk, setPk] = useState<number | null>(null);
+  return <div class="border-t border-line bg-c1/40 px-4 py-3 pop-in" onClick={(e) => e.stopPropagation()}>
+    <ul class="flex flex-col divide-y divide-line rounded-lg bg-c0 border border-line">
+      {o.items.map((i, k) => { const p = lineProgress(o, i), pct = i.qty ? Math.min(100, (p.printed / i.qty) * 100) : 0, wp = i.qty ? Math.min(100 - pct, (p.failed / i.qty) * 100) : 0;
+        return <li key={k} class="px-3 py-2">
+          <div class="grid grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_auto] items-center gap-3">
+            <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" />
+            <div class="min-w-0"><div class="text-[13px] font-semibold truncate">{i.name}</div><div class="t-meta">×{i.qty}</div></div>
+            <div class="min-w-0"><div class="flex h-1.5 rounded-full bg-c1 overflow-hidden"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></div>
+              <div class="text-[11px] font-medium mt-0.5 whitespace-nowrap"><span class="text-grn">{p.printed} done</span> · <span class="text-red">{p.failed} failed</span> · <span class="text-c3">{p.pending} left</span>{p.printing > 0 && <b class="text-c4"> · {p.printing} on plate</b>}</div></div>
+            <button class={`h-8 px-3 !min-h-0 rounded-lg text-[12px] font-semibold cursor-pointer ${pk === k ? "bg-c1 text-c4" : "bg-c4 text-c0"}`} onClick={() => setPk(pk === k ? null : k)}>{pk === k ? "Close" : p.printing ? "Finish / print" : "Print"}</button>
+          </div>
+          {pk === k && <div class="mt-2 max-w-xl ml-10 text-xs"><PrintRuns order={o} item={i} onOpen={() => {}} /></div>}
+        </li>; })}
+    </ul>
+  </div>;
 }
 const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : o.stage; return <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>; };
 const Due = ({ o }: { o: Order }) => { const d = left(o.due); return <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
@@ -109,27 +130,28 @@ function Progress({ o }: { o: Order }) {
 function SegRow({ seg, o, onOpen, onEdit }: { seg: Segment; o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void }) {
   const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
   const kind = kindOf(o, c);
+  const [desk, setDesk] = useState(false);
   const open = { role: "button" as const, tabIndex: 0, onClick: () => onOpen(o), onKeyDown: (e: KeyboardEvent) => e.key === "Enter" && onOpen(o), class: `${ROW} ${SEG_COLS[seg].cols}` };
   const menu = <div class="@max-lg:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>;
   if (seg === "client") return <div {...open}>
     <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug truncate">{o.customer}</div><div class="t-meta truncate">{[c?.city, c?.phone || o.medium].filter(Boolean).join(" · ")}</div></div>
-    <Items o={o} />
+    <Items o={o} seg={seg} />
     <span class="@max-lg:hidden num text-[13px] font-semibold">{inr(orderTotal(o))}</span>
     <span class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold" style={tint(o.paid ? STAGE_HUE.shipping : STAGE_HUE.qc)}>{o.paid ? "Paid" : "Unpaid"}</span></span>
     <StagePill o={o} /><Due o={o} />{menu}
   </div>;
   if (seg === "inhouse") { const ms = [...new Set(o.items.flatMap((i) => lineMachines(o, i).map((m) => m.name)))]; return <div {...open}>
     <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug truncate">{o.customer}</div><div class="t-meta font-mono">{o.no}</div></div>
-    <Items o={o} />
+    <Items o={o} seg={seg} />
     <span class="@max-lg:hidden text-[13px] text-c3 truncate">{ms.join(", ") || "—"}</span>
     <StagePill o={o} /><Due o={o} />{menu}
   </div>; }
-  return <div {...open}>
+  return <div class="border-t border-line first:border-0"><div {...open} class={`${open.class} !border-0`}>
     <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
     <div class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
-    <Items o={o} /><Progress o={o} />
+    <Items o={o} seg={seg} all={desk} setAll={setDesk} /><Progress o={o} />
     <StagePill o={o} /><Due o={o} />{menu}
-  </div>;
+  </div>{desk && <PrintDesk o={o} />}</div>;
 }
 function Kpis({ items }: { items: [string, string | number, string?][] }) {
   return <div class="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))` }}>

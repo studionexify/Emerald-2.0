@@ -238,7 +238,7 @@ function LineRow({ order, i, k, onOpen, filG, seg }: { order: Order; i: Order["i
 }
 
 /** Bulk lines print in runs: N units on a printer with a spool, then logged good / failed. */
-function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["items"][number]; onOpen: (o: Order) => void }) {
+export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["items"][number]; onOpen: (o: Order) => void }) {
   const runs = batchesSig.value.filter((b) => b.orderNo === order.no && b.name === item.name && (b.running || b.printer || b.spool));
   const p = lineProgress(order, item);
   const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
