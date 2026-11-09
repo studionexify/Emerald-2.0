@@ -35,7 +35,7 @@ export type Check = { label: string; done: boolean; field: keyof Order; action: 
 export function checks(o: Order, _b: Batch[]): Check[] {
   return [
     { label: "Quotation approved", done: !!o.approved, field: "approved", action: "Record" },
-    { label: "PO received", done: !!o.po, field: "po", action: "Record" },
+    { label: "PO received (optional)", done: !!o.po, field: "po", action: "Record" },
     { label: "Build sheet", done: !!o.buildSheet, field: "buildSheet", action: "Record" },
     { label: "Jobs off the floor", done: !!o.jobsDone, field: "jobsDone", action: "Record" },
     { label: "QC logged", done: !!o.qcLogged, field: "qcLogged", action: "Record" },
@@ -52,7 +52,7 @@ export function gateReason(o: Order, batches: Batch[] = []): string | null {
   const mine = batches.filter((b) => b.orderNo === o.no);
   switch (o.stage) {
     case "quotation": return o.approved ? null : o.type === "inhouse" ? "Approve the job card first — approval is where the production details get filled in." : "Approve the quotation first — approval is where the production details get filled in.";
-    case "po": return o.po ? null : "Record the customer's PO before production starts.";
+    case "po": return null; // PO is optional — never blocks production
     case "production": return o.jobsDone || (mine.length > 0 && mine.every((b) => b.done >= b.units)) ? null : "Jobs are still on the floor — mark every print off before QC.";
     case "qc": return o.qcLogged ? null : "Log at least one QC entry before packing.";
     case "packing": return o.packed || o.skipPacking ? null : "Log the packing materials used before moving to invoicing.";
