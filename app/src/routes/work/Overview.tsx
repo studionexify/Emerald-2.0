@@ -3,7 +3,7 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, DetailHead, Icon, Section, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, type OrderSize, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
@@ -127,7 +127,14 @@ function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void;
 function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) => void }) {
   const [o, setO] = useState<Order>({ ...order, items: order.items.map((i) => ({ ...i })) });
   const f = "h-9 px-2 rounded-lg border border-line bg-c1 text-[13px] w-full min-w-0";
-  const save = () => { ordersSig.value = ordersSig.value.map((x) => (x.id === o.id ? o : x)); log("Edited order", o.no); onDone(o); };
+  const put = (k: number, patch: Partial<Order["items"][number]>) => setO((cur) => ({ ...cur, items: cur.items.map((x, j) => (j === k ? { ...x, ...patch } : x)) }));
+  const attach = async (k: number, file?: File | null) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]);
+    put(k, { img: storeMedia(full, `${o.no} ${o.items[k]?.name ?? file.name}`), thumb });
+  };
+  const addLine = () => setO((cur) => { const last = cur.items[cur.items.length - 1]; return { ...cur, items: [...cur.items, { name: "", material: last?.material || "PLA", colour: last?.colour || "", qty: 1, price: 0, cost: 0 }] }; });
+  const save = () => { const items = o.items.filter((i) => i.name.trim()); const next = { ...o, items }; ordersSig.value = ordersSig.value.map((x) => (x.id === next.id ? next : x)); log("Edited order", next.no); onDone(next); };
   return (
     <div>
       <DetailHead title={`Edit · ${order.customer}`} onClose={() => onDone(null)} />
@@ -141,16 +148,33 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
         <label class="col-span-2">Medium<input class={f} value={o.medium} onInput={(e) => setO({ ...o, medium: (e.target as HTMLInputElement).value })} /></label>
       </div>
       <h3 class="font-semibold text-sm mt-3 mb-1.5">Items</h3>
-      <div class="flex flex-col gap-1.5">
+      <div class="flex flex-col gap-2">
         {o.items.map((i, k) => (
-          <div key={k} class="grid grid-cols-[minmax(0,1fr)_70px_80px_32px] gap-1.5 items-center">
-            <input class={f} value={i.name} onInput={(e) => { const it = [...o.items]; it[k] = { ...i, name: (e.target as HTMLInputElement).value }; setO({ ...o, items: it }); }} />
-            <input class={f} type="number" min={0} value={i.qty} onInput={(e) => { const it = [...o.items]; it[k] = { ...i, qty: Number((e.target as HTMLInputElement).value) || 0 }; setO({ ...o, items: it }); }} />
-            <input class={f} type="number" min={0} value={i.price} onInput={(e) => { const it = [...o.items]; it[k] = { ...i, price: Number((e.target as HTMLInputElement).value) || 0 }; setO({ ...o, items: it }); }} />
-            <button aria-label="Remove line" class="h-9 !min-h-0 rounded-lg hover:bg-c1 grid place-items-center cursor-pointer" onClick={() => setO({ ...o, items: o.items.filter((_, j) => j !== k) })}><Icon name="close" size={14} /></button>
+          <div key={k} class="rounded-lg border border-line p-2 flex flex-col gap-1.5"
+            onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); attach(k, e.dataTransfer?.files?.[0]); }}
+            onPaste={(e) => { const f = [...(e.clipboardData?.files ?? [])][0]; if (f) { e.preventDefault(); attach(k, f); } }}>
+            <div class="grid grid-cols-[44px_minmax(0,1fr)_70px_80px_32px] gap-1.5 items-center">
+              <Thumb thumb={i.thumb} full={i.img} alt={i.name || "Item"} onAdd={(f) => attach(k, f)} />
+              <input class={f} placeholder="Item name" value={i.name} onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} />
+              <input class={f} type="number" min={0} title="Qty" value={i.qty} onInput={(e) => put(k, { qty: Number((e.target as HTMLInputElement).value) || 0 })} />
+              <input class={f} type="number" min={0} title="₹ each" value={i.price} onInput={(e) => put(k, { price: Number((e.target as HTMLInputElement).value) || 0 })} />
+              <button type="button" aria-label="Remove line" class="h-9 !min-h-0 rounded-lg hover:bg-c1 grid place-items-center cursor-pointer" onClick={() => setO({ ...o, items: o.items.filter((_, j) => j !== k) })}><Icon name="close" size={14} /></button>
+            </div>
+            <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5 items-center">
+              <input class={f} placeholder="Material" value={i.material} onInput={(e) => put(k, { material: (e.target as HTMLInputElement).value })} />
+              <input class={f} placeholder="Colour" value={i.colour} onInput={(e) => put(k, { colour: (e.target as HTMLInputElement).value })} />
+              <span class="flex items-center gap-2 text-[12px] whitespace-nowrap">
+                <label class="underline cursor-pointer">{i.img || i.thumb ? "Replace image" : "Add image"}<input type="file" accept="image/*" class="sr-only" onChange={(e) => { attach(k, (e.target as HTMLInputElement).files?.[0]); (e.target as HTMLInputElement).value = ""; }} /></label>
+                {(i.img || i.thumb) && <button type="button" class="underline text-red cursor-pointer !min-h-0" onClick={() => put(k, { img: undefined, thumb: undefined })}>Remove</button>}
+              </span>
+            </div>
           </div>
         ))}
-        <div class="t-meta">Name · qty · ₹ each</div>
+        <div class="flex items-center justify-between">
+          <span class="t-meta">Image · name · qty · ₹ each — drop or paste an image on a line</span>
+          <Button variant="outline" onClick={addLine}>+ Add item</Button>
+        </div>
+        <div class="text-right text-[13px] font-semibold num">Total {inr(orderTotal(o))}</div>
       </div>
       <div class="flex gap-2 mt-4"><Button onClick={save}>Save</Button><Button variant="outline" onClick={() => onDone(null)}>Cancel</Button></div>
     </div>
