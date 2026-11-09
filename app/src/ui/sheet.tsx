@@ -18,7 +18,8 @@ vv?.addEventListener("scroll", syncKb);
 
 const FOCUSABLE = "a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex='-1'])";
 
-export function Sheet({ open = true, onClose, title, children, footer, full, wide }: {
+export function Sheet({ open = true, onClose, title, children, footer, full, wide, huge }: {
+  /** Near-full-screen dialog (90% of the viewport) on desktop: big editors. */ huge?: boolean;
   /** Wide, fixed-height dialog on desktop (settings). */ wide?: boolean;
   open?: boolean; onClose: () => void; title?: ComponentChildren; children: ComponentChildren;
   /** Sticky footer (submit row) kept above the keyboard / safe area. */ footer?: ComponentChildren;
@@ -66,11 +67,11 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
   };
 
   return (
-    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide ? "md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
+    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide || huge ? "md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
       <div class="absolute inset-0 bg-black/40 sheet-fade" onClick={onClose} aria-hidden="true" />
       <div ref={panel} role="dialog" aria-modal="true" tabIndex={-1} aria-label={typeof title === "string" ? title : undefined}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 md:w-full ${wide ? "md:max-w-3xl md:h-[min(680px,84dvh)] h-[88dvh]" : "md:max-w-lg"} md:mx-auto ${wide ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide ? "" : "max-h-[92dvh]"}`}
+        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 ${huge ? "" : "md:w-full"} ${huge ? "md:max-w-none md:w-[90vw] md:h-[90dvh] h-[94dvh]" : wide ? "md:max-w-3xl md:h-[min(680px,84dvh)] h-[88dvh]" : "md:max-w-lg"} md:mx-auto ${wide || huge ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge ? "" : "max-h-[92dvh]"}`}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dy ? "none" : undefined, touchAction: "pan-y" }}>
         <div class="shrink-0 pt-2 pb-1 flex justify-center cursor-grab" aria-hidden="true"><span class="w-9 h-1.5 rounded-full bg-c1" /></div>
         {title && (

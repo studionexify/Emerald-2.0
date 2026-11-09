@@ -1,9 +1,9 @@
 import { Thumb } from "../../ui/media";
 import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
-import { Button, DetailHead, Icon, Section, Status, Waterfall } from "../../ui";
+import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, type OrderSize, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
@@ -110,6 +110,7 @@ function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void;
       <ul class="min-w-0 @max-lg:col-span-2 @max-lg:row-start-2 text-[13px] leading-[1.5]">
         {o.items.slice(0, 2).map((i, k) => <li key={k} class="flex items-center gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" /><span class="min-w-0 text-c3 truncate">{i.name}</span></li>)}
         {o.items.length > 2 && <li class="pl-[84px] t-meta">+{o.items.length - 2} more</li>}
+        {(() => { const t = orderProgress(o); return (t.printed > 0 || t.failed > 0 || o.type === "bulk") && <li class="pl-[84px] text-[11px] font-medium whitespace-nowrap"><span style={{ color: "#3F8F5F" }}>{t.printed} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></li>; })()}
       </ul>
       <div class="@max-4xl:hidden pr-2"><Track o={o} /></div>
       <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>
@@ -135,49 +136,65 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
   };
   const addLine = () => setO((cur) => { const last = cur.items[cur.items.length - 1]; return { ...cur, items: [...cur.items, { name: "", material: last?.material || "PLA", colour: last?.colour || "", qty: 1, price: 0, cost: 0 }] }; });
   const save = () => { const items = o.items.filter((i) => i.name.trim()); const next = { ...o, items }; ordersSig.value = ordersSig.value.map((x) => (x.id === next.id ? next : x)); log("Edited order", next.no); onDone(next); };
+  const num = (v: string) => Math.max(0, Number(v) || 0);
+  const tot = orderProgress(o);
+  const th = "text-left text-[11px] font-semibold uppercase tracking-wide text-c3 px-1.5 py-2 whitespace-nowrap";
   return (
-    <div>
-      <DetailHead title={`Edit · ${order.customer}`} onClose={() => onDone(null)} />
-      <div class="grid grid-cols-2 gap-2 text-[12px]">
+    <Sheet huge open onClose={() => onDone(null)} title={`Edit order · ${order.customer}`}
+      footer={<><Button variant="outline" onClick={() => onDone(null)}>Cancel</Button><Button onClick={save}>Save changes</Button></>}>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-[12px]">
         <label class="col-span-2">Client<input class={f} value={o.customer} onInput={(e) => { const v = (e.target as HTMLInputElement).value; setO({ ...o, customer: v, ...(b2bFor(v) ?? {}) }); }} /></label>
         <label>Type<select class={f} value={o.type} onChange={(e) => setO({ ...o, type: (e.target as HTMLSelectElement).value as Order["type"] })}>{Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label>Order type<select class={f} value={o.size ?? ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value as OrderSize; setO({ ...o, size: v || undefined, b2b: v === "b2b" ? o.b2b ?? B2B_TYPES[0] : undefined }); }}><option value="">—</option>{Object.entries(SIZE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         {canSwitchMode() && <label>Payment mode<select class={f} value={o.pay ?? "alpha"} onChange={(e) => setO({ ...o, pay: (e.target as HTMLSelectElement).value as "alpha" | "beta" })}><option value="alpha">{PAY_LABEL.alpha}</option><option value="beta">{PAY_LABEL.beta}</option></select></label>}
         {o.size === "b2b" && <label>B2B type<select class={f} value={o.b2b} onChange={(e) => setO({ ...o, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>}
         <label>Deadline<input type="date" class={f} value={o.due} onInput={(e) => setO({ ...o, due: (e.target as HTMLInputElement).value })} /></label>
-        <label class="col-span-2">Medium<input class={f} value={o.medium} onInput={(e) => setO({ ...o, medium: (e.target as HTMLInputElement).value })} /></label>
+        <label>Medium<input class={f} value={o.medium} onInput={(e) => setO({ ...o, medium: (e.target as HTMLInputElement).value })} /></label>
       </div>
-      <h3 class="font-semibold text-sm mt-3 mb-1.5">Items</h3>
-      <div class="flex flex-col gap-2">
-        {o.items.map((i, k) => (
-          <div key={k} class="rounded-lg border border-line p-2 flex flex-col gap-1.5"
-            onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); attach(k, e.dataTransfer?.files?.[0]); }}
-            onPaste={(e) => { const f = [...(e.clipboardData?.files ?? [])][0]; if (f) { e.preventDefault(); attach(k, f); } }}>
-            <div class="grid grid-cols-[44px_minmax(0,1fr)_70px_80px_32px] gap-1.5 items-center">
-              <Thumb thumb={i.thumb} full={i.img} alt={i.name || "Item"} onAdd={(f) => attach(k, f)} />
-              <input class={f} placeholder="Item name" value={i.name} onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} />
-              <input class={f} type="number" min={0} title="Qty" value={i.qty} onInput={(e) => put(k, { qty: Number((e.target as HTMLInputElement).value) || 0 })} />
-              <input class={f} type="number" min={0} title="₹ each" value={i.price} onInput={(e) => put(k, { price: Number((e.target as HTMLInputElement).value) || 0 })} />
-              <button type="button" aria-label="Remove line" class="h-9 !min-h-0 rounded-lg hover:bg-c1 grid place-items-center cursor-pointer" onClick={() => setO({ ...o, items: o.items.filter((_, j) => j !== k) })}><Icon name="close" size={14} /></button>
-            </div>
-            <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5 items-center">
-              <input class={f} placeholder="Material" value={i.material} onInput={(e) => put(k, { material: (e.target as HTMLInputElement).value })} />
-              <input class={f} placeholder="Colour" value={i.colour} onInput={(e) => put(k, { colour: (e.target as HTMLInputElement).value })} />
-              <span class="flex items-center gap-2 text-[12px] whitespace-nowrap">
-                <label class="underline cursor-pointer">{i.img || i.thumb ? "Replace image" : "Add image"}<input type="file" accept="image/*" class="sr-only" onChange={(e) => { attach(k, (e.target as HTMLInputElement).files?.[0]); (e.target as HTMLInputElement).value = ""; }} /></label>
-                {(i.img || i.thumb) && <button type="button" class="underline text-red cursor-pointer !min-h-0" onClick={() => put(k, { img: undefined, thumb: undefined })}>Remove</button>}
-              </span>
-            </div>
-          </div>
-        ))}
-        <div class="flex items-center justify-between">
-          <span class="t-meta">Image · name · qty · ₹ each — drop or paste an image on a line</span>
-          <Button variant="outline" onClick={addLine}>+ Add item</Button>
-        </div>
-        <div class="text-right text-[13px] font-semibold num">Total {inr(orderTotal(o))}</div>
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-1 mt-5 mb-2">
+        <h3 class="font-semibold text-sm mr-auto">Items · {o.items.length}</h3>
+        <span class="text-[12px]">Ordered <b class="num">{tot.qty}</b></span>
+        <span class="text-[12px]" style={{ color: "#3F8F5F" }}>Printed <b class="num">{tot.printed}</b></span>
+        <span class="text-[12px] text-red">Wasted <b class="num">{tot.failed}</b></span>
+        <span class="text-[12px]">Pending <b class="num">{tot.pending}</b></span>
+        <span class="text-[13px] font-semibold num">Total {inr(orderTotal(o))}</span>
       </div>
-      <div class="flex gap-2 mt-4"><Button onClick={save}>Save</Button><Button variant="outline" onClick={() => onDone(null)}>Cancel</Button></div>
-    </div>
+      <div class="overflow-x-auto rounded-xl border border-line">
+        <table class="w-full min-w-[920px] border-collapse">
+          <thead class="bg-c1/60"><tr>
+            <th class={th}>Image</th><th class={`${th} w-[30%]`}>Item</th><th class={th}>Material</th><th class={th}>Colour</th>
+            <th class={th}>Qty</th><th class={th}>₹ each</th><th class={th}>Printed</th><th class={th}>Wasted</th><th class={th}>Pending</th><th class={th}>Amount</th><th class={th} />
+          </tr></thead>
+          <tbody>
+            {o.items.map((i, k) => { const p = lineProgress(o, i); return (
+              <tr key={k} class="border-t border-line align-middle"
+                onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); attach(k, e.dataTransfer?.files?.[0]); }}
+                onPaste={(e) => { const fl = [...(e.clipboardData?.files ?? [])][0]; if (fl) { e.preventDefault(); attach(k, fl); } }}>
+                <td class="px-1.5 py-1.5"><div class="flex items-center gap-1.5">
+                  <Thumb thumb={i.thumb} full={i.img} alt={i.name || "Item"} onAdd={(fl) => attach(k, fl)} />
+                  <div class="flex flex-col text-[11px] leading-tight">
+                    <label class="underline cursor-pointer whitespace-nowrap">{i.img || i.thumb ? "Replace" : "Upload"}<input type="file" accept="image/*" class="sr-only" onChange={(e) => { attach(k, (e.target as HTMLInputElement).files?.[0]); (e.target as HTMLInputElement).value = ""; }} /></label>
+                    {(i.img || i.thumb) && <button type="button" class="underline text-red cursor-pointer !min-h-0 text-left" onClick={() => put(k, { img: undefined, thumb: undefined })}>Remove</button>}
+                  </div></div></td>
+                <td class="px-1.5"><input class={f} placeholder="Item name" title={i.name} value={i.name} onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} /></td>
+                <td class="px-1.5 w-[110px]"><input class={f} value={i.material} onInput={(e) => put(k, { material: (e.target as HTMLInputElement).value })} /></td>
+                <td class="px-1.5 w-[110px]"><input class={f} value={i.colour} onInput={(e) => put(k, { colour: (e.target as HTMLInputElement).value })} /></td>
+                <td class="px-1.5 w-[80px]"><input class={f} type="number" min={0} value={i.qty} onInput={(e) => put(k, { qty: num((e.target as HTMLInputElement).value) })} /></td>
+                <td class="px-1.5 w-[90px]"><input class={f} type="number" min={0} value={i.price} onInput={(e) => put(k, { price: num((e.target as HTMLInputElement).value) })} /></td>
+                <td class="px-1.5 w-[80px]"><input class={f} type="number" min={0} value={p.printed} onInput={(e) => put(k, { printed: num((e.target as HTMLInputElement).value) })} /></td>
+                <td class="px-1.5 w-[80px]"><input class={f} type="number" min={0} value={p.failed} onInput={(e) => put(k, { failed: num((e.target as HTMLInputElement).value) })} /></td>
+                <td class="px-1.5 w-[70px] num text-[13px] font-semibold">{p.pending}</td>
+                <td class="px-1.5 w-[90px] num text-[13px] whitespace-nowrap">{inr(i.qty * i.price)}</td>
+                <td class="px-1.5 w-[40px]"><button type="button" aria-label="Remove line" class="h-9 w-9 !min-h-0 rounded-lg hover:bg-c1 grid place-items-center cursor-pointer" onClick={() => setO({ ...o, items: o.items.filter((_, j) => j !== k) })}><Icon name="close" size={14} /></button></td>
+              </tr>); })}
+          </tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between gap-3 mt-2">
+        <span class="t-meta">Drop or paste an image onto any row. Lines without a name are dropped on save.</span>
+        <Button variant="outline" onClick={addLine}>+ Add item</Button>
+      </div>
+    </Sheet>
   );
 }
 
@@ -196,13 +213,13 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const busy = fleet.filter((p) => p.status === "printing").length;
   return (
-    <WorkShell detail={edit ? <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} /> : open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+    <>{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} /></Section>
 
       <Section title="Live orders" note={String(live.length)} action={<a href="/work/orders" class="t-meta whitespace-nowrap">Board →</a>}>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
             <div class={`hidden @lg:grid ${COLS} gap-x-4 @6xl:gap-x-6 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3`}><span>Client</span><span>Type</span><span>Items</span><span class="@max-4xl:hidden">Progress</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
-            {live.slice(0, n).map((o) => <OrderRow key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => { setOpen(null); setEdit(x); }} />)}
+            {live.slice(0, n).map((o) => <OrderRow key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>
         </Section>
@@ -245,6 +262,6 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
           {!jobsSig.value.some((j) => j.status !== "done") && <p class="t-meta px-4 py-3">Queue is empty.</p>}
         </div>
       </Section>
-    </WorkShell>
+    </WorkShell></>
   );
 }

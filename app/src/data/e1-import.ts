@@ -73,15 +73,18 @@ export function mapEmerald1(t: Tables): Migrated {
     };
   });
   for (const b of T("bulk_orders")) {
-    const lines = json<{ name?: string; qty?: number; price?: number | null }[]>(b.lines, []);
+    const lines = json<{ id?: string; name?: string; qty?: number; price?: number | null; printed?: number; good?: number; done?: number; failed?: number; wasted?: number }[]>(b.lines, []);
+    const runs = T("bulk_print_batches").filter((x) => x.order_id === b.id);
+    const sum = (lid: unknown, k: string) => runs.filter((x) => str(x.line_id) === str(lid)).reduce((s, x) => s + num(x[k]), 0);
     orders.push({ id: str(b.id), no: str(b.id), type: "bulk", customer: str(b.party_name), medium: b.party_type === "store" ? "Store" : "Bulk", stage: b.status === "closed" ? "archived" : "production",
-      created: day(b.order_date || b.created_at), due: day(b.order_date || b.created_at), items: lines.map((l) => ({ name: str(l.name), material: "PLA", colour: "", qty: num(l.qty, 1), price: num(l.price), cost: 0 })),
+      created: day(b.order_date || b.created_at), due: day(b.order_date || b.created_at), items: lines.map((l) => ({ name: str(l.name), material: "PLA", colour: "", qty: num(l.qty, 1), price: num(l.price), cost: 0,
+        printed: sum(l.id, "good") || num(l.printed ?? l.good ?? l.done), failed: sum(l.id, "failed") || num(l.failed ?? l.wasted) })),
       approved: true, invoiced: !!b.invoice_number });
   }
   const bulkName = (oid: string, lid: string) => json<{ id: string; name: string }[]>(T("bulk_orders").find((b) => b.id === oid)?.lines, []).find((l) => l.id === lid)?.name ?? "Batch";
   const batches: Batch[] = T("bulk_print_batches").map((b) => ({
     id: str(b.id), orderNo: str(b.order_id), customer: str(T("bulk_orders").find((o) => o.id === b.order_id)?.party_name), name: bulkName(str(b.order_id), str(b.line_id)),
-    units: num(b.good) + num(b.failed), done: num(b.good), stage: (b.status === "done" ? "qc" : "production") as BatchStage,
+    units: num(b.good) + num(b.failed), done: num(b.good), failed: num(b.failed), stage: (b.status === "done" ? "qc" : "production") as BatchStage,
   }));
 
   const jobs: Job[] = T("production_jobs").map((j) => {

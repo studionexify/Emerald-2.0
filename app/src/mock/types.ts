@@ -4,7 +4,8 @@ export type Stage = "quotation" | "po" | "production" | "qc" | "packing" | "invo
 export type OrderSize = "small" | "bulk" | "b2b";
 export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bulk", b2b: "B2B" };
 export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
-export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string };
+export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string;
+  /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number };
 export type Order = {
   /** Alpha = bank/UPI, Beta = cash. One mode per order. */ pay?: "alpha" | "beta";
   id: string; no: string; type: OrderType; customer: string; medium: string;
@@ -23,7 +24,7 @@ export type Spool = { id: string; material: string; colour: string; brand: strin
   hex?: string; finish?: string; diameter?: number; tare?: number; spoolMat?: string; gross?: number; costKg?: number; vendor?: string; bought?: string; lot?: string;
   location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string; slot?: number };
 export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number; vendor?: string; size?: string; location?: string; notes?: string; active?: boolean; cat?: string; machine?: string };
-export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; stage: BatchStage; invoiceNo?: string; tracking?: string };
+export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; /** units scrapped as bad prints */ failed?: number; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";
 export type TaskStep = { id: string; title: string; done: boolean };
 export type PayMode = "alpha" | "beta";

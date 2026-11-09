@@ -141,3 +141,15 @@ export const vMoney = () => _money.value.filter(_sm);
 export const vExpenses = () => _exp.value.filter(_se);
 export const vBills = () => _bills.value.filter((b) => _shown(b.pay));
 export const vQuotes = () => _quotes.value.filter((q) => _shown(q.pay ?? ordersSig.value.find((o) => o.no === q.orderNo)?.pay));
+
+/** Bulk tracking per line: good units printed, units wasted to bad prints, units still to print.
+ *  Uses the counts stored on the line; falls back to this order's batches named after the line. */
+export function lineProgress(o: Order, i: Order["items"][number], batches = batchesSig.value) {
+  const mine = batches.filter((b) => b.orderNo === o.no && b.name === i.name);
+  const printed = i.printed ?? mine.reduce((s, b) => s + (b.done || 0), 0);
+  const failed = i.failed ?? mine.reduce((s, b) => s + (b.failed ?? (b.stage !== "production" ? Math.max(0, b.units - b.done) : 0)), 0);
+  return { printed, failed, pending: Math.max(0, i.qty - printed) };
+}
+export function orderProgress(o: Order, batches = batchesSig.value) {
+  return o.items.reduce((t, i) => { const p = lineProgress(o, i, batches); return { qty: t.qty + i.qty, printed: t.printed + p.printed, failed: t.failed + p.failed, pending: t.pending + p.pending }; }, { qty: 0, printed: 0, failed: 0, pending: 0 });
+}
