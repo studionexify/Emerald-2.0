@@ -47,7 +47,6 @@ export function DayBook() {
   const [f, setF] = useState({ kind: "receipt" as MoneyKind, amount: 0, note: "", to: accs[1]?.id ?? "" });
   const d = daySummary(acc, day);
   const shift = (n: number) => setDay(new Date(Date.parse(day) + n * 864e5).toISOString().slice(0, 10));
-  const total = accs.reduce((s, a) => s + balanceOf(a.id), 0);
   const full = can("mauny", "full");
   return (
     <Shell title="Day book" sub="Running ledger per account — opening, in, out, closing"
@@ -56,14 +55,13 @@ export function DayBook() {
         {accs.map((a) => (
           <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer border ${a.id === acc ? "bg-c0 border-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
             <div class="flex items-baseline justify-between gap-2"><span class="t-meta">{a.name}</span><span class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} to review</span></div>
-            <div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div>
           </button>
         ))}
       </div>
-      <Section title="Day book" note={`${inr(total)} across accounts`} action={<span class="flex items-center gap-1"><button class={sm} onClick={() => shift(-1)} aria-label="Previous day">‹</button><input type="date" class={sm} value={day} onInput={(e) => setDay((e.target as HTMLInputElement).value)} /><button class={sm} onClick={() => shift(1)} aria-label="Next day">›</button></span>}>
+      <Section title="Day book" note={`${accs.length} accounts`} action={<span class="flex items-center gap-1"><button class={sm} onClick={() => shift(-1)} aria-label="Previous day">‹</button><input type="date" class={sm} value={day} onInput={(e) => setDay((e.target as HTMLInputElement).value)} /><button class={sm} onClick={() => shift(1)} aria-label="Next day">›</button></span>}>
         <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
-          <div class="grid grid-cols-4 border-b border-line divide-x divide-line">
-            {([["Opening", d.opening], ["In", d.in], ["Out", -d.out], ["Closing", d.closing]] as const).map(([l, v]) => <div key={l} class="px-3 py-1.5 min-w-0"><div class="t-meta">{l}</div><div class="num text-[13px] font-semibold truncate">{inr(v)}</div></div>)}
+          <div class="grid grid-cols-2 border-b border-line divide-x divide-line">
+            {([["In", d.in], ["Out", -d.out]] as const).map(([l, v]) => <div key={l} class="px-3 py-1.5 min-w-0"><div class="t-meta">{l}</div><div class="num text-[13px] font-semibold truncate">{inr(v)}</div></div>)}
           </div>
           {full && (form ? (
             <div class="grid gap-2 grid-cols-2 md:grid-cols-[150px_150px_minmax(0,1fr)_120px_auto] items-end p-2 bg-c1/50 border-b border-line">
@@ -94,13 +92,13 @@ function Ledger({ acc, upto }: { acc: string; upto: string }) {
   const rows = moneySig.value.filter((m) => m.account === acc && m.date <= upto).sort((a, b) => b.date.localeCompare(a.date));
   let bal = balanceOf(acc, upto);
   const withBal = rows.slice(0, n).map((m) => { const r = { m, bal }; bal -= m.amount; return r; });
-  const cols = "grid grid-cols-[minmax(0,1fr)_88px_88px] md:grid-cols-[minmax(0,1fr)_110px_96px_96px_110px] gap-x-3 items-center px-3";
+  const cols = "grid grid-cols-[minmax(0,1fr)_88px_88px] md:grid-cols-[minmax(0,1fr)_110px_96px_96px] gap-x-3 items-center px-3";
   if (!rows.length) return <p class="t-meta px-3 py-3">No entries on or before {shortDate(upto)}. Add one above.</p>;
   let last = "";
   return (
     <div class="text-[13px]">
-      <div class={`${cols} h-7 t-meta uppercase tracking-[0.06em]`}><span>Entry</span><span class="hidden md:block">Kind</span><span class="text-right">Debit</span><span class="text-right">Credit</span><span class="hidden md:block text-right">Balance</span></div>
-      {withBal.map(({ m, bal }) => {
+      <div class={`${cols} h-7 t-meta uppercase tracking-[0.06em]`}><span>Entry</span><span class="hidden md:block">Kind</span><span class="text-right">Debit</span><span class="text-right">Credit</span></div>
+      {withBal.map(({ m }) => {
         const div = m.date !== last ? (last = m.date, <div key={`d${m.date}`} class="px-3 h-6 flex items-center bg-c1/50 border-t border-line t-meta font-semibold">{new Date(m.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</div>) : null;
         return [div, (
           <button key={m.id} onClick={() => peek(m)} class={`${cols} w-full text-left min-h-9 py-1.5 border-t border-line hover:bg-c1/60 cursor-pointer`}>
@@ -108,7 +106,6 @@ function Ledger({ acc, upto }: { acc: string; upto: string }) {
             <span class="hidden md:block t-meta truncate capitalize">{m.kind.replace("_", " ")}</span>
             <span class="num text-right">{m.amount < 0 ? inr(-m.amount) : ""}</span>
             <span class="num text-right">{m.amount > 0 ? inr(m.amount) : ""}</span>
-            <span class="hidden md:block num text-right text-c3">{inr(bal)}</span>
           </button>
         )];
       })}
@@ -310,7 +307,7 @@ export function Accounts() {
       toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
-        {accountsSig.value.map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="num text-[17px] font-semibold leading-tight mt-0.5">{inr(balanceOf(a.id))}</div><div class="t-meta num">Opening {inr(a.opening)}</div></button>)}
+        {accountsSig.value.map((a) => <button key={a.id} onClick={() => setAcc(a.id)} aria-pressed={a.id === acc} class={`text-left rounded-2xl px-3 py-2 cursor-pointer bg-c0 border ${a.id === acc ? "border-c4" : "border-line hover:bg-c1/40"}`}><div class="t-meta">{a.name}</div><div class="t-meta num">{statementSig.value.filter((l) => l.account === a.id && l.state === "review").length} lines to review</div></button>)}
       </div>
       <Disclosure title="CSV format & matching rules"><p class="t-meta">CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense.</p></Disclosure>
       <Card class="!py-1">
@@ -355,7 +352,7 @@ export function Books() {
         {t === "purchase" && <Table rows={B.purchase} rowKey={(r) => r.id} onRow={peek} cols={tax} />}
         {t === "debtors" && <Table rows={B.debtors} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "p", label: "Party", render: (r) => <b>{r.party}</b> }, { key: "a", label: "0–30", align: "right", render: (r) => inr(r.b0) }, { key: "b", label: "31–60", align: "right", render: (r) => inr(r.b30) }, { key: "c", label: "61–90", align: "right", render: (r) => inr(r.b60) }, { key: "d", label: "90+", align: "right", render: (r) => inr(r.b90) }, { key: "t", label: "Total", align: "right", render: (r) => inr(r.total) }]} />}
         {t === "creditors" && <Table rows={B.creditors} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "p", label: "Party", render: (r) => <b>{r.party}</b> }, { key: "m", label: "MSME", render: (r) => r.msme }, { key: "d", label: "Pay by", render: (r) => (r.due ? shortDate(r.due) : "—") }, { key: "h", label: "43B(h)", render: (r) => (r.h ? <Status tone="blocked">Disallowed if unpaid</Status> : r.msme !== "—" ? <Status tone="waiting">Watch</Status> : "—") }, { key: "t", label: "Owed", align: "right", render: (r) => inr(r.total) }]} />}
-        {t === "bank" && <><div class="mb-2"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /></div><Table rows={bank} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Particulars", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "r", label: "Receipt", align: "right", render: (r) => (r.amount > 0 ? inr(r.amount) : "—") }, { key: "p", label: "Payment", align: "right", render: (r) => (r.amount < 0 ? inr(-r.amount) : "—") }, { key: "b", label: "Balance", align: "right", render: (r) => inr(r.bal) }]} /></>}
+        {t === "bank" && <><div class="mb-2"><SubTabs value={acc} onChange={setAcc} items={accountsSig.value.map((a) => [a.id, a.name] as [string, string])} /></div><Table rows={bank} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Particulars", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "r", label: "Receipt", align: "right", render: (r) => (r.amount > 0 ? inr(r.amount) : "—") }, { key: "p", label: "Payment", align: "right", render: (r) => (r.amount < 0 ? inr(-r.amount) : "—") }]} /></>}
         {t === "expense" && <><Table rows={B.heads} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "h", label: "Head", render: (r) => <b>{r.head}</b> }, { key: "a", label: "FY", align: "right", render: (r) => inr(r.amount) }]} />
           <h3 class="font-semibold text-sm mt-4 mb-1">Wastage log</h3><Table rows={consSig.value.filter((c) => c.kind === "scrap")} rowKey={(c) => c.id} onRow={peek} cols={[{ key: "i", label: "Scrap", render: (c) => <b>{c.item}</b> }, { key: "o", label: "Order", render: (c) => c.orderNo ?? "—" }, { key: "q", label: "Grams", align: "right", render: (c) => c.qty }, { key: "v", label: "Cost", align: "right", render: (c) => inr(c.cost) }]} /></>}
         {t === "capital" && <><Table rows={moneySig.value.filter((m) => ["capital_in", "drawings"].includes(m.kind))} rowKey={(r) => r.id} onRow={peek} cols={[{ key: "t", label: "Entry", render: (r) => <b>{r.note}</b> }, { key: "d", label: "Date", render: (r) => shortDate(r.date) }, { key: "a", label: "Amount", align: "right", render: (r) => inr(r.amount) }]} />

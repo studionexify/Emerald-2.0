@@ -110,3 +110,57 @@ if (!done3 && ordersSig.value.some((o) => o.id.startsWith("demo-")) && !moneySig
     M(12, -6, 0, "expense", -2500, "Marketing", "Instagram boost"), M(13, -7, 0, "expense", -4350, "Parts & tools", "Hotend + nozzles"),
   ];
 }
+
+/* Fourth pass (v4): invoices, quotes, bills, expenses, goals, statement lines, assets, loans, GST status — so every Mauny tab has content. */
+import { assetsSig, billsSig, expensesSig, goalsSig, gstSig, invoicesSig, loansSig, nextNo, openingSig, quotesSig, statementSig, type Bill, type Expense, type Goal, type Invoice, type Quote, type StatementLine } from "./ledger";
+let done4 = false;
+try { done4 = !!localStorage.getItem("emerald:demo4"); localStorage.setItem("emerald:demo4", "1"); } catch {}
+if (!done4 && ordersSig.value.some((o) => o.id.startsWith("demo-")) && !invoicesSig.value.length) {
+  const acc = accountsSig.value.map((a) => a.id);
+  const pre = nextNo("invoice", d(0)).replace(/\d+$/, "");
+  const I = (i: number, n: number, customer: string, gstin: string | undefined, orderNo: string, lines: Invoice["lines"], paid?: number): Invoice =>
+    ({ id: `demo-i${i}`, kind: "invoice", no: `${pre}${String(i + 1).padStart(3, "0")}`, date: d(n), customer, gstin, orderNo, lines, gstRate: 18, interstate: !!gstin && gstin.slice(0, 2) !== "29", status: "issued", ...(paid !== undefined ? { paidOn: d(paid), paidAccount: acc[0] } : {}) });
+  invoicesSig.value = [
+    I(0, -20, "Paper Trail Stationers", "27AABCP1234F1Z5", "EM-2090", [{ desc: "Pen stand", hsn: "3926", qty: 80, rate: 140 }], -12),
+    I(1, -14, "Meera Iyer", undefined, "EM-2093", [{ desc: "Custom figurine", hsn: "3926", qty: 1, rate: 1450 }], -14),
+    I(2, -9, "The Gift Box Co.", "27AAGCT5678K1Z2", "EM-2103", [{ desc: "Lithophane lamp", hsn: "9405", qty: 10, rate: 850 }]),
+    I(3, -6, "Studio Kiln Architects", "36AAKFS9012L1Z8", "EM-2105", [{ desc: "Site model 1:200 — 50% milestone", hsn: "4906", qty: 1, rate: 9250 }]),
+    I(4, -3, "Kabir Singh", undefined, "EM-2108", [{ desc: "Cable clips", hsn: "3926", qty: 20, rate: 25 }], -1),
+    I(5, -1, "Rohan Mehta", undefined, "EM-2104", [{ desc: "Phone stand — advance batch", hsn: "3926", qty: 50, rate: 95 }]),
+  ];
+  const Q = (i: number, n: number, customer: string, lines: Quote["lines"], outcome: Quote["outcome"], orderNo?: string): Quote => ({ id: `demo-q${i}`, no: `Q-${pre.replace(/-$/, "")}-${d(n).slice(5, 7)}-${String(i + 1).padStart(3, "0")}`, date: d(n), customer, orderNo, lines, gstRate: 18, valid: d(n + 15), outcome });
+  quotesSig.value = [
+    Q(0, -2, "BrightMinds School", [{ desc: "Molecule kit", hsn: "9023", qty: 50, rate: 420 }, { desc: "Gear set", hsn: "9023", qty: 50, rate: 180 }], "open", "EM-2107"),
+    Q(1, -8, "Rohan Mehta", [{ desc: "Phone stand", hsn: "3926", qty: 200, rate: 95 }], "approved", "EM-2104"),
+    Q(2, -11, "Nest Interiors", [{ desc: "Pendant lamp shades", hsn: "9405", qty: 12, rate: 1600 }], "lost"),
+    Q(3, -4, "Ravi Kumar", [{ desc: "Bobblehead", hsn: "3926", qty: 1, rate: 1200 }], "open"),
+  ];
+  const B = (i: number, n: number, vendor: string, gstin: string, no: string, sub: number, cat: string, status: Bill["status"], lines?: Bill["lines"]): Bill =>
+    ({ id: `demo-bl${i}`, vendor, gstin, no, date: d(n), subtotal: sub, tax: Math.round(sub * 0.18), total: Math.round(sub * 1.18), cat, status, note: status === "needs_review" ? "Check the GST split before logging" : "", lines, fy: "FY 2026-27" });
+  billsSig.value = [
+    B(0, -1, "Polymaker India", "29AAFCP2211K1Z9", "PMI/2611/88", 4200, "Filament", "needs_review", [{ desc: "PLA White 1 kg", amount: 2478, qty: 2, unit: "kg" }, { desc: "PETG Grey 1 kg", amount: 2478, qty: 2, unit: "kg" }]),
+    B(1, -3, "BoxKart Packaging", "27AAGCB9012P1Z3", "BK-5541", 1400, "Packing", "logged"),
+    B(2, -5, "Robu.in", "27AAICR4455Q1Z1", "RB-77120", 3686, "Parts", "logged"),
+    B(3, -2, "Adobe India", "", "ADB-112233", 762, "Software", "needs_review"),
+    B(4, -7, "BESCOM", "", "EB-NOV-26", 2898, "Electricity", "logged"),
+  ];
+  const E = (i: number, n: number, head: string, vendor: string, amount: number, tax: number, paid: boolean, extra: Partial<Expense> = {}): Expense => ({ id: `demo-e${i}`, date: d(n), head, vendor, amount, tax, paid, account: paid ? acc[0] : undefined, ...extra });
+  expensesSig.value = [
+    E(0, -2, "Rent", "Studio landlord", 18000, 0, true), E(1, -3, "Electricity", "BESCOM", 3420, 0, true),
+    E(2, -4, "Salaries", "Arjun", 24000, 0, true), E(3, -5, "Packing", "BoxKart Packaging", 1652, 252, true, { billId: "demo-bl1" }),
+    E(4, -5, "Parts", "Robu.in", 4350, 664, true, { billId: "demo-bl2" }), E(5, -6, "Marketing", "Meta ads", 2500, 0, true),
+    E(6, 0, "Filament", "Polymaker India", 4956, 756, false, { msme: "Small", dueDate: d(30) }), E(7, -1, "Freight", "DTDC", 720, 0, true),
+  ];
+  const G = (i: number, title: string, metric: Goal["metric"], target: number, note: string): Goal => ({ id: `demo-g${i}`, title, metric, start: d(-8), end: d(22), period: "month", target, note, archived: false });
+  goalsSig.value = [G(0, "₹2 lakh revenue this month", "revenue", 200000, "Push B2B gift shops"), G(1, "Collect every overdue invoice", "collection", 30000, "Gift Box + Studio Kiln"), G(2, "Keep spend under ₹70k", "expense_cap", 70000, ""), G(3, "40 orders", "orders", 40, "Instagram + repeat clients"), G(4, "Hold 45% margin", "margin_pct", 45, "")];
+  const S = (i: number, n: number, text: string, amount: number, state: StatementLine["state"], match?: string): StatementLine => ({ id: `demo-st${i}`, account: acc[0], date: d(n), text, amount, state, match, hash: `demo-${i}` });
+  statementSig.value = [
+    S(0, 0, "NEFT CR THE GIFT BOX CO", 9250, "review"), S(1, -1, "UPI DR POLYMAKER INDIA", -4956, "review"), S(2, -2, "IMPS CR STUDIO KILN ARCH", 9250, "confirmed", "Receipt"),
+    S(3, -2, "ACH DR META PLATFORMS", -2500, "confirmed", "Marketing"), S(4, -3, "NEFT DR LANDLORD RENT NOV", -18000, "confirmed", "Rent"), S(5, -4, "UPI CR RVK8812@okaxis", 1200, "review"), S(6, -5, "POS DR AMAZON PAY", -649, "rejected"),
+  ];
+  assetsSig.value = [{ id: "demo-as0", name: "Bambu X1 Carbon", machine: "Bambu X1C · 01", block: "Plant & machinery", blockRate: 15, cost: 145000, date: "2026-04-18" }, { id: "demo-as1", name: "Prusa MK4", machine: "Prusa MK4 · 03", block: "Plant & machinery", blockRate: 15, cost: 92000, date: "2025-09-02" }, { id: "demo-as2", name: "Workstation PC", machine: "—", block: "Computers", blockRate: 40, cost: 68000, date: "2025-06-10" }];
+  loansSig.value = [{ id: "demo-ln0", lender: "HDFC Business Loan", principal: 300000, rate: 11.5, date: "2025-11-01", repaid: 85000 }];
+  openingSig.value = { capital: 250000, stock: 38000, closingStock: 42000 };
+  const ym2 = (n: number) => { const x = new Date(); x.setMonth(x.getMonth() + n); return x.toISOString().slice(0, 7); };
+  gstSig.value = { [ym2(-2)]: { r1: true, r3b: true, locked: true }, [ym2(-1)]: { r1: true, r3b: false, locked: false } };
+}

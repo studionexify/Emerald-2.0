@@ -9,12 +9,12 @@ import { clientsSig, log, me, openOrderSig, ordersSig, printersSig, segmentOf, S
 
 type ListKey = "myday" | "important" | "planned" | "assigned" | "linked" | "tasks" | `list:${string}`;
 const SMART: { k: ListKey; label: string; icon: string; hue: string }[] = [
-  { k: "myday", label: "My Day", icon: "sun", hue: "#d97706" },
-  { k: "important", label: "Important", icon: "star", hue: "#db2777" },
-  { k: "planned", label: "Planned", icon: "calendar", hue: "#0d9488" },
-  { k: "assigned", label: "Assigned to me", icon: "user", hue: "#16a34a" },
-  { k: "linked", label: "Linked to work", icon: "link", hue: "#9333ea" },
-  { k: "tasks", label: "Tasks", icon: "list", hue: "#2563eb" },
+  { k: "myday", label: "My Day", icon: "sun", hue: "#C49A5A" },
+  { k: "important", label: "Important", icon: "star", hue: "#C08497" },
+  { k: "planned", label: "Planned", icon: "calendar", hue: "#6FA39C" },
+  { k: "assigned", label: "Assigned to me", icon: "user", hue: "#6E9C7C" },
+  { k: "linked", label: "Linked to work", icon: "link", hue: "#9A86B8" },
+  { k: "tasks", label: "Tasks", icon: "list", hue: "#6B8DB5" },
 ];
 const LINK_KINDS = ["Order", "Quotation", "Client", "Printer"] as const;
 const myName = () => me.value?.name ?? "You";
@@ -37,13 +37,13 @@ function linkOptions(kind: string): { ref: string; label: string }[] {
   return printersSig.value.map((p) => ({ ref: p.name, label: p.name }));
 }
 const linkLabel = (l: NonNullable<Task["link"]>) => { const o = (l.kind === "Order" || l.kind === "Quotation") && ordersSig.value.find((x) => x.no === l.ref); return o ? `${l.ref} · ${o.customer}` : l.ref; };
-const dueTone = (d: string) => (d < today() ? "#dc2626" : d === today() ? "#2563eb" : "var(--c-3)");
+const dueTone = (d: string) => (d < today() ? "#B97468" : d === today() ? "#6B8DB5" : "var(--c-3)");
 const dueText = (d: string) => (d === today() ? "Today" : d < today() ? `Overdue · ${shortDate(d)}` : shortDate(d));
 
 function Check({ t, big }: { t: Task; big?: boolean }) {
   return (
     <button aria-label={t.done ? "Mark as not completed" : "Mark as completed"} onClick={(e) => { e.stopPropagation(); toggle(t); }}
-      class={`group shrink-0 rounded-full grid place-items-center cursor-pointer !min-h-0 border-2 ${big ? "w-6 h-6" : "w-5 h-5"} ${t.done ? "bg-[#2563eb] border-[#2563eb] text-white" : "border-c3 hover:border-[#2563eb] text-[#2563eb]"}`}>
+      class={`group shrink-0 rounded-full grid place-items-center cursor-pointer !min-h-0 border-2 ${big ? "w-6 h-6" : "w-5 h-5"} ${t.done ? "bg-[#6B8DB5] border-[#6B8DB5] text-white" : "border-c3 hover:border-[#6B8DB5] text-[#6B8DB5]"}`}>
       <span class={t.done ? "" : "opacity-0 group-hover:opacity-100"}><Icon name="check" size={big ? 13 : 11} /></span>
     </button>
   );
@@ -51,7 +51,7 @@ function Check({ t, big }: { t: Task; big?: boolean }) {
 function Star({ t }: { t: Task }) {
   return (
     <button aria-label={t.important ? "Remove importance" : "Mark as important"} aria-pressed={!!t.important} onClick={(e) => { e.stopPropagation(); put(t.id, { important: !t.important }); }}
-      class={`w-8 h-8 !min-h-0 shrink-0 grid place-items-center rounded-lg cursor-pointer hover:bg-c1 ${t.important ? "text-[#db2777]" : "text-c2"}`}>
+      class={`w-8 h-8 !min-h-0 shrink-0 grid place-items-center rounded-lg cursor-pointer hover:bg-c1 ${t.important ? "text-[#C08497]" : "text-c2"}`}>
       <svg width="17" height="17" viewBox="0 0 24 24" fill={t.important ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" /></svg>
     </button>
   );
@@ -64,14 +64,14 @@ function Row({ t, sel, onSel }: { t: Task; sel: boolean; onSel: () => void }) {
     steps.length > 0 && <span key="s">{steps.filter((s) => s.done).length} of {steps.length}</span>,
     t.due && <span key="u" class="inline-flex items-center gap-1" style={{ color: t.done ? undefined : dueTone(t.due) }}><Icon name="calendar" size={11} />{dueText(t.due)}</span>,
     t.repeat && <span key="r" class="inline-flex items-center gap-1"><Icon name="repeat" size={11} />{t.repeat}</span>,
-    t.link && <button key="l" onClick={(e) => { e.stopPropagation(); openLink(t.link!); }} class="inline-flex items-center gap-1 !min-h-0 text-[#9333ea] font-semibold hover:underline cursor-pointer"><Icon name="link" size={11} />{t.link.kind} · {linkLabel(t.link)}</button>,
+    t.link && <button key="l" onClick={(e) => { e.stopPropagation(); openLink(t.link!); }} class="inline-flex items-center gap-1 !min-h-0 text-[#9A86B8] font-semibold hover:underline cursor-pointer"><Icon name="link" size={11} />{t.link.kind} · {linkLabel(t.link)}</button>,
     t.list && <span key="t">{t.list}</span>,
     !isMine(t) && <span key="w" class="inline-flex items-center gap-1"><Icon name="user" size={11} />{t.who}</span>,
     t.notes && <span key="n">Note</span>,
   ].filter(Boolean);
   return (
     <div role="button" tabIndex={0} onClick={onSel} onKeyDown={(e) => e.key === "Enter" && onSel()}
-      class={`flex items-center gap-3 pl-4 pr-2 min-h-[52px] py-2 rounded-lg cursor-pointer !min-h-0 shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${sel ? "bg-[color-mix(in_srgb,#2563eb_10%,var(--c-0))] ring-1 ring-[#2563eb]/40" : "bg-c0 hover:bg-c1/70"}`}>
+      class={`flex items-center gap-3 pl-4 pr-2 min-h-[52px] py-2 rounded-lg cursor-pointer !min-h-0 shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${sel ? "bg-[color-mix(in_srgb,#6B8DB5_10%,var(--c-0))] ring-1 ring-[#6B8DB5]/40" : "bg-c0 hover:bg-c1/70"}`}>
       <Check t={t} />
       <div class="min-w-0 flex-1">
         <div class={`text-[14px] leading-snug ${t.done ? "line-through text-c3" : "text-c4"}`}>{t.title}</div>
@@ -100,18 +100,18 @@ function Detail({ t, onClose }: { t: Task; onClose: () => void }) {
         </div>
         {steps.map((s) => (
           <div key={s.id} class="flex items-center gap-3 px-4 h-10 border-t border-line">
-            <button aria-label="Toggle step" onClick={() => put(t.id, { steps: steps.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)) })} class={`w-4 h-4 !min-h-0 rounded-full border-2 grid place-items-center cursor-pointer ${s.done ? "bg-[#2563eb] border-[#2563eb] text-white" : "border-c3"}`}>{s.done && <Icon name="check" size={9} />}</button>
+            <button aria-label="Toggle step" onClick={() => put(t.id, { steps: steps.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)) })} class={`w-4 h-4 !min-h-0 rounded-full border-2 grid place-items-center cursor-pointer ${s.done ? "bg-[#6B8DB5] border-[#6B8DB5] text-white" : "border-c3"}`}>{s.done && <Icon name="check" size={9} />}</button>
             <input class={`flex-1 min-w-0 bg-transparent outline-none text-[13px] ${s.done ? "line-through text-c3" : ""}`} value={s.title} onInput={(e) => put(t.id, { steps: steps.map((x) => (x.id === s.id ? { ...x, title: (e.target as HTMLInputElement).value } : x)) })} />
             <button aria-label="Delete step" onClick={() => put(t.id, { steps: steps.filter((x) => x.id !== s.id) })} class="w-7 h-7 !min-h-0 grid place-items-center rounded text-c2 hover:bg-c1 cursor-pointer"><Icon name="close" size={12} /></button>
           </div>
         ))}
-        <form class="flex items-center gap-3 px-4 h-11 border-t border-line text-[#2563eb]" onSubmit={(e) => { e.preventDefault(); if (step.trim()) { put(t.id, { steps: [...steps, { id: uid(), title: step.trim(), done: false }] }); setStep(""); } }}>
-          <Icon name="plus" size={15} /><input class="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-c4 placeholder:text-[#2563eb]" placeholder={steps.length ? "Next step" : "Add step"} value={step} onInput={(e) => setStep((e.target as HTMLInputElement).value)} />
+        <form class="flex items-center gap-3 px-4 h-11 border-t border-line text-[#6B8DB5]" onSubmit={(e) => { e.preventDefault(); if (step.trim()) { put(t.id, { steps: [...steps, { id: uid(), title: step.trim(), done: false }] }); setStep(""); } }}>
+          <Icon name="plus" size={15} /><input class="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-c4 placeholder:text-[#6B8DB5]" placeholder={steps.length ? "Next step" : "Add step"} value={step} onInput={(e) => setStep((e.target as HTMLInputElement).value)} />
         </form>
       </div>
 
       <div class={box}>
-        <button class={`${opt} ${t.myDay === today() ? "text-[#2563eb] font-semibold" : ""}`} onClick={() => put(t.id, { myDay: t.myDay === today() ? undefined : today() })}>
+        <button class={`${opt} ${t.myDay === today() ? "text-[#6B8DB5] font-semibold" : ""}`} onClick={() => put(t.id, { myDay: t.myDay === today() ? undefined : today() })}>
           <Icon name="sun" size={16} />{t.myDay === today() ? "Added to My Day" : "Add to My Day"}
         </button>
       </div>
@@ -124,11 +124,11 @@ function Detail({ t, onClose }: { t: Task; onClose: () => void }) {
       </div>
 
       <div class={box}>
-        <div class="flex items-center gap-3 px-4 h-11 text-[14px] font-semibold text-[#9333ea]"><Icon name="link" size={16} />Linked to</div>
+        <div class="flex items-center gap-3 px-4 h-11 text-[14px] font-semibold text-[#9A86B8]"><Icon name="link" size={16} />Linked to</div>
         {t.link ? (
           <div class="flex items-center gap-2 px-4 pb-3">
-            <button onClick={() => openLink(t.link!)} class="flex-1 min-w-0 text-left rounded-lg px-3 py-2 cursor-pointer !min-h-0" style={{ background: "color-mix(in srgb, #9333ea 10%, transparent)" }}>
-              <div class="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9333ea]">{t.link.kind}</div>
+            <button onClick={() => openLink(t.link!)} class="flex-1 min-w-0 text-left rounded-lg px-3 py-2 cursor-pointer !min-h-0" style={{ background: "color-mix(in srgb, #9A86B8 10%, transparent)" }}>
+              <div class="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9A86B8]">{t.link.kind}</div>
               <div class="text-[13px] font-semibold truncate">{linkLabel(t.link)}</div>
               <div class="text-[11px] text-c3">Open →</div>
             </button>
@@ -136,7 +136,7 @@ function Detail({ t, onClose }: { t: Task; onClose: () => void }) {
           </div>
         ) : (
           <div class="flex flex-col gap-1.5 px-4 pb-3">
-            <div class="flex gap-1">{LINK_KINDS.map((k) => <button key={k} onClick={() => setLk(k)} class={`h-7 px-2.5 !min-h-0 rounded-full text-[12px] font-medium cursor-pointer ${lk === k ? "bg-[#9333ea] text-white" : "bg-c1 text-c3"}`}>{k}</button>)}</div>
+            <div class="flex gap-1">{LINK_KINDS.map((k) => <button key={k} onClick={() => setLk(k)} class={`h-7 px-2.5 !min-h-0 rounded-full text-[12px] font-medium cursor-pointer ${lk === k ? "bg-[#9A86B8] text-white" : "bg-c1 text-c3"}`}>{k}</button>)}</div>
             <select class={`${sel} w-full h-9`} value="" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) { put(t.id, { link: { kind: lk, ref: v } }); log("Linked task", `${t.title} → ${lk} ${v}`); } }}>
               <option value="">Choose {lk.toLowerCase()}…</option>
               {linkOptions(lk).map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
@@ -163,7 +163,7 @@ export function Todo() {
   const [newList, setNewList] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const tasks = tasksSig.value;
-  const meta = SMART.find((s) => s.k === k) ?? { k, label: k.slice(5), icon: "list", hue: "#2563eb" };
+  const meta = SMART.find((s) => s.k === k) ?? { k, label: k.slice(5), icon: "list", hue: "#6B8DB5" };
   const here = tasks.filter((t) => inList(t, k));
   const open = here.filter((t) => !t.done).sort((a, b) => Number(!!b.important) - Number(!!a.important) || (a.due || "9").localeCompare(b.due || "9"));
   const done = here.filter((t) => t.done);
@@ -190,11 +190,11 @@ export function Todo() {
         <div class="px-3 pt-2 pb-3"><div class="text-[16px] font-bold">To-do</div><div class="text-[12px] text-c3">{tasks.filter((t) => !t.done).length} open · {tasks.filter((t) => t.link && !t.done).length} linked to work</div></div>
         {SMART.map((s) => side(s.k, s.label, s.icon, s.hue))}
         <div class="my-2 border-t border-line" />
-        {taskListsSig.value.map((n) => side(`list:${n}`, n, "list", "#64748b"))}
+        {taskListsSig.value.map((n) => side(`list:${n}`, n, "list", "#8A93A3"))}
         {newList === null
-          ? <button onClick={() => setNewList("")} class="flex items-center gap-3 w-full h-10 px-3 rounded-lg text-[14px] text-[#2563eb] hover:bg-c1/60 cursor-pointer !min-h-0"><Icon name="plus" size={17} />New list</button>
+          ? <button onClick={() => setNewList("")} class="flex items-center gap-3 w-full h-10 px-3 rounded-lg text-[14px] text-[#6B8DB5] hover:bg-c1/60 cursor-pointer !min-h-0"><Icon name="plus" size={17} />New list</button>
           : <form class="px-1" onSubmit={(e) => { e.preventDefault(); const n = newList.trim(); if (n && !taskListsSig.value.includes(n)) { taskListsSig.value = [...taskListsSig.value, n]; setK(`list:${n}`); } setNewList(null); }}>
-              <input autoFocus class="w-full h-10 px-3 rounded-lg border border-[#2563eb] bg-c0 text-[14px] outline-none" placeholder="Untitled list" value={newList} onInput={(e) => setNewList((e.target as HTMLInputElement).value)} onBlur={() => setNewList(null)} />
+              <input autoFocus class="w-full h-10 px-3 rounded-lg border border-[#6B8DB5] bg-c0 text-[14px] outline-none" placeholder="Untitled list" value={newList} onInput={(e) => setNewList((e.target as HTMLInputElement).value)} onBlur={() => setNewList(null)} />
             </form>}
       </aside>
 
@@ -214,10 +214,10 @@ export function Todo() {
             {showDone && done.map((t) => <Row key={t.id} t={t} sel={sel === t.id} onSel={() => setSel(t.id)} />)}
           </>}
         </div>
-        <form class="mx-4 mb-4 flex items-center gap-3 h-12 px-4 rounded-lg bg-c0 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-[#2563eb]" onSubmit={(e) => { e.preventDefault(); add(); }} onClick={() => input.current?.focus()}>
+        <form class="mx-4 mb-4 flex items-center gap-3 h-12 px-4 rounded-lg bg-c0 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-[#6B8DB5]" onSubmit={(e) => { e.preventDefault(); add(); }} onClick={() => input.current?.focus()}>
           <Icon name="plus" size={18} />
-          <input id="todo-add" ref={input} class="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-c4 placeholder:text-[#2563eb]" placeholder="Add a task" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} />
-          {draft && <button type="submit" class="h-8 px-3 !min-h-0 rounded-md bg-[#2563eb] text-white text-[12px] font-semibold cursor-pointer">Add</button>}
+          <input id="todo-add" ref={input} class="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-c4 placeholder:text-[#6B8DB5]" placeholder="Add a task" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} />
+          {draft && <button type="submit" class="h-8 px-3 !min-h-0 rounded-md bg-[#6B8DB5] text-white text-[12px] font-semibold cursor-pointer">Add</button>}
         </form>
       </section>
 
@@ -245,8 +245,8 @@ export function LinkedTasks({ kind, refNo }: { kind: string; refNo: string }) {
           </li>
         ))}
       </ul>
-      <form class="flex items-center gap-2 h-9 px-2 mt-1 rounded-lg bg-c1 text-[#2563eb]" onSubmit={(e) => { e.preventDefault(); if (!v.trim()) return; tasksSig.value = [{ id: uid(), title: v.trim(), due: today(), done: false, who: myName(), created: today(), link: { kind, ref: refNo } }, ...tasksSig.value]; log("Added task", `${v.trim()} → ${refNo}`); setV(""); }}>
-        <Icon name="plus" size={14} /><input class="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-c4 placeholder:text-[#2563eb]" placeholder="Add a task for this" value={v} onInput={(e) => setV((e.target as HTMLInputElement).value)} />
+      <form class="flex items-center gap-2 h-9 px-2 mt-1 rounded-lg bg-c1 text-[#6B8DB5]" onSubmit={(e) => { e.preventDefault(); if (!v.trim()) return; tasksSig.value = [{ id: uid(), title: v.trim(), due: today(), done: false, who: myName(), created: today(), link: { kind, ref: refNo } }, ...tasksSig.value]; log("Added task", `${v.trim()} → ${refNo}`); setV(""); }}>
+        <Icon name="plus" size={14} /><input class="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-c4 placeholder:text-[#6B8DB5]" placeholder="Add a task for this" value={v} onInput={(e) => setV((e.target as HTMLInputElement).value)} />
       </form>
     </div>
   );

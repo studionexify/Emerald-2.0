@@ -74,8 +74,8 @@ function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: O
 /* Live-orders table: fixed columns stay tight, flexible ones (client, items, city) share the extra width. */
 const COLS = "md:grid-cols-[minmax(130px,1.3fr)_minmax(104px,0.7fr)_minmax(150px,1.6fr)_minmax(100px,0.6fr)_minmax(70px,0.7fr)_80px_28px] xl:grid-cols-[minmax(140px,1.3fr)_minmax(110px,0.7fr)_minmax(160px,1.6fr)_minmax(150px,1fr)_minmax(104px,0.6fr)_minmax(80px,0.7fr)_84px_28px]";
 const TRACK: [Order["stage"], string][] = [["quotation", "doc"], ["po", "stamp"], ["production", "printer"], ["qc", "shield"], ["packing", "box"], ["invoice", "receipt"], ["shipping", "truck"]];
-const STAGE_HUE: Record<string, string> = { quotation: "#64748b", po: "#6366f1", production: "#2563eb", qc: "#d97706", packing: "#9333ea", invoice: "#0d9488", shipping: "#16a34a", archived: "#64748b", blocked: "#dc2626" };
-const KIND_HUE = (k: string) => (k.startsWith("B2B") ? "#2563eb" : k === "Bulk" ? "#9333ea" : k === "In-house" ? "#64748b" : "#0d9488");
+const STAGE_HUE: Record<string, string> = { quotation: "#8A93A3", po: "#8C8FC4", production: "#6B8DB5", qc: "#C49A5A", packing: "#9A86B8", invoice: "#6FA39C", shipping: "#6E9C7C", archived: "#8A93A3", blocked: "#B97468" };
+const KIND_HUE = (k: string) => (k.startsWith("B2B") ? "#6B8DB5" : k === "Bulk" ? "#9A86B8" : k === "In-house" ? "#8A93A3" : "#6FA39C");
 const tint = (h: string) => ({ color: h, background: `color-mix(in srgb, ${h} 13%, transparent)` });
 
 function Track({ o }: { o: Order }) {
@@ -189,7 +189,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
                 class={`rounded-[var(--radius-card)] p-4 min-w-0 block min-h-[148px] transition-colors ${hot ? "bg-c4 text-c0 border-2 border-c4 shadow-lg" : "bg-c0 border border-line hover:bg-c1/40"}`}>
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0"><div class="text-[16px] font-bold leading-tight">{p.name}</div><div class={`text-[12px] ${hot ? "opacity-70" : "text-c3"}`}>{p.model}</div></div>
-                  {hot ? <span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full bg-c0 text-c4 text-[11px] font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse" />Printing</span>
+                  {hot ? <span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full bg-c0 text-c4 text-[11px] font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-[#8FC29E] animate-pulse" />Printing</span>
                     : <Status tone={p.status === "down" ? "blocked" : "idle"}>{p.status}</Status>}
                 </div>
                 {j ? (

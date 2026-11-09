@@ -158,7 +158,7 @@ function SpoolEdit({ s, done }: { s: Spool; done: () => void }) {
 const MAT_C: [RegExp, string][] = [
   [/silk/i, "#e879f9"], [/matte/i, "#34d399"], [/marble|stone/i, "#d6d3d1"], [/wood/i, "#c08457"], [/glow/i, "#bef264"], [/sparkle|glitter|galaxy/i, "#f0abfc"],
   [/rainbow|multi|dual|tri/i, "#fda4af"], [/high.?speed|hs\b|hyper/i, "#22d3ee"], [/pla\s*\+|pla.?plus|pla.?pro/i, "#86efac"],
-  [/cf|carbon|gf|glass/i, "#a1a1aa"], [/petg/i, "#60a5fa"], [/pla/i, "#4ade80"], [/abs/i, "#fb923c"], [/asa/i, "#f87171"], [/tpu|tpe|flex/i, "#c084fc"], [/pa|nylon/i, "#facc15"], [/pc|polycarb/i, "#2dd4bf"]];
+  [/cf|carbon|gf|glass/i, "#a1a1aa"], [/petg/i, "#60a5fa"], [/pla/i, "#8FC29E"], [/abs/i, "#fb923c"], [/asa/i, "#f87171"], [/tpu|tpe|flex/i, "#c084fc"], [/pa|nylon/i, "#facc15"], [/pc|polycarb/i, "#2dd4bf"]];
 const hashC = (m: string) => { let h = 0; for (const c of m) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 70% 65%)`; };
 const matC = (m: string) => MAT_C.find(([r]) => r.test(m))?.[1] ?? hashC(m);
 const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;

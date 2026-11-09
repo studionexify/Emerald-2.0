@@ -2,25 +2,55 @@ import { useEffect, useState } from "preact/hooks";
 import { Icon, Page } from "../ui";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
-import { accountsSig, addMoney, balanceOf, can, inr, isExternal, moduleOf, moneySig, parseStatementCsv, statementSig, today, transfer, type MoneyKind } from "../data";
+import { accountsSig, addMoney, can, inr, invoicesSig, invTax, isExternal, log, moduleOf, moneySig, orderTotal, ordersSig, parseStatementCsv, statementSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
+import { persisted } from "../data/store";
 
 /* Mauny entry: a money-tracker home. Log an entry in seconds (type → amount → category → wallet),
    see wallets, the month's in/out, where money went, and every transaction grouped by day. */
 
-type Cat = { k: string; label: string; icon: string; hue: string; kind: MoneyKind };
-const OUT: Cat[] = [
-  ["Filament & resin", "box", "#d97706"], ["Packaging", "box", "#a16207"], ["Shipping", "truck", "#0891b2"], ["Parts & tools", "wrench", "#475569"],
-  ["Rent", "home", "#7c3aed"], ["Electricity", "alert", "#ca8a04"], ["Salaries", "user", "#2563eb"], ["Marketing", "trend", "#db2777"],
-  ["Software", "grid", "#0d9488"], ["Food & travel", "calendar", "#ea580c"], ["Machine", "printer", "#4f46e5"], ["GST / tax", "receipt", "#dc2626"], ["Drawings", "wallet", "#64748b"], ["Other", "more", "#78716c"],
-].map(([label, icon, hue]) => ({ k: label, label, icon, hue, kind: label === "Machine" ? "asset_purchase" : label === "GST / tax" ? "tax_payment" : label === "Drawings" ? "drawings" : "expense" }));
-const IN: Cat[] = [
-  ["Customer payment", "cash", "#16a34a", "receipt"], ["Advance", "stamp", "#0d9488", "advance"], ["Other income", "trend", "#65a30d", "other_income"],
-  ["Capital", "wallet", "#2563eb", "capital_in"], ["Loan", "money", "#7c3aed", "loan_taken"],
-].map(([label, icon, hue, kind]) => ({ k: label, label, icon, hue, kind: kind as MoneyKind }));
-const ALL = [...OUT, ...IN];
+export type Cat = { k: string; label: string; icon: string; hue: string; kind: MoneyKind; dir: "in" | "out" };
+/** Chalk palette — soft, readable tones for categories. */
+export const CHALK = ["#C49A5A", "#B39567", "#74A7B8", "#7D8796", "#9B89BF", "#C7A867", "#6B8DB5", "#C08497", "#6FA39C", "#CC9277", "#8A8BBE", "#B97468", "#8A93A3", "#A09890", "#6E9C7C", "#97A773"];
+const ICONS = ["box", "truck", "wrench", "home", "alert", "user", "trend", "grid", "calendar", "printer", "receipt", "wallet", "cash", "stamp", "money", "doc", "check", "star", "link", "more"];
+const OUT_KINDS: [MoneyKind, string][] = [["expense", "Expense"], ["asset_purchase", "Asset (machine)"], ["tax_payment", "Tax payment"], ["drawings", "Drawings"], ["loan_repayment", "Loan repayment"]];
+const IN_KINDS: [MoneyKind, string][] = [["receipt", "Customer payment"], ["advance", "Advance"], ["other_income", "Other income"], ["capital_in", "Capital"], ["loan_taken", "Loan taken"]];
+const DEFAULT_CATS: Cat[] = [
+  ...([["Filament & resin", "box", 0], ["Packaging", "box", 1], ["Shipping", "truck", 2], ["Parts & tools", "wrench", 3], ["Rent", "home", 4], ["Electricity", "alert", 5],
+    ["Salaries", "user", 6], ["Marketing", "trend", 7], ["Software", "grid", 8], ["Food & travel", "calendar", 9], ["Machine", "printer", 10], ["GST / tax", "receipt", 11], ["Drawings", "wallet", 12], ["Other", "more", 13]] as const)
+    .map(([label, icon, h]): Cat => ({ k: label, label, icon, hue: CHALK[h], dir: "out", kind: label === "Machine" ? "asset_purchase" : label === "GST / tax" ? "tax_payment" : label === "Drawings" ? "drawings" : "expense" })),
+  ...([["Customer payment", "cash", 14, "receipt"], ["Advance", "stamp", 8, "advance"], ["Other income", "trend", 15, "other_income"], ["Capital", "wallet", 6, "capital_in"], ["Loan", "money", 4, "loan_taken"]] as const)
+    .map(([label, icon, h, kind]): Cat => ({ k: label, label, icon, hue: CHALK[h], dir: "in", kind })),
+];
+export const catsSig = persisted<Cat[]>("mauny-cats", DEFAULT_CATS);
 const KIND_CAT: Partial<Record<MoneyKind, string>> = { receipt: "Customer payment", advance: "Advance", other_income: "Other income", capital_in: "Capital", loan_taken: "Loan", expense: "Other", drawings: "Drawings", tax_payment: "GST / tax", asset_purchase: "Machine", loan_repayment: "Other" };
-const catOf = (m: { cat?: string; kind: MoneyKind }) => ALL.find((c) => c.k === (m.cat ?? KIND_CAT[m.kind])) ?? (m.kind.startsWith("transfer") ? { k: "Transfer", label: "Transfer", icon: "rows", hue: "#64748b", kind: m.kind } : OUT[OUT.length - 1]);
-const GREEN = "#16a34a", RED = "#dc2626";
+const catOf = (m: { cat?: string; kind: MoneyKind }): Cat => catsSig.value.find((c) => c.k === (m.cat ?? KIND_CAT[m.kind])) ?? (m.kind.startsWith("transfer") ? { k: "Transfer", label: "Transfer", icon: "rows", hue: "#8A93A3", kind: m.kind, dir: "out" } : { k: m.cat ?? "Other", label: m.cat ?? "Other", icon: "more", hue: "#A09890", kind: m.kind, dir: m.kind === "receipt" ? "in" : "out" });
+
+/** Inline category editor: name, colour, icon, and how it books. */
+function CatEditor({ c, onDone }: { c: Cat; onDone: () => void }) {
+  const [v, setV] = useState(c);
+  const isNew = !catsSig.value.some((x) => x.k === c.k);
+  const save = () => { if (!v.label.trim()) return; const n = { ...v, label: v.label.trim() };
+    catsSig.value = isNew ? [...catsSig.value, { ...n, k: n.label }] : catsSig.value.map((x) => (x.k === c.k ? { ...n, k: c.k } : x)); onDone(); };
+  const kinds = v.dir === "in" ? IN_KINDS : OUT_KINDS;
+  return (
+    <div class="rounded-xl border border-line bg-c1/60 p-3 flex flex-col gap-2.5">
+      <div class="flex items-center gap-2">
+        <span class="w-9 h-9 rounded-full grid place-items-center text-white shrink-0" style={{ background: v.hue }}><Icon name={v.icon} size={16} /></span>
+        <input autoFocus class="flex-1 min-w-0 h-9 px-3 rounded-lg border border-line bg-c0 text-[14px] outline-none" placeholder="Category name" value={v.label} onInput={(e) => setV({ ...v, label: (e.target as HTMLInputElement).value })} />
+      </div>
+      <div class="flex flex-wrap gap-1.5">{CHALK.map((h) => <button key={h} aria-label={`Colour ${h}`} onClick={() => setV({ ...v, hue: h })} class={`w-6 h-6 !min-h-0 rounded-full cursor-pointer ${v.hue === h ? "ring-2 ring-offset-2 ring-c3" : ""}`} style={{ background: h }} />)}</div>
+      <div class="flex flex-wrap gap-1">{ICONS.map((i) => <button key={i} aria-label={`Icon ${i}`} onClick={() => setV({ ...v, icon: i })} class={`w-8 h-8 !min-h-0 rounded-lg grid place-items-center cursor-pointer ${v.icon === i ? "bg-c4 text-c0" : "bg-c0 text-c3 hover:bg-c1"}`}><Icon name={i} size={14} /></button>)}</div>
+      <label class="text-[12px] font-semibold text-c3">Books as<select class="ml-2 h-8 px-2 rounded-md border border-line bg-c0 text-[13px]" value={v.kind} onChange={(e) => setV({ ...v, kind: (e.target as HTMLSelectElement).value as MoneyKind })}>{kinds.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+      <div class="flex items-center gap-2">
+        <button onClick={save} class="h-8 px-3 rounded-lg bg-c4 text-c0 text-[12px] font-bold cursor-pointer !min-h-0">Save</button>
+        <button onClick={onDone} class="h-8 px-3 rounded-lg text-[12px] font-semibold cursor-pointer hover:bg-c1 !min-h-0">Cancel</button>
+        {!isNew && <button onClick={() => { catsSig.value = catsSig.value.filter((x) => x.k !== c.k); onDone(); }} class="ml-auto h-8 px-3 rounded-lg text-[12px] font-semibold cursor-pointer hover:bg-c1 !min-h-0" style={{ color: "#B97468" }}>Delete</button>}
+      </div>
+    </div>
+  );
+}
+
+const GREEN = "#5E8F6C", RED = "#B06A5E";
 const ym = (d: string) => d.slice(0, 7);
 const monthName = (m: string) => new Date(m + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
@@ -29,7 +59,7 @@ export function MaunyHome() {
   const accs = accountsSig.value;
   const [type, setType] = useState<"out" | "in" | "transfer">("out");
   const [amt, setAmt] = useState("");
-  const [cat, setCat] = useState(OUT[0].k);
+  const [cat, setCat] = useState(catsSig.value.find((c) => c.dir === "out")?.k ?? "");
   const [acc, setAcc] = useState(accs[0]?.id ?? "");
   const [to, setTo] = useState(accs[1]?.id ?? "");
   const [date, setDate] = useState(today());
@@ -38,12 +68,31 @@ export function MaunyHome() {
   const [month, setMonth] = useState(ym(today()));
   const [wallet, setWallet] = useState("all");
   const full = can("mauny", "full");
-  const cats = type === "in" ? IN : OUT;
+  const [editCats, setEditCats] = useState(false);
+  const [editing, setEditing] = useState<Cat | null>(null);
+  const [against, setAgainst] = useState("");
+  const cats = catsSig.value.filter((c) => c.dir === (type === "in" ? "in" : "out"));
+  const curCat = cats.find((x) => x.k === cat) ?? cats[0];
+  const linkable = type === "in" && !!curCat && (curCat.kind === "receipt" || curCat.kind === "advance");
+  const paidSoFar = (ref: string) => moneySig.value.filter((m) => m.ref === ref && m.amount > 0).reduce((s, m) => s + m.amount, 0);
+  const dues = [
+    ...invoicesSig.value.filter((i) => i.kind === "invoice" && i.status === "issued" && !i.paidOn).map((i) => ({ ref: i.no, who: i.customer, due: invTax(i).total - paidSoFar(i.no), kind: "Invoice" as const })),
+    ...ordersSig.value.filter((o) => o.type !== "inhouse" && !o.paid && o.stage !== "archived" && !invoicesSig.value.some((i) => i.orderNo === o.no)).map((o) => ({ ref: o.no, who: o.customer, due: orderTotal(o) - paidSoFar(o.no), kind: "Order" as const })),
+  ].filter((x) => x.due > 0);
+  const pick = (ref: string) => { setAgainst(ref); const d = dues.find((x) => x.ref === ref); if (d) { if (!amt) setAmt(String(Math.round(d.due))); if (!note) setNote(d.who); } };
   const save = () => {
     const a = Number(amt); if (!a || !acc) { setMsg("Enter an amount"); return; }
     if (type === "transfer") { if (!to || to === acc) { setMsg("Pick two different wallets"); return; } transfer(acc, to, a, date); }
-    else { const c = cats.find((x) => x.k === cat) ?? cats[0]; addMoney({ date, account: acc, kind: c.kind, amount: type === "in" ? a : -a, note: note || c.label, cat: c.k, source: "mauny_entry" }); }
-    setMsg(`Saved ${inr(a)} · ${type === "transfer" ? "transfer" : cat}`); setAmt(""); setNote(""); setMonth(ym(date));
+    else {
+      const c = curCat; const d = linkable ? dues.find((x) => x.ref === against) : undefined;
+      addMoney({ date, account: acc, kind: c.kind, amount: type === "in" ? a : -a, note: note || d?.who || c.label, cat: c.k, ref: d?.ref, source: "mauny_entry" });
+      if (d && a >= d.due - 1) {
+        if (d.kind === "Invoice") { const inv = invoicesSig.value.find((i) => i.no === d.ref); if (inv) updateInvoice(inv, { paidOn: date, paidAccount: acc }, "Marked invoice paid"); }
+        else { ordersSig.value = ordersSig.value.map((o) => (o.no === d.ref ? { ...o, paid: true } : o)); log("Marked order paid", d.ref); }
+      }
+      setAgainst("");
+    }
+    setMsg(`Saved ${inr(a)} · ${type === "transfer" ? "transfer" : curCat?.label}${against ? ` · against ${against}` : ""}`); setAmt(""); setNote(""); setMonth(ym(date));
     setTimeout(() => setMsg(""), 2500);
   };
   const onStatement = (fl: FileList | null) => {
@@ -57,22 +106,21 @@ export function MaunyHome() {
   const inflow = real.filter((m) => m.amount > 0).reduce((s, m) => s + m.amount, 0), outflow = -real.filter((m) => m.amount < 0).reduce((s, m) => s + m.amount, 0);
   const byCat = Object.entries(real.filter((m) => m.amount < 0).reduce<Record<string, number>>((o, m) => { const c = catOf(m).k; o[c] = (o[c] ?? 0) - m.amount; return o; }, {})).sort((a, b) => b[1] - a[1]);
   const days = [...new Set(rows.map((m) => m.date))].sort().reverse();
-  const total = accs.reduce((s, a) => s + balanceOf(a.id), 0);
   const review = statementSig.value.filter((l) => l.state === "review").length;
-  const seg = (k: typeof type, l: string, hue: string) => <button key={k} onClick={() => { setType(k); setCat((k === "in" ? IN : OUT)[0].k); }} aria-pressed={type === k} class={`flex-1 h-9 rounded-lg text-[13px] font-bold cursor-pointer !min-h-0 ${type === k ? "bg-c0 shadow-sm" : "text-c3"}`} style={type === k ? { color: hue } : undefined}>{l}</button>;
-  const hue = type === "in" ? GREEN : type === "out" ? RED : "#2563eb";
+  const seg = (k: typeof type, l: string, hue: string) => <button key={k} onClick={() => { setType(k); setCat(catsSig.value.find((c) => c.dir === (k === "in" ? "in" : "out"))?.k ?? ""); setEditCats(false); setEditing(null); }} aria-pressed={type === k} class={`flex-1 h-9 rounded-lg text-[13px] font-bold cursor-pointer !min-h-0 ${type === k ? "bg-c0 shadow-sm" : "text-c3"}`} style={type === k ? { color: hue } : undefined}>{l}</button>;
+  const hue = type === "in" ? GREEN : type === "out" ? RED : "#6B8DB5";
   const inp = "h-10 px-3 rounded-lg border border-line bg-c1 text-[14px] w-full min-w-0 outline-none focus:border-c3";
   return (
     <Page title="Mauny" sub="Log money in and out — everything else lives in the tabs" tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))} detail={inspectSig.value ? <Peeked /> : null}>
       <div class="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
-        <button onClick={() => setWallet("all")} aria-pressed={wallet === "all"} class={`shrink-0 min-w-[200px] text-left rounded-[var(--radius-card)] p-4 cursor-pointer ${wallet === "all" ? "bg-c4 text-c0" : "bg-c0 border border-line"}`}>
-          <div class="text-[12px] font-semibold opacity-70 flex items-center gap-1.5"><Icon name="wallet" size={13} />Total · {accs.length} wallets</div>
-          <div class="num text-[24px] font-bold leading-tight mt-1">{inr(total)}</div>
+        <button onClick={() => setWallet("all")} aria-pressed={wallet === "all"} class={`shrink-0 min-w-[170px] text-left rounded-[var(--radius-card)] px-4 py-3 cursor-pointer ${wallet === "all" ? "bg-c4 text-c0" : "bg-c0 border border-line"}`}>
+          <div class="text-[14px] font-bold flex items-center gap-2"><Icon name="wallet" size={15} />All wallets</div>
+          <div class="text-[12px] opacity-70 mt-0.5">{accs.length} accounts</div>
         </button>
         {accs.map((a) => (
-          <button key={a.id} onClick={() => { setWallet(a.id); setAcc(a.id); }} aria-pressed={wallet === a.id} class={`shrink-0 min-w-[180px] text-left rounded-[var(--radius-card)] p-4 cursor-pointer border ${wallet === a.id ? "bg-c0 border-c4 ring-1 ring-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
-            <div class="text-[12px] font-semibold text-c3 flex items-center justify-between gap-2"><span class="truncate">{a.name}</span>{statementSig.value.some((l) => l.account === a.id && l.state === "review") && <span class="text-[10px] font-bold rounded-full px-1.5 bg-[#fde68a] text-black">review</span>}</div>
-            <div class="num text-[20px] font-bold leading-tight mt-1">{inr(balanceOf(a.id))}</div>
+          <button key={a.id} onClick={() => { setWallet(a.id); setAcc(a.id); }} aria-pressed={wallet === a.id} class={`shrink-0 min-w-[170px] text-left rounded-[var(--radius-card)] px-4 py-3 cursor-pointer border ${wallet === a.id ? "bg-c0 border-c4 ring-1 ring-c4" : "bg-c0 border-line hover:bg-c1/40"}`}>
+            <div class="text-[14px] font-bold flex items-center justify-between gap-2"><span class="truncate">{a.name}</span>{statementSig.value.some((l) => l.account === a.id && l.state === "review") && <span class="text-[10px] font-bold rounded-full px-1.5 bg-[#fde68a] text-black">review</span>}</div>
+            <div class="text-[12px] text-c3 mt-0.5">{moneySig.value.filter((m) => m.account === a.id && ym(m.date) === month).length} entries this month</div>
           </button>
         ))}
       </div>
@@ -80,7 +128,7 @@ export function MaunyHome() {
       <div class="grid gap-4 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] items-start">
         {full && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 lg:sticky lg:top-0">
           <div class="text-[15px] font-bold">New entry</div>
-          <div class="flex gap-1 p-1 rounded-xl bg-c1">{seg("out", "Expense", RED)}{seg("in", "Income", GREEN)}{seg("transfer", "Transfer", "#2563eb")}</div>
+          <div class="flex gap-1 p-1 rounded-xl bg-c1">{seg("out", "Expense", RED)}{seg("in", "Income", GREEN)}{seg("transfer", "Transfer", "#6B8DB5")}</div>
           <label class="flex items-center gap-2 h-16 px-4 rounded-xl border-2" style={{ borderColor: hue }}>
             <span class="text-[26px] font-bold" style={{ color: hue }}>₹</span>
             <input id="mauny-amount" type="number" inputMode="decimal" min={0} placeholder="0" value={amt} onInput={(e) => setAmt((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && save()}
@@ -88,18 +136,30 @@ export function MaunyHome() {
           </label>
           {type !== "transfer" ? (
             <div>
-              <div class="text-[12px] font-semibold text-c3 mb-1.5">Category</div>
+              <div class="text-[12px] font-semibold text-c3 mb-1.5 flex items-center justify-between">Category<button onClick={() => { setEditCats(!editCats); setEditing(null); }} class="text-[12px] font-semibold underline cursor-pointer !min-h-0">{editCats ? "Done" : "Edit categories"}</button></div>
+              {editing && <div class="mb-2"><CatEditor key={editing.k} c={editing} onDone={() => setEditing(null)} /></div>}
               <div class="grid grid-cols-4 gap-1.5">
                 {cats.map((c) => (
-                  <button key={c.k} onClick={() => setCat(c.k)} aria-pressed={cat === c.k} title={c.label}
+                  <button key={c.k} onClick={() => (editCats ? setEditing(c) : setCat(c.k))} aria-pressed={cat === c.k} title={editCats ? `Edit ${c.label}` : c.label}
                     class={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl cursor-pointer !min-h-0 border ${cat === c.k ? "border-current" : "border-transparent hover:bg-c1"}`} style={cat === c.k ? { color: c.hue, background: `color-mix(in srgb, ${c.hue} 10%, transparent)` } : undefined}>
-                    <span class="w-9 h-9 rounded-full grid place-items-center text-white" style={{ background: c.hue }}><Icon name={c.icon} size={16} /></span>
+                    <span class="relative w-9 h-9 rounded-full grid place-items-center text-white" style={{ background: c.hue }}><Icon name={c.icon} size={16} />{editCats && <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-c0 text-c4 grid place-items-center shadow"><Icon name="edit" size={9} /></span>}</span>
                     <span class={`text-[11px] leading-tight text-center ${cat === c.k ? "font-bold" : "text-c4"}`}>{c.label}</span>
                   </button>
                 ))}
+                {editCats && <button onClick={() => setEditing({ k: `new-${Date.now()}`, label: "", icon: "more", hue: CHALK[cats.length % CHALK.length], dir: type === "in" ? "in" : "out", kind: type === "in" ? "other_income" : "expense" })}
+                  class="flex flex-col items-center gap-1 py-2 px-1 rounded-xl cursor-pointer !min-h-0 border border-dashed border-line hover:bg-c1"><span class="w-9 h-9 rounded-full grid place-items-center bg-c1 text-c3"><Icon name="plus" size={16} /></span><span class="text-[11px]">Add</span></button>}
               </div>
             </div>
           ) : null}
+          {linkable && (
+            <label class="text-[12px] font-semibold text-c3">Against invoice / order
+              <select class={inp} value={against} onChange={(e) => pick((e.target as HTMLSelectElement).value)}>
+                <option value="">Not linked</option>
+                {dues.map((x) => <option key={x.ref} value={x.ref}>{x.kind} {x.ref} · {x.who} · {inr(x.due)} due</option>)}
+              </select>
+              {against && <span class="block mt-1 font-normal">Paying the full due marks it paid; less is recorded as a part payment.</span>}
+            </label>
+          )}
           <div class="grid grid-cols-2 gap-2">
             <label class="text-[12px] font-semibold text-c3">{type === "transfer" ? "From" : "Wallet"}<select class={inp} value={acc} onChange={(e) => setAcc((e.target as HTMLSelectElement).value)}>{accs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
             {type === "transfer"
