@@ -13,7 +13,7 @@ const jobTone = (s: string) => (s === "done" ? "done" : s === "printing" ? "acti
 const PAGE = 25;
 
 /** Pipeline tracker: one segmented strip, each stage a count + share bar. */
-function StageStrip({ list }: { list: Order[] }) {
+function StageStrip({ list, active, onPick }: { list: Order[]; active: string; onPick: (k: string) => void }) {
   const live = list.filter((o) => o.stage !== "archived");
   const max = Math.max(1, ...STAGES.map((s) => list.filter((o) => o.stage === s.key).length));
   return (
@@ -21,11 +21,11 @@ function StageStrip({ list }: { list: Order[] }) {
       {STAGES.map((s) => {
         const n = list.filter((o) => o.stage === s.key).length;
         return (
-          <a key={s.key} href="/work/orders" class="px-3 py-2 min-w-0 hover:bg-c1/60 border-line max-md:[&:nth-child(n+5)]:border-t">
+          <button key={s.key} type="button" onClick={() => onPick(active === s.key ? "" : s.key)} aria-pressed={active === s.key} class={`px-3 py-2 min-w-0 text-left cursor-pointer !min-h-0 border-line max-md:[&:nth-child(n+5)]:border-t ${active === s.key ? "bg-c1" : "hover:bg-c1/60"}`}>
             <div class="t-meta truncate">{s.label}</div>
             <div class="num text-[17px] font-semibold leading-tight">{n}</div>
             <div class="mt-1.5 h-1 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-c4 rounded-full" style={{ width: `${(n / max) * 100}%` }} /></div>
-          </a>
+          </button>
         );
       })}
       <span class="sr-only">{live.length} live orders</span>
@@ -206,17 +206,20 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [open, setOpen] = useOpenOrder();
   const [edit, setEdit] = useState<Order | null>(null);
   const [n, setN] = useState(PAGE);
+  const [st, setSt] = useState("");
   const mine = vOrders().filter((o) => segmentOf(o) === seg);
   const subs = [...new Set(mine.map((o) => kindOf(o)))].sort();
   const list = mine.filter((o) => f === "all" || kindOf(o) === f);
-  const live = list.filter((o) => o.stage !== "archived").sort((a, b) => Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
+  const live = list.filter((o) => (st ? o.stage === st : o.stage !== "archived")).sort((a, b) => Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
   const fleet = printersSig.value.filter((p) => p.active !== false);
+  const nos = new Set(mine.map((o) => o.no));
+  const myJobs = jobsSig.value.filter((j) => nos.has(j.orderNo));
   const busy = fleet.filter((p) => p.status === "printing").length;
   return (
-    <>{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
-      <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} /></Section>
+    <>{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+      <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} active={st} onPick={setSt} /></Section>
 
-      <Section title="Live orders" note={String(live.length)} action={<a href="/work/orders" class="t-meta whitespace-nowrap">Board →</a>}>
+      <Section title={st ? `${STAGES.find((x) => x.key === st)?.label} orders` : "Live orders"} note={String(live.length)} action={st ? <button class="t-meta underline cursor-pointer !min-h-0" onClick={() => setSt("")}>Show all live</button> : undefined}>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
             <div class={`hidden @lg:grid ${COLS} gap-x-4 @6xl:gap-x-6 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3`}><span>Client</span><span>Type</span><span>Items</span><span class="@max-4xl:hidden">Progress</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
             {live.slice(0, n).map((o) => <OrderRow key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} />)}
@@ -228,10 +231,10 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         <Waterfall min={260} max={5} gap="gap-3" items={[
           ...fleet.map((p): [number, preact.ComponentChildren] => {
             const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing");
-            const ord = j && vOrders().find((o) => o.no === j.orderNo);
+            const ord = j && mine.find((o) => o.no === j.orderNo);
             const hot = !!j || p.status === "printing";
             return [j ? 3 : 2,
-              <a key={p.id} href="/work/production" onClick={(e) => { if (ord) { e.preventDefault(); setOpen(ord); } }}
+              <a key={p.id} href="#" onClick={(e) => { e.preventDefault(); if (ord) setOpen(ord); }}
                 class={`rounded-[var(--radius-card)] p-4 min-w-0 block min-h-[148px] transition-colors ${hot ? "bg-c4 text-c0 border-2 border-c4 shadow-lg" : "bg-c0 border border-line hover:bg-c1/40"}`}>
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0"><div class="text-[16px] font-bold leading-tight">{p.name}</div><div class={`text-[12px] ${hot ? "opacity-70" : "text-c3"}`}>{p.model}</div></div>
@@ -251,9 +254,9 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         ]} />
       </Section>
 
-      <Section title="Queue" note={`${jobsSig.value.filter((j) => j.status === "queued").length} queued`} action={<a href="/work/production" class="t-meta">All →</a>}>
+      <Section title="Queue" note={`${myJobs.filter((j) => j.status === "queued").length} queued`}>
         <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
-          {jobsSig.value.filter((j) => j.status !== "done").map((j) => { const ord = vOrders().find((o) => o.no === j.orderNo); return (
+          {myJobs.filter((j) => j.status !== "done").map((j) => { const ord = vOrders().find((o) => o.no === j.orderNo); return (
             <button key={j.id} onClick={() => ord && setOpen(ord)} class="w-full text-left flex items-center gap-3 px-4 py-2.5 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0">
               <span class="min-w-0 flex-1"><span class="block text-[14px] font-semibold truncate">{j.item}</span><span class="block t-meta truncate">{j.orderNo}{ord ? ` · ${ord.customer}` : ""} · {j.printer || "Unassigned"}</span></span>
               <span class="num t-meta whitespace-nowrap">{j.hours} h · {j.grams} g</span>

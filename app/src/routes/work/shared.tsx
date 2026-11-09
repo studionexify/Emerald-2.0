@@ -51,7 +51,8 @@ export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void;
 }
 
 /** Inline order detail (no overlay; forward moves honour the stage gate). Render via the page's `detail` prop. */
-export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose: () => void; onOpen: (o: Order) => void }) {
+/** `onStage` keeps stage clicks inside the calling tab instead of opening the shared stage page. */
+export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order; onClose: () => void; onOpen: (o: Order) => void; onStage?: (st: Stage) => void }) {
   const [msg, setMsg] = useState("");
   const next = nextOf(order), prev = prevOf(order);
   const sug = SUGGESTED[order.type];
@@ -105,7 +106,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
         <Row k="City" v={cl?.city} />
         <Row k="GSTIN" v={cl?.gstin} />
         <Row k="Came via" v={order.medium} />
-        <button class="text-xs underline mt-1.5 cursor-pointer" onClick={() => { returnSig.value = { path: path.value, no: order.no, scroll: 0 }; navigate("/work/clients"); }}>{cl ? "Edit client" : "Add to clients"} →</button>
+        {!onStage && <button class="text-xs underline mt-1.5 cursor-pointer" onClick={() => { returnSig.value = { path: path.value, no: order.no, scroll: 0 }; navigate("/work/clients"); }}>{cl ? "Edit client" : "Add to clients"} →</button>}
       </Fold>
 
       <Fold id={F("order")} hue={H.order} open title={`2 · Order details · ${order.items.length} line${order.items.length === 1 ? "" : "s"}`} meta={total ? inr(total) : "Internal"}>
@@ -126,7 +127,7 @@ export function OrderDetail({ order, onClose, onOpen }: { order: Order; onClose:
       <Fold id={F("prod")} hue={H.prod} open title="3 · Production status" meta={`${STAGE_LABEL[order.stage]} · ${ckDone}/${ck.length}`}>
         <ol class="flex flex-col mb-2" aria-label="Pipeline">
           {STAGE_ORDER.map((st, i) => { const done = i < cur, now = i === cur, off = !sug.includes(st);
-            return <li key={st}><button onClick={() => goStage(order, st)} class={`w-full flex items-center gap-2.5 h-9 !min-h-0 px-1 rounded-lg text-left cursor-pointer hover:bg-c1 ${off && !now ? "opacity-45" : ""}`} title={`Open ${STAGE_LABEL[st]} page`}>
+            return <li key={st}><button onClick={() => (onStage ? onStage(st) : goStage(order, st))} class={`w-full flex items-center gap-2.5 h-9 !min-h-0 px-1 rounded-lg text-left cursor-pointer hover:bg-c1 ${off && !now ? "opacity-45" : ""}`} title={`Open ${STAGE_LABEL[st]} page`}>
               <span class="w-5 h-5 rounded-full grid place-items-center shrink-0 text-[10px] font-bold" style={now ? { background: H.prod, color: "#fff" } : done ? { background: `color-mix(in srgb, ${H.prod} 25%, var(--c0))`, color: H.prod } : { boxShadow: "inset 0 0 0 1.5px var(--line)" }}>{done ? "✓" : i + 1}</span>
               <span class={`flex-1 text-[13px] ${now ? "font-bold" : ""}`}>{STAGE_LABEL[st]}</span>
               {now && <span class="text-[11px] font-semibold" style={{ color: H.prod }}>Current</span>}
