@@ -148,10 +148,24 @@ export const vQuotes = () => _quotes.value.filter((q) => _shown(q.pay ?? ordersS
 /** Bulk tracking per line: good units printed, units wasted to bad prints, units still to print.
  *  Uses the counts stored on the line; falls back to this order's batches named after the line. */
 export function lineProgress(o: Order, i: Order["items"][number], batches = batchesSig.value) {
-  const mine = batches.filter((b) => b.orderNo === o.no && b.name === i.name);
+  const all = batches.filter((b) => b.orderNo === o.no && b.name === i.name), mine = all.filter((b) => !b.running);
   const printed = i.printed ?? mine.reduce((s, b) => s + (b.done || 0), 0);
   const failed = i.failed ?? mine.reduce((s, b) => s + (b.failed ?? (b.stage !== "production" ? Math.max(0, b.units - b.done) : 0)), 0);
-  return { printed, failed, pending: Math.max(0, i.qty - printed) };
+  const printing = all.filter((b) => b.running).reduce((s, b) => s + b.units, 0);
+  return { printed, failed, printing, pending: Math.max(0, i.qty - printed) };
+}
+/** Print runs: start a run of N units on a printer with a spool, then log good / failed when it comes off. */
+export function startRun(o: Order, item: string, units: number, printer: string, spool: string) {
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spool || undefined, running: true, at: new Date().toISOString(), stage: "production" }];
+  log("Started print", `${o.no} · ${units}× ${item} on ${printer}`);
+}
+export function finishRun(o: Order, id: string, good: number, bad: number): Order {
+  const b = batchesSig.value.find((x) => x.id === id); if (!b) return o;
+  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad } : x));
+  log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}`);
+  // Lines carrying imported totals get the run added on top; others are summed from runs.
+  if (!o.items.some((i) => i.name === b.name && (i.printed !== undefined || i.failed !== undefined))) return o;
+  return patchOrder(o, { items: o.items.map((i) => (i.name === b.name && (i.printed !== undefined || i.failed !== undefined) ? { ...i, printed: (i.printed ?? 0) + good, failed: (i.failed ?? 0) + bad } : i)) });
 }
 /** Machines a line was printed on, from print batches and production jobs. */
 export function lineMachines(o: Order, i: Order["items"][number], batches = batchesSig.value, jobs = jobsSig.value) {

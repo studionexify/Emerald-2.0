@@ -267,7 +267,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
                     <div class="text-[13px] opacity-80">{j.item}</div>
                     <div class="text-[12px] opacity-70 num mt-1">{j.hours} h · {j.grams} g{j.operator ? ` · ${j.operator}` : ""}</div>
                   </div>
-                ) : <div class="mt-3 text-[13px] text-c3">{p.status === "down" ? "Out of service" : hot ? "Busy with another tab’s order" : "Free — nothing printing"}</div>}
+                ) : <div class={`mt-3 text-[13px] ${hot ? "opacity-70" : "text-c3"}`}>{p.status === "down" ? "Out of service" : hot ? "Busy with another tab’s order" : "Free — nothing printing"}</div>}
               </a>];
           }),
         ]} />

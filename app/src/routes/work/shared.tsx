@@ -1,6 +1,7 @@
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { itemLabel, ordersSig, log, clientsSig, invoicesSig, quotesSig, shipmentsSig, openOrderSig, returnSig } from "../../data";
 import { navigate, path } from "../../router";
+import { segmentOf, type Segment } from "../../data/inventory";
 import { STAGE_HREF } from "../../ui/stage-strip";
 import { vOrders } from "../../data";
 import { LinkedTasks } from "../Todo";
@@ -8,7 +9,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
-import { lineProgress, lineMachines, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { startRun, finishRun, printersSig, lineProgress, lineMachines, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -89,6 +90,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
   const docN = qs.length + invs.length + ships.length + photos.length + (order.po ? 1 : 0);
   const cur = STAGE_ORDER.indexOf(order.stage);
   const F = (id: string) => `${order.no}:${id}`;
+  const seg = segmentOf(order);
   const Row = ({ k, v }: { k: string; v?: ComponentChildren }) => <div class="flex justify-between gap-3 py-1 border-t border-line first:border-0 text-[13px]"><span class="text-c3 shrink-0">{k}</span><span class="text-right min-w-0 break-words">{v || "—"}</span></div>;
   const Doc = ({ label, sub, href }: { label: string; sub?: string; href: string }) => <button class="w-full flex items-center justify-between gap-2 py-1.5 border-t border-line first:border-0 text-left text-[13px] cursor-pointer !min-h-0" onClick={() => { returnSig.value = { path: path.value, no: order.no, scroll: document.querySelector("[data-split-main]")?.scrollTop ?? 0 }; navigate(href); }}><span class="min-w-0"><b>{label}</b>{sub && <span class="t-meta"> · {sub}</span>}</span><Icon name="right" size={12} /></button>;
   return (
@@ -98,7 +100,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
       {gate && order.stage !== "archived" && <p class="text-xs mb-2 rounded-xl p-2.5" style={{ background: "color-mix(in srgb, #d97706 14%, var(--c0))" }} role="note"><b>Blocked:</b> {gate}</p>}
       {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
 
-      <Fold id={F("client")} hue={H.client} title="1 · Client details" meta={cl?.city || order.medium}>
+      {seg !== "inhouse" && <Fold id={F("client")} hue={H.client} title="1 · Client details" meta={cl?.city || order.medium}>
         <Row k="Name" v={order.customer} />
         <Row k="Phone" v={cl?.phone && <a class="underline" href={`tel:${cl.phone}`}>{cl.phone}</a>} />
         <Row k="Email" v={cl?.email && <a class="underline" href={`mailto:${cl.email}`}>{cl.email}</a>} />
@@ -107,10 +109,11 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
         <Row k="GSTIN" v={cl?.gstin} />
         <Row k="Came via" v={order.medium} />
         {!onStage && <button class="text-xs underline mt-1.5 cursor-pointer" onClick={() => { returnSig.value = { path: path.value, no: order.no, scroll: 0 }; navigate("/work/clients"); }}>{cl ? "Edit client" : "Add to clients"} →</button>}
-      </Fold>
+        {seg === "client" && <Row k="Payment" v={order.paid ? "Paid" : `Unpaid · ${inr(total)} due`} />}
+      </Fold>}
 
-      <Fold id={F("order")} hue={H.order} open title={`2 · Order details · ${order.items.length} line${order.items.length === 1 ? "" : "s"}`} meta={total ? inr(total) : "Internal"}>
-        {(() => { const t = orderProgress(order); if (!(t.printed || t.failed || order.type === "bulk")) return null;
+      <Fold id={F("order")} hue={H.order} open title={`${seg === "inhouse" ? "1 · Build" : "2 · Order"} details · ${order.items.length} line${order.items.length === 1 ? "" : "s"}`} meta={total ? inr(total) : "Internal"}>
+        {(() => { const t = orderProgress(order); if (!(t.printed || t.failed || seg === "bulk")) return null;
           const ms = [...new Set(order.items.flatMap((i) => lineMachines(order, i).map((m) => m.name)))];
           const done = order.items.filter((i) => lineProgress(order, i).pending === 0).length;
           const cell = (k: string, v: number, c = "") => <div class="rounded-lg bg-c1 px-2 py-1.5"><div class="t-meta">{k}</div><div class={`num font-bold text-sm ${c}`}>{v}</div></div>;
@@ -120,13 +123,13 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
             <div class="t-meta mt-1">{t.qty ? Math.round(t.printed / t.qty * 100) : 0}% printed · {done}/{order.items.length} lines complete{t.printed + t.failed ? ` · ${Math.round(t.failed / (t.printed + t.failed) * 100)}% waste rate` : ""}</div>
             <div class="t-meta">Machines: {ms.length ? ms.join(", ") : "none logged yet"}</div>
           </div>; })()}
-        <ul class="flex flex-col">{order.items.map((i, k) => <LineRow key={k} order={order} i={i} k={k} onOpen={onOpen} filG={filG} />)}</ul>
+        <ul class="flex flex-col">{order.items.map((i, k) => <LineRow key={k} order={order} i={i} k={k} onOpen={onOpen} filG={filG} seg={seg} />)}</ul>
         <div class="flex justify-between text-[13px] pt-2 mt-1 border-t border-line"><span class="text-c3">Total · due {shortDate(order.due)}</span><b class="num">{total ? inr(total) : "Internal"}</b></div>
       </Fold>
 
-      <Fold id={F("prod")} hue={H.prod} open title="3 · Production status" meta={`${STAGE_LABEL[order.stage]} · ${ckDone}/${ck.length}`}>
+      <Fold id={F("prod")} hue={H.prod} open title={`${seg === "inhouse" ? 2 : 3} · Production status`} meta={`${STAGE_LABEL[order.stage]} · ${ckDone}/${ck.length}`}>
         <ol class="flex flex-col mb-2" aria-label="Pipeline">
-          {STAGE_ORDER.map((st, i) => { const done = i < cur, now = i === cur, off = !sug.includes(st);
+          {STAGE_ORDER.filter((st) => seg !== "inhouse" || sug.includes(st) || st === order.stage).map((st, i) => { const at = STAGE_ORDER.indexOf(st), done = at < cur, now = at === cur, off = !sug.includes(st);
             return <li key={st}><button onClick={() => (onStage ? onStage(st) : goStage(order, st))} class={`w-full flex items-center gap-2.5 h-9 !min-h-0 px-1 rounded-lg text-left cursor-pointer hover:bg-c1 ${off && !now ? "opacity-45" : ""}`} title={`Open ${STAGE_LABEL[st]} page`}>
               <span class="w-5 h-5 rounded-full grid place-items-center shrink-0 text-[10px] font-bold" style={now ? { background: H.prod, color: "#fff" } : done ? { background: `color-mix(in srgb, ${H.prod} 25%, var(--c0))`, color: H.prod } : { boxShadow: "inset 0 0 0 1.5px var(--line)" }}>{done ? "✓" : i + 1}</span>
               <span class={`flex-1 text-[13px] ${now ? "font-bold" : ""}`}>{STAGE_LABEL[st]}</span>
@@ -149,7 +152,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
         {order.stage === "production" && lowAcc.length > 0 && <p class="text-xs mt-1 rounded-lg bg-c1 p-2"><b>Low stock:</b> {lowAcc.map((a) => a.name).join(", ")}</p>}
       </Fold>
 
-      <Fold id={F("docs")} hue={H.docs} title="4 · Documents & photos" meta={String(docN)} action={<label class="text-xs underline cursor-pointer">+ Photo<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); }); }} /></label>}>
+      <Fold id={F("docs")} hue={H.docs} title={`${seg === "inhouse" ? 3 : 4} · Documents & photos`} meta={String(docN)} action={<label class="text-xs underline cursor-pointer">+ Photo<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); }); }} /></label>}>
         {qs.map((q) => <Doc key={q.id} label={`Quotation ${q.no}`} sub={`${shortDate(q.date)} · ${q.outcome}`} href="/work/quotes" />)}
         {order.po && <Doc label={`Purchase order ${order.po}`} href="/work/orders" />}
         {invs.map((i) => <Doc key={i.id} label={`${i.kind === "credit" ? "Credit note" : "Invoice"} ${i.no}`} sub={`${shortDate(i.date)}${i.paidOn ? " · paid" : ""}${i.status === "cancelled" ? " · cancelled" : ""}`} href="/work/invoice" />)}
@@ -159,7 +162,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
           {Array.from({ length: Math.max(0, 4 - photos.length) }, (_, k) => <figure key={`ph${k}`} class="text-[10px] text-c3"><Thumb alt="Photo" class="w-full aspect-square" onAdd={(f) => shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); })} /><figcaption>{["QC", "Packing", "Shipping", "Other"][photos.length + k] ?? "Photo"}</figcaption></figure>)}</div>
       </Fold>
 
-      <Fold id={F("internal")} hue={H.internal} title="5 · Internal" meta={total ? `${inr(used)} used · ${Math.round((1 - used / total) * 100)}% margin` : `${inr(used)} used`}>
+      <Fold id={F("internal")} hue={H.internal} title={`${seg === "inhouse" ? 4 : 5} · Internal`} meta={total ? `${inr(used)} used · ${Math.round((1 - used / total) * 100)}% margin` : `${inr(used)} used`}>
         {canSwitchMode() && order.type !== "inhouse" && <label class="flex items-center gap-2 text-[12px] mb-2"><span class="text-c3 w-24">Payment mode</span>
           <select class={`${sel} flex-1`} value={order.pay ?? "alpha"} onChange={(e) => { const m = (e.target as HTMLSelectElement).value as "alpha" | "beta"; ordersSig.value = ordersSig.value.map((x) => (x.id === order.id ? { ...x, pay: m } : x)); log("Payment mode", `${order.no} → ${PAY_LABEL[m]}`); onOpen({ ...order, pay: m }); }}>
             {(["alpha", "beta"] as const).map((m) => <option key={m} value={m}>{PAY_LABEL[m]}</option>)}</select></label>}
@@ -180,7 +183,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
 }
 
 /** One order line: basic row; tap to reveal image upload and the design record. */
-function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"][number]; k: number; onOpen: (o: Order) => void; filG: number }) {
+function LineRow({ order, i, k, onOpen, filG, seg }: { order: Order; i: Order["items"][number]; k: number; onOpen: (o: Order) => void; filG: number; seg: Segment }) {
   const [open, setOpen] = useState(false); const [drag, setDrag] = useState(false);
   const key = `${order.no}#${k}`; const d = designSig.value[key] ?? { file: "", profile: "", grams: 0, minutes: 0, bom: "", measuredBy: "", source: "slicer" as const };
   const set = (p: Partial<typeof d>) => (designSig.value = { ...designSig.value, [key]: { ...d, ...p, measuredBy: "you" } });
@@ -199,11 +202,11 @@ function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"
           const pct = i.qty ? Math.min(100, (p.printed / i.qty) * 100) : 0, wp = i.qty ? Math.min(100 - pct, (p.failed / i.qty) * 100) : 0;
           return <>
             <span class="flex h-1.5 rounded-full bg-c1 overflow-hidden mt-1 mb-0.5" aria-hidden="true"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></span>
-            <span class="block text-[11px] font-medium"><span class="text-grn">{p.printed} printed</span> · <span class="text-red">{p.failed} wasted</span> · <span class="text-c3">{p.pending} pending</span></span>
+            <span class="block text-[11px] font-medium"><span class="text-grn">{p.printed} printed</span> · <span class="text-red">{p.failed} wasted</span> · <span class="text-c3">{p.pending} pending</span>{p.printing > 0 && <b class="text-c4"> · {p.printing} printing now</b>}</span>
             {ms.length > 0 && <span class="block text-[11px] text-c3 truncate">On {ms.map((m) => m.units ? `${m.name} (${m.units})` : m.name).join(", ")}</span>}
           </>; })()}
       </button>
-      <span class="num text-sm text-right whitespace-nowrap">{i.price ? inr(i.price * i.qty) : "—"}</span>
+      {seg !== "inhouse" && <span class="num text-sm text-right whitespace-nowrap">{i.price ? inr(i.price * i.qty) : "—"}</span>}
       <button class="w-7 h-7 !min-h-0 grid place-items-center rounded-lg text-c3 cursor-pointer" style={{ transform: open ? "rotate(90deg)" : undefined }} onClick={() => setOpen(!open)} aria-label="More"><Icon name="right" size={12} /></button>
     </div>
     {open && <div class="pb-3 flex flex-col gap-2 text-xs pop-in">
@@ -214,6 +217,7 @@ function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"
         {i.img && <button class="underline text-red" onClick={(e) => { e.preventDefault(); putItem({ img: undefined, thumb: undefined }); }}>Remove</button>}
         <input type="file" accept="image/*" class="sr-only" onChange={(e) => attach((e.target as HTMLInputElement).files?.[0])} />
       </label>
+      {seg === "bulk" ? <PrintRuns order={order} item={i} onOpen={onOpen} /> : <>
       <div class="flex justify-between t-meta"><span>Est. cost {inr(i.cost * i.qty)}</span>{d.grams > 0 && <span>Sliced {d.grams * i.qty} g · logged {filG} g</span>}</div>
       <div class="grid grid-cols-2 gap-1.5">
         <input class={c} placeholder="Print file name" value={d.file} onInput={(e) => set({ file: (e.target as HTMLInputElement).value })} />
@@ -222,8 +226,46 @@ function LineRow({ order, i, k, onOpen, filG }: { order: Order; i: Order["items"
         <input class={c} type="number" placeholder="Sliced min" value={d.minutes || ""} onInput={(e) => set({ minutes: Number((e.target as HTMLInputElement).value) || 0 })} />
         <input class={`${c} col-span-2`} placeholder="BOM: magnets ×2, insert ×4…" value={d.bom} onInput={(e) => set({ bom: (e.target as HTMLInputElement).value })} />
       </div>
+      </>}
     </div>}
   </li>;
+}
+
+/** Bulk lines print in runs: N units on a printer with a spool, then logged good / failed. */
+function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["items"][number]; onOpen: (o: Order) => void }) {
+  const runs = batchesSig.value.filter((b) => b.orderNo === order.no && b.name === item.name && (b.running || b.printer || b.spool));
+  const p = lineProgress(order, item);
+  const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
+  const spools = spoolsSig.value.filter((x) => x.active !== false && x.status !== "empty");
+  const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sp, setSp] = useState("");
+  const [fin, setFin] = useState<Record<string, [number, number]>>({});
+  const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
+  const spLabel = (x: typeof spools[number]) => `${x.spoolNo} · ${x.material} ${x.colour}`.trim();
+  const room = Math.max(0, p.pending - p.printing);
+  const start = (e: Event) => { e.preventDefault(); const n = qty || room; if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", sp || (spools[0] ? spLabel(spools[0]) : "")); setQty(0); onOpen({ ...order }); };
+  return <div class="flex flex-col gap-2">
+    <div class="grid grid-cols-4 gap-1.5 text-center">
+      {([["Ordered", item.qty, ""], ["Good", p.printed, "text-grn"], ["Failed", p.failed, "text-red"], ["Pending", p.pending, ""]] as const).map(([k, v, cl]) => <div key={k} class="rounded-lg bg-c1 py-1"><div class="t-meta">{k}</div><div class={`num font-bold text-[13px] ${cl}`}>{v}</div></div>)}
+    </div>
+    {runs.length > 0 && <ul class="flex flex-col rounded-lg border border-line divide-y divide-line">
+      {runs.map((r) => { const f = fin[r.id] ?? [r.units, 0]; return <li key={r.id} class="px-2 py-1.5">
+        <div class="flex items-center gap-2"><span class="num font-semibold">{r.units}×</span><span class="flex-1 min-w-0 truncate">{r.printer || "—"}{r.spool ? ` · ${r.spool}` : ""}</span>
+          {r.running ? <Status tone="active">printing</Status> : <span class="text-[11px] font-medium whitespace-nowrap"><span class="text-grn">{r.done} good</span> · <span class="text-red">{r.failed ?? 0} failed</span></span>}</div>
+        {r.running && <form class="flex items-center gap-1.5 mt-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1])); }}>
+          <label class="t-meta">Good</label><input class={`${c} w-16`} type="number" min={0} value={f[0]} onInput={(e) => setFin({ ...fin, [r.id]: [Number((e.target as HTMLInputElement).value) || 0, f[1]] })} />
+          <label class="t-meta">Failed</label><input class={`${c} w-16`} type="number" min={0} value={f[1]} onInput={(e) => setFin({ ...fin, [r.id]: [f[0], Number((e.target as HTMLInputElement).value) || 0] })} />
+          <button class="h-8 px-3 ml-auto rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Print done</button>
+        </form>}
+      </li>; })}
+    </ul>}
+    <form class="flex flex-wrap items-center gap-1.5" onSubmit={start}>
+      <span class="t-meta w-full">Start a print run</span>
+      <input class={`${c} w-20`} type="number" min={1} placeholder={`${room} pcs`} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Pieces in this run" />
+      <select class={`${c} flex-1`} value={pr} onChange={(e) => setPr((e.target as HTMLSelectElement).value)} aria-label="Printer">{printers.map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}</select>
+      <select class={`${c} flex-1`} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)} aria-label="Spool"><option value="">{spools.length ? "Pick spool" : "No spools"}</option>{spools.map((x) => <option key={x.id} value={spLabel(x)}>{spLabel(x)} ({x.grams} g)</option>)}</select>
+      <button class="h-8 px-3 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
+    </form>
+  </div>;
 }
 
 const KINDS: ConKind[] = ["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"];
