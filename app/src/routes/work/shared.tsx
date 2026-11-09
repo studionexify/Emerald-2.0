@@ -9,7 +9,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
-import { startRun, finishRun, undoRun, gramsPerPiece, runSpools, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { startRun, finishRun, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -238,21 +238,39 @@ function LineRow({ order, i, k, onOpen, filG, seg }: { order: Order; i: Order["i
 }
 
 /** Bulk lines print in runs: N units on a printer with a spool, then logged good / failed. */
+/** Pick a spool in three steps: material type → colour → spool number. Empty spools are left out. */
+function SpoolPick({ value, onChange, taken, n }: { value: string; onChange: (id: string) => void; taken: string[]; n: number }) {
+  const all = spoolsSig.value.filter((x) => x.active !== false && x.status !== "empty" && x.grams > 0 && (x.id === value || !taken.includes(x.id)));
+  const cur = all.find((x) => x.id === value);
+  const [mat, setMat] = useState(cur?.material ?? ""), [col, setCol] = useState(cur?.colour ?? "");
+  const mats = [...new Set(all.map((x) => x.material))].sort();
+  const cols = [...new Set(all.filter((x) => x.material === mat).map((x) => x.colour))].sort();
+  const nums = all.filter((x) => x.material === mat && x.colour === col).sort((a, b) => b.grams - a.grams);
+  const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
+  const pickMat = (m: string) => { setMat(m); setCol(""); onChange(""); const cs = [...new Set(all.filter((x) => x.material === m).map((x) => x.colour))]; if (cs.length === 1) pickCol(cs[0], m); };
+  const pickCol = (cl: string, m = mat) => { setCol(cl); const ns = all.filter((x) => x.material === m && x.colour === cl); onChange(ns.length ? ns.sort((a, b) => b.grams - a.grams)[0].id : ""); };
+  return <div class="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,1fr)] gap-1.5 flex-1 min-w-0">
+    <select class={c} value={mat} onChange={(e) => pickMat((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n} material`}><option value="">Type…</option>{mats.map((m) => <option key={m}>{m}</option>)}</select>
+    <select class={c} value={col} disabled={!mat} onChange={(e) => pickCol((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n} colour`}><option value="">Colour…</option>{cols.map((x) => <option key={x}>{x}</option>)}</select>
+    <select class={c} value={value} disabled={!col} onChange={(e) => onChange((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n}`}><option value="">Spool no…</option>{nums.map((x) => <option key={x.id} value={x.id}>#{x.spoolNo} · {x.grams} g</option>)}</select>
+  </div>;
+}
+
 export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["items"][number]; onOpen: (o: Order) => void }) {
   const runs = batchesSig.value.filter((b) => b.orderNo === order.no && b.name === item.name && (b.running || b.printer || b.spool));
   const p = lineProgress(order, item);
   const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
-  const spools = spoolsSig.value.filter((x) => x.active !== false && x.status !== "empty");
-  const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]);
+  const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]), [rk, setRk] = useState(0);
   const [fin, setFin] = useState<Record<string, [number, number]>>({}), [gm, setGm] = useState<Record<string, Record<string, number>>>({}), [why, setWhy] = useState<Record<string, string>>({});
-  const gpp = gramsPerPiece(item.name);
-  /** Suggested grams per spool for a run: learnt grams-per-piece × pieces, split evenly across its spools. */
-  const guess = (r: Batch, no: string) => gm[r.id]?.[no] ?? (gpp ? Math.round((gpp * r.units) / Math.max(1, runSpools(r.spool).length)) : 0);
-  const gramsFor = (r: Batch) => Object.fromEntries(runSpools(r.spool).map((no) => [no, guess(r, no)]));
   const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
-  const spLabel = (x: typeof spools[number]) => `${x.spoolNo} · ${x.material} ${x.colour}`.trim();
   const room = Math.max(0, p.pending - p.printing);
-  const start = (e: Event) => { e.preventDefault(); const n = qty || room; if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", sps.filter(Boolean).join(" + ")); setQty(0); setSps([""]); onOpen({ ...order }); };
+  const gpp = gramsPerPiece(item.name);
+  const byId = (id: string) => spoolsSig.value.find((x) => x.id === id);
+  const picked = sps.map(byId).filter(Boolean) as NonNullable<ReturnType<typeof byId>>[];
+  /** Suggested grams per spool for a run: learnt grams-per-piece × pieces, split evenly across its spools. */
+  const guess = (r: Batch, id: string) => gm[r.id]?.[id] ?? (gpp ? Math.round((gpp * r.units) / Math.max(1, runSpools(r).length)) : 0);
+  const gramsFor = (r: Batch) => Object.fromEntries(runSpools(r).map((x) => [x.id, guess(r, x.id)]));
+  const start = (e: Event) => { e.preventDefault(); const n = qty || room; if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", picked.map((x) => ({ id: x.id, label: spoolLabel(x) }))); setQty(0); setSps([""]); setRk(rk + 1); onOpen({ ...order }); };
   const live = runs.filter((r) => r.running), past = runs.filter((r) => !r.running);
   return <div class="flex flex-col gap-2">
     <form class="rounded-lg border border-c4/30 bg-c1 p-2 flex flex-col gap-1.5" onSubmit={start}>
@@ -261,20 +279,20 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
         <input class={c} type="number" min={1} placeholder={String(room)} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Pieces in this run" />
         <select class={c} value={pr || printers[0]?.name} onChange={(e) => setPr((e.target as HTMLSelectElement).value)} aria-label="Printer">{printers.map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}</select>
       </div>
-      <span class="t-meta">Spools / materials used</span>
-      {sps.map((v, k) => <div key={k} class="flex items-center gap-1.5">
+      <span class="t-meta">Spools / materials used — type, colour, then spool no.</span>
+      {sps.map((v, k) => <div key={`${rk}-${k}`} class="flex items-center gap-1.5">
         <span class="t-meta w-4 text-right">{k + 1}</span>
-        <select class={`${c} flex-1`} value={v} onChange={(e) => setSps(sps.map((x, j) => (j === k ? (e.target as HTMLSelectElement).value : x)))} aria-label={`Spool ${k + 1}`}><option value="">{spools.length ? "Pick spool…" : "No spools"}</option>{spools.filter((x) => spLabel(x) === v || !sps.includes(spLabel(x))).map((x) => <option key={x.id} value={spLabel(x)}>{spLabel(x)} ({x.grams} g)</option>)}</select>
+        <SpoolPick n={k + 1} value={v} taken={sps.filter((_, j) => j !== k)} onChange={(id) => setSps(sps.map((x, j) => (j === k ? id : x)))} />
         {sps.length > 1 && <button type="button" class="w-7 h-7 !min-h-0 rounded-lg text-c3 hover:bg-c0 cursor-pointer" onClick={() => setSps(sps.filter((_, j) => j !== k))} aria-label={`Remove spool ${k + 1}`}>×</button>}
       </div>)}
       <button type="button" class="self-start underline t-meta cursor-pointer !min-h-0" onClick={() => setSps([...sps, ""])}>+ Add another spool / material</button>
-      {(() => { const pick = spools.filter((x) => sps.includes(spLabel(x))); if (!gpp || !pick.length) return null;
-        const need = Math.round(gpp * (qty || room)), have = pick.reduce((a, x) => a + x.grams, 0);
-        return need > have ? <p class="text-[11px] text-red font-medium" role="alert">⚠ Needs about {need} g but the picked spool{pick.length > 1 ? "s hold" : " holds"} {have} g — add a spool or print fewer.</p>
-          : <p class="t-meta">Needs about {need} g · {have} g on the picked spool{pick.length > 1 ? "s" : ""}</p>; })()}
+      {(() => { if (!gpp || !picked.length) return null;
+        const need = Math.round(gpp * (qty || room)), have = picked.reduce((a, x) => a + x.grams, 0);
+        return need > have ? <p class="text-[11px] text-red font-medium" role="alert">⚠ Needs about {need} g but the picked spool{picked.length > 1 ? "s hold" : " holds"} {have} g — add a spool or print fewer.</p>
+          : <p class="t-meta">Needs about {need} g · {have} g on the picked spool{picked.length > 1 ? "s" : ""}</p>; })()}
       <button class="h-8 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
     </form>
-    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id])); }}>
+    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id])); }}>
       <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.spool ? ` · ${r.spool}` : ""}{r.by ? <span class="t-meta"> · {r.by}</span> : null}</span></div>
       <div class="flex flex-wrap items-center gap-1.5">
         <label class="t-meta">Good</label><input class={`${c} w-14`} type="number" min={0} value={f[0]} onInput={(e) => setFin({ ...fin, [r.id]: [Number((e.target as HTMLInputElement).value) || 0, f[1]] })} />
@@ -284,11 +302,11 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
       {f[1] > 0 && <label class="flex items-center gap-1.5"><span class="t-meta">Why failed?</span>
         <select class={`${c} flex-1`} value={why[r.id] ?? ""} onChange={(e) => setWhy({ ...why, [r.id]: (e.target as HTMLSelectElement).value })} aria-label="Failure reason">
           <option value="">Pick a reason (optional)</option>{FAIL_REASONS.map((x) => <option key={x}>{x}</option>)}</select></label>}
-      {runSpools(r.spool).length > 0 && <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      {rs.length > 0 && <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span class="t-meta w-full">Filament used (comes off the spool){gpp ? ` · filled from ${Math.round(gpp * 10) / 10} g per piece, adjust if needed` : ""}</span>
-        {runSpools(r.spool).map((no) => { const left = spoolsSig.value.find((x) => x.spoolNo === no)?.grams; return <label key={no} class="flex items-center gap-1.5">
-          <span class="font-mono text-[11px]">{no}</span>
-          <input class={`${c} w-20`} type="number" min={0} placeholder="g" value={guess(r, no) || ""} onInput={(e) => setGm({ ...gm, [r.id]: { ...gramsFor(r), ...gm[r.id], [no]: Number((e.target as HTMLInputElement).value) || 0 } })} aria-label={`Grams used from ${no}`} />
+        {rs.map((x) => { const left = byId(x.id)?.grams; return <label key={x.id} class="flex items-center gap-1.5">
+          <span class="text-[11px] truncate max-w-[160px]">{x.label}</span>
+          <input class={`${c} w-20`} type="number" min={0} placeholder="g" value={guess(r, x.id) || ""} onInput={(e) => setGm({ ...gm, [r.id]: { ...gramsFor(r), ...gm[r.id], [x.id]: Number((e.target as HTMLInputElement).value) || 0 } })} aria-label={`Grams used from ${x.label}`} />
           <span class="t-meta">g{left !== undefined ? ` · ${left} g left` : ""}</span>
         </label>; })}
       </div>}
@@ -298,7 +316,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
         <span class="flex-1 min-w-0"><span class="block truncate">{r.printer || "—"}{r.spool ? ` · ${r.spool}` : ""}</span>
           <span class="block t-meta truncate">{[r.by, g ? `${g} g` : "", r.reason ? `failed: ${r.reason}` : ""].filter(Boolean).join(" · ") || "—"}</span></span>
         <span class="whitespace-nowrap"><span class="text-grn">{r.done} good</span> · <span class="text-red">{r.failed ?? 0} failed</span></span>
-        {(r.failed ?? 0) > 0 && <button type="button" class="h-7 px-2 rounded-md bg-c1 text-[11px] font-semibold cursor-pointer !min-h-0" onClick={() => { startRun(order, item.name, r.failed!, r.printer || printers[0]?.name || "Printer", r.spool ?? ""); onOpen({ ...order }); }} title="Start a new run for just the failed pieces, same printer and spools">Reprint {r.failed}</button>}
+        {(r.failed ?? 0) > 0 && <button type="button" class="h-7 px-2 rounded-md bg-c1 text-[11px] font-semibold cursor-pointer !min-h-0" onClick={() => { startRun(order, item.name, r.failed!, r.printer || printers[0]?.name || "Printer", runSpools(r)); onOpen({ ...order }); }} title="Start a new run for just the failed pieces, same printer and spools">Reprint {r.failed}</button>}
         <button type="button" class="underline t-meta cursor-pointer !min-h-0" onClick={() => { if (confirm(`Undo this run? ${r.done} good / ${r.failed ?? 0} failed come off the line${g ? ` and ${g} g go back on the spool` : ""}. It goes back on the plate so you can log it again.`)) onOpen(undoRun(order, r.id)); }}>Undo</button>
       </li>; })}</ul>
     </details>}

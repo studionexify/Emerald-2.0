@@ -12,7 +12,8 @@ effect(() => { const o = ordersSig.value; if (o.some((x) => x.stage === "po")) o
 export const batchesSig = P<Batch[]>("batches", []);
 export const logsSig = P<Log[]>("logs", []);
 export const consSig = P<Consumption[]>("consumption", []);
-import { spoolsSig, packSig, jobsSig, isSpoolItem, nextSpoolNo } from "./inventory";
+spoolUseSrc.value = consSig;
+import { spoolUseSrc, spoolsSig, packSig, jobsSig, isSpoolItem, nextSpoolNo } from "./inventory";
 export * from "./inventory";
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
@@ -97,9 +98,9 @@ const RATE: Record<ConKind, (item: string) => number> = { filament: perG, scrap:
 export const UNIT: Record<ConKind, string> = { filament: "g", packing: "pcs", accessory: "pcs", part: "pcs", machine: "h", power: "h", labour: "h", freight: "₹", scrap: "g" };
 
 /** Record any consumption; decrements stock where it applies and writes a log row. */
-export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string }) {
+export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string; /** print-run usage: counted against this spool, sync-safe */ spoolId?: string }) {
   let cost = d.qty * RATE[d.kind](d.item);
-  if (d.kind === "filament") spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(d.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
+  if (d.kind === "filament" && !d.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(d.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
   if (d.kind === "packing") {
     const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;
     packSig.value = packSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p));
@@ -155,12 +156,17 @@ export function lineProgress(o: Order, i: Order["items"][number], batches = batc
   return { printed, failed, printing, pending: Math.max(0, i.qty - printed) };
 }
 /** Print runs: start a run of N units on a printer with a spool, then log good / failed when it comes off. */
-export function startRun(o: Order, item: string, units: number, printer: string, spool: string) {
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spool || undefined, running: true, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
+export function startRun(o: Order, item: string, units: number, printer: string, spools: { id: string; label: string }[]) {
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spools.map((x) => x.label).join(" + ") || undefined, spoolIds: spools.map((x) => x.id), running: true, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
   log("Started print", `${o.no} · ${units}× ${item} on ${printer}`);
 }
-/** Spool numbers in a run's spool label, e.g. "SP-001 · PLA Black + SP-004 · PLA White" → ["SP-001", "SP-004"]. */
-export const runSpools = (label?: string) => (label ? label.split(" + ").map((x) => x.split(" · ")[0].trim()).filter(Boolean) : []);
+/** A run's spools as {id, label}: by id for new runs; older runs fall back to spool numbers in the label. */
+export function runSpools(b: Batch): { id: string; label: string }[] {
+  const labels = b.spool ? b.spool.split(" + ") : [];
+  if (b.spoolIds?.length) return b.spoolIds.map((id, k) => ({ id, label: labels[k] ?? id }));
+  return labels.map((l) => { const no = l.split(" · ")[0].trim(); return { id: spoolsSig.value.find((s) => s.spoolNo === no)?.id ?? no, label: l }; });
+}
+export const spoolLabel = (s: { spoolNo: string; material: string; colour: string }) => `${s.spoolNo} · ${s.material} ${s.colour}`.trim();
 /** Grams per piece for a product, learnt from its most recent finished run that logged grams. */
 export function gramsPerPiece(item: string, batches = batchesSig.value) {
   const r = [...batches].reverse().find((b) => b.name === item && !b.running && b.grams && b.done + (b.failed ?? 0) > 0);
@@ -176,7 +182,7 @@ export function finishRun(o: Order, id: string, good: number, bad: number, grams
   const b = batchesSig.value.find((x) => x.id === id); if (!b) return o;
   // Filament used (good and failed pieces alike) comes off each spool and lands in the order's consumption.
   const cons: string[] = [];
-  for (const [no, g] of Object.entries(grams)) if (g > 0) cons.push(consume({ kind: "filament", item: no, qty: g, orderNo: o.no, batch: b.name, printer: b.printer }).id);
+  for (const [id, g] of Object.entries(grams)) { const sp = spoolsSig.value.find((x) => x.id === id); if (g > 0) cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : id, qty: g, orderNo: o.no, batch: b.name, printer: b.printer, spoolId: sp?.id }).id); }
   batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad, grams, cons, reason: bad > 0 ? reason || undefined : undefined, by: me.value?.name ?? x.by } : x));
   log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}${bad && reason ? ` (${reason})` : ""}`);
   return addToLine(o, b.name, good, bad);
@@ -184,7 +190,9 @@ export function finishRun(o: Order, id: string, good: number, bad: number, grams
 /** Undo a finished run: counts come back off the line, grams go back on the spools, and the run is on the plate again to re-log. */
 export function undoRun(o: Order, id: string): Order {
   const b = batchesSig.value.find((x) => x.id === id); if (!b || b.running) return o;
-  for (const [no, g] of Object.entries(b.grams ?? {})) if (g > 0) spoolsSig.value = spoolsSig.value.map((s) => (s.spoolNo === no ? { ...s, grams: s.grams + g, status: s.status === "empty" ? "open" : s.status } : s));
+  // New runs: removing their usage rows puts the grams back. Older runs deducted directly, so add those back by hand.
+  const rows = consSig.value.filter((c) => b.cons?.includes(c.id));
+  for (const c of rows) if (!c.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(c.item, s.spoolNo) || s.spoolNo === c.item ? { ...s, grams: s.grams + c.qty } : s));
   if (b.cons?.length) consSig.value = consSig.value.filter((c) => !b.cons!.includes(c.id));
   batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: true, done: 0, failed: undefined, grams: undefined, cons: undefined, reason: undefined } : x));
   log("Undid print", `${o.no} · ${b.name}: ${b.done} good, ${b.failed ?? 0} failed`);

@@ -24,7 +24,7 @@ export type Spool = { id: string; material: string; colour: string; brand: strin
   hex?: string; finish?: string; diameter?: number; tare?: number; spoolMat?: string; gross?: number; costKg?: number; vendor?: string; bought?: string; lot?: string;
   location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string; slot?: number };
 export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number; vendor?: string; size?: string; location?: string; notes?: string; active?: boolean; cat?: string; machine?: string };
-export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; /** units scrapped as bad prints */ failed?: number; /** machine(s) it ran on */ printer?: string; /** spool(s) used */ spool?: string; /** a print run still on the plate */ running?: boolean; at?: string; /** grams used per spool no. */ grams?: Record<string, number>; /** why pieces failed */ reason?: string; /** who logged it */ by?: string; /** consumption rows it created */ cons?: string[]; stage: BatchStage; invoiceNo?: string; tracking?: string };
+export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; /** units scrapped as bad prints */ failed?: number; /** machine(s) it ran on */ printer?: string; /** spool(s) used, as labels */ spool?: string; /** spool ids, same order */ spoolIds?: string[]; /** a print run still on the plate */ running?: boolean; at?: string; /** grams used per spool no. */ grams?: Record<string, number>; /** why pieces failed */ reason?: string; /** who logged it */ by?: string; /** consumption rows it created */ cons?: string[]; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";
 export type TaskStep = { id: string; title: string; done: boolean };
 export type PayMode = "alpha" | "beta";
@@ -36,6 +36,6 @@ export type Money = { id: string; date: string; title: string; account: string; 
 export type Member = { id: string; name: string; role: string; email: string };
 
 export type ConKind = "filament" | "packing" | "accessory" | "part" | "machine" | "power" | "labour" | "freight" | "scrap";
-export type Consumption = { id: string; at: string; who: string; orderNo?: string; batch?: string; printer?: string; kind: ConKind; item: string; qty: number; unit: string; cost: number };
+export type Consumption = { id: string; at: string; who: string; orderNo?: string; batch?: string; printer?: string; spoolId?: string; kind: ConKind; item: string; qty: number; unit: string; cost: number };
 export type Movement = { id: string; date: string; cat: string; item: string; dir: "in" | "out"; qty: number; unit: string; unitCost: number; vendor: string; colour?: string; brand?: string; notes?: string; by: string };
 export type PackRecord = { id: string; order: string; box: string; weight: string; materials: string; cost: number; by: string; notes: string; date?: string };

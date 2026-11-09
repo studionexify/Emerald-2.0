@@ -1,6 +1,6 @@
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
-import { effect, signal } from "@preact/signals";
+import { computed, effect, signal } from "@preact/signals";
 import { persisted, today, uid } from "./store";
 import { B2B_TYPES } from "../mock/types";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
@@ -19,7 +19,23 @@ function list<T extends { id: string }>(key: string, seed: T[], fill: Partial<T>
   return s;
 }
 export const printersSig = list<Printer>("printers", [], { active: true });
-export const spoolsSig = list<Spool>("spools", [], { active: true, tare: 250, diameter: 1.75, costKg: 1250, status: "open" });
+/** Stored spool rows. Their `grams` is the weighed balance *before* print-run usage. */
+const spoolBase = list<Spool>("spools", [], { active: true, tare: 250, diameter: 1.75, costKg: 1250, status: "open" });
+/** Filament used by print runs, as its own synced rows (one per spool per run) — set from the data layer. */
+export const spoolUseSrc = signal<Signal<{ spoolId?: string; qty: number; kind: string }[]> | null>(null);
+const usedBy = computed(() => { const m = new Map<string, number>(); for (const c of spoolUseSrc.value?.value ?? []) if (c.spoolId && c.kind === "filament") m.set(c.spoolId, (m.get(c.spoolId) ?? 0) + c.qty); return m; });
+const shown = computed(() => spoolBase.value.map((s) => { const u = usedBy.value.get(s.id); return u ? { ...s, grams: Math.max(0, s.grams - u) } : s; }));
+/**
+ * Spools as the app sees them: stored balance minus print-run usage. Usage lives in separate rows, so two devices
+ * logging prints on the same spool at once can never overwrite each other's grams. Writes go back to the stored
+ * rows with usage added back, so code that sets or subtracts grams keeps working unchanged.
+ */
+export const spoolsSig = {
+  get value() { return shown.value; },
+  set value(v: Spool[]) { const u = usedBy.peek(); spoolBase.value = v.map((s) => { const g = u.get(s.id); return g ? { ...s, grams: s.grams + g } : s; }); },
+  peek: () => shown.peek(),
+  subscribe: (f: (v: Spool[]) => void) => shown.subscribe(f),
+} as unknown as Signal<Spool[]>;
 export const packSig = list<PackItem>("packStock", [], { active: true });
 export const itemsSig = list<PackItem>("accessories", [], { active: true });
 export const movesSig = persisted<Movement[]>("movements2", []);
