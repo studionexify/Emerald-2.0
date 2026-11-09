@@ -1,5 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { signal } from "@preact/signals";
+import { useEffect, useState } from "preact/hooks";
 import { navigate, useLocation } from "../router";
 import { syncState } from "../data/sync";
 import { NAV, NAV_GROUPS, type NavItem } from "../nav";
@@ -124,9 +125,7 @@ function TopBar() {
         <div class="ml-auto flex items-center gap-0 md:gap-1 shrink-0">
           <span class="hidden md:inline-flex mr-1"><SyncDot /></span>
           <a href="/search" aria-label="Search" class="md:hidden w-11 h-11 rounded-lg flex items-center justify-center"><Icon name="search" size={18} /></a>
-          <a href="/work/orders" class="h-8 px-3.5 mr-1 rounded-full bg-c4 text-c0 hidden md:inline-flex items-center gap-1 text-[13px] font-semibold">
-            <Icon name="plus" size={13} /> New
-          </a>
+          <NewMenu path={path} />
           <button onClick={toggleTheme} aria-label="Toggle theme" class="w-8 h-8 shrink-0 rounded-lg hover:bg-c1 hidden md:flex items-center justify-center cursor-pointer">
             <Icon name={theme.value === "dark" ? "sun" : "moon"} size={16} />
           </button>
@@ -137,6 +136,54 @@ function TopBar() {
         </div>
       </div>
     </header>
+  );
+}
+
+/* Context "+ New": what can be created depends on the section you are in. Each entry opens its page and
+   presses that page's own create button (or focuses its entry field), so there is one way to create everything. */
+type NewItem = { label: string; href: string; text?: string; focus?: string; icon: string };
+const N = (label: string, href: string, icon: string, how: string): NewItem => (how.startsWith("#") || how.startsWith("[") ? { label, href, icon, focus: how } : { label, href, icon, text: how });
+const NEW_MAP: [string, NewItem[]][] = [
+  ["/work", [N("Order", "/work/orders", "box", "New order"), N("Quotation", "/work/quotes", "doc", "New quotation"), N("Invoice", "/work/invoice", "receipt", "New invoice"), N("Bulk order", "/work/bulk", "work", "New bulk order"), N("Print job", "/work/production", "printer", "New job"), N("Client", "/work/clients", "user", "Add client")]],
+  ["/workshop", [N("Spool", "/workshop", "box", "Add spool"), N("Printer", "/workshop/printers", "printer", "Add printer"), N("Part", "/workshop/parts", "wrench", "Add part"), N("Packing item", "/workshop/packing", "box", "Add packing item"), N("Stock movement", "/workshop/movements", "rows", "Log movement")]],
+  ["/mauny", [N("Entry", "/mauny", "cash", "#mauny-amount"), N("Expense", "/mauny/finance", "wallet", "Add expense"), N("Bank statement", "/mauny", "doc", "#mauny-statement"), N("Goal", "/mauny/goals", "trend", "New goal")]],
+  ["/todo", [N("Task", "/todo", "check", "#todo-add")]],
+  ["/settings/users", [N("Person", "/settings/users", "user", "Add person")]],
+  ["/", [N("Order", "/work/orders", "box", "New order"), N("Quotation", "/work/quotes", "doc", "New quotation"), N("Money entry", "/mauny", "cash", "#mauny-amount"), N("Task", "/todo", "check", "#todo-add"), N("Spool", "/workshop", "box", "Add spool")]],
+];
+const newFor = (path: string) => (path === "/" ? NEW_MAP.find(([p]) => p === "/")![1] : NEW_MAP.find(([p]) => p !== "/" && (path === p || path.startsWith(p + "/")))?.[1] ?? null);
+function runNew(it: NewItem) {
+  navigate(it.href);
+  let n = 0;
+  const tick = () => {
+    const main = document.querySelector("main");
+    if (it.focus) { const el = document.querySelector(it.focus) as HTMLElement | null; if (el) { if (el instanceof HTMLInputElement && el.type === "file") el.click(); else { el.focus(); el.scrollIntoView({ block: "center" }); } return; } }
+    else { const b = main && [...main.querySelectorAll("button, label")].find((x) => x.textContent?.trim() === it.text) as HTMLElement | undefined; if (b) { b.click(); return; } }
+    if (++n < 20) setTimeout(tick, 120);
+  };
+  setTimeout(tick, 60);
+}
+function NewMenu({ path }: { path: string }) {
+  const items = newFor(path);
+  const [on, setOn] = useState(false);
+  useEffect(() => { if (!on) return; const f = () => setOn(false); addEventListener("click", f); return () => removeEventListener("click", f); }, [on]);
+  if (!items) return null;
+  const cls = "h-8 px-3.5 mr-1 rounded-full bg-c4 text-c0 hidden md:inline-flex items-center gap-1 text-[13px] font-semibold cursor-pointer";
+  if (items.length === 1) return <button class={cls} onClick={() => runNew(items[0])}><Icon name="plus" size={13} /> New {items[0].label.toLowerCase()}</button>;
+  return (
+    <div class="relative" onClick={(e) => e.stopPropagation()}>
+      <button class={cls} aria-haspopup="menu" aria-expanded={on} onClick={() => setOn(!on)}><Icon name="plus" size={13} /> New <Icon name="down" size={12} /></button>
+      {on && (
+        <div role="menu" class="absolute right-1 top-10 z-40 w-56 rounded-xl bg-c0 border border-line shadow-lg py-1.5 pop-in">
+          <div class="px-3 pb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-c2">Create</div>
+          {items.map((it) => (
+            <button key={it.label} role="menuitem" onClick={() => { setOn(false); runNew(it); }} class="w-full flex items-center gap-2.5 h-9 px-3 text-[13px] font-medium text-left hover:bg-c1 cursor-pointer !min-h-0">
+              <span class="text-acc"><Icon name={it.icon} size={15} /></span>{it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

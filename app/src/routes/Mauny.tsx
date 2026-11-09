@@ -39,7 +39,7 @@ function Fig({ label, value, note, dark, rule, inputs }: { label: string; value:
 /* ======================================================= Overview / Mauny money book */
 const KINDS: [MoneyKind, string, 1 | -1][] = [["receipt", "Customer receipt", 1], ["advance", "Customer advance", 1], ["other_income", "Other income", 1], ["capital_in", "Capital introduced", 1], ["loan_taken", "Loan taken", 1],
   ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1], ["tax_payment", "GST / tax paid", -1]];
-export function MaunyHome() {
+export function DayBook() {
   const accs = accountsSig.value;
   const [acc, setAcc] = useState(accs[0]?.id ?? "");
   const [day, setDay] = useState(today());
@@ -50,7 +50,7 @@ export function MaunyHome() {
   const total = accs.reduce((s, a) => s + balanceOf(a.id), 0);
   const full = can("mauny", "full");
   return (
-    <Shell title="Mauny" sub="The money book — every rupee in and out of every account"
+    <Shell title="Day book" sub="Running ledger per account — opening, in, out, closing"
 >
       <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
         {accs.map((a) => (

@@ -216,7 +216,7 @@ export function Todo() {
         </div>
         <form class="mx-4 mb-4 flex items-center gap-3 h-12 px-4 rounded-lg bg-c0 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-[#2563eb]" onSubmit={(e) => { e.preventDefault(); add(); }} onClick={() => input.current?.focus()}>
           <Icon name="plus" size={18} />
-          <input ref={input} class="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-c4 placeholder:text-[#2563eb]" placeholder="Add a task" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} />
+          <input id="todo-add" ref={input} class="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-c4 placeholder:text-[#2563eb]" placeholder="Add a task" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} />
           {draft && <button type="submit" class="h-8 px-3 !min-h-0 rounded-md bg-[#2563eb] text-white text-[12px] font-semibold cursor-pointer">Add</button>}
         </form>
       </section>

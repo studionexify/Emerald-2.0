@@ -91,3 +91,22 @@ if (!done2 && ordersSig.value.some((o) => o.id.startsWith("demo-"))) {
   ];
   if (!binSig.value.length) binSig.value = bin;
 }
+
+/* Third pass (v3): wallets and a month of money entries for the Mauny entry screen. */
+import { accountsSig, moneySig, type MoneyEntry } from "./ledger";
+let done3 = false;
+try { done3 = !!localStorage.getItem("emerald:demo3"); localStorage.setItem("emerald:demo3", "1"); } catch {}
+if (!done3 && ordersSig.value.some((o) => o.id.startsWith("demo-")) && !moneySig.value.length) {
+  if (!accountsSig.value.length) accountsSig.value = [{ id: "demo-a0", name: "HDFC Current", opening: 185000 }, { id: "demo-a1", name: "Cash", opening: 12000 }, { id: "demo-a2", name: "UPI · GPay", opening: 8000 }];
+  const A = accountsSig.value.map((a) => a.id);
+  const M = (i: number, n: number, a: number, kind: MoneyEntry["kind"], amount: number, cat: string, note: string, ref?: string): MoneyEntry => ({ id: `demo-m${i}`, date: d(n), account: A[a] ?? A[0], kind, amount, cat, note, ref, source: "mauny_entry" });
+  moneySig.value = [
+    M(0, 0, 0, "receipt", 9250, "Customer payment", "The Gift Box Co.", "EM-2103"), M(1, 0, 1, "expense", -340, "Food & travel", "Courier office auto"),
+    M(2, 0, 2, "expense", -2480, "Filament & resin", "White PLA 2 kg"), M(3, -1, 0, "expense", -1650, "Packaging", "Boxes & bubble wrap"),
+    M(4, -1, 2, "receipt", 500, "Customer payment", "Kabir Singh", "EM-2108"), M(5, -2, 0, "expense", -18000, "Rent", "Studio rent · Nov"),
+    M(6, -2, 0, "advance", 9250, "Advance", "Studio Kiln Architects", "EM-2105"), M(7, -3, 0, "expense", -3420, "Electricity", "BESCOM bill"),
+    M(8, -3, 2, "expense", -899, "Software", "Slicer cloud plan"), M(9, -4, 0, "expense", -24000, "Salaries", "Arjun · Oct"),
+    M(10, -5, 1, "expense", -720, "Shipping", "DTDC · 3 parcels"), M(11, -5, 0, "receipt", 14400, "Customer payment", "Paper Trail Stationers", "EM-2101"),
+    M(12, -6, 0, "expense", -2500, "Marketing", "Instagram boost"), M(13, -7, 0, "expense", -4350, "Parts & tools", "Hotend + nozzles"),
+  ];
+}

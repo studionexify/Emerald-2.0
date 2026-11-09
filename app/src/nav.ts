@@ -51,7 +51,8 @@ export const WORK_TABS = [
 ];
 
 export const MAUNY_TABS = [
-  { href: "/mauny", label: "Overview" },
+  { href: "/mauny", label: "Entry" },
+  { href: "/mauny/daybook", label: "Day book" },
   { href: "/mauny/purchases", label: "Purchases" },
   { href: "/mauny/finance", label: "Finance" },
   { href: "/mauny/goals", label: "Goals" },
