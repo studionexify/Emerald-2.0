@@ -1,6 +1,6 @@
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
-import { signal } from "@preact/signals";
+import { effect, signal } from "@preact/signals";
 import { persisted, today, uid } from "./store";
 import { B2B_TYPES } from "../mock/types";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
@@ -110,3 +110,23 @@ export function segmentOf(o: { type: string; size?: string; customer: string }):
 export const openOrderSig = signal<string | null>(null);
 /** Custom To-do lists (beyond the smart lists). */
 export const taskListsSig = persisted<string[]>("task-lists", ["Studio", "Purchases"]);
+
+/** Spool number on the label: per material + colour + brand. A new spool takes the lowest number not held by a spool that still has filament
+ *  (7 spools, #4 runs empty → the next one bought becomes #4). Numbers are fixed once given. */
+export const spoolGroup = (s: Spool) => `${s.material}|${s.colour}|${s.brand}`.toLowerCase();
+export function assignSlots(list: Spool[]): Spool[] {
+  if (!list.some((s) => s.slot == null)) return list;
+  const held = new Map<string, Set<number>>();
+  const live = (s: Spool) => s.grams > 0 && s.active !== false;
+  for (const s of list) if (s.slot != null && live(s)) { const g = spoolGroup(s); if (!held.has(g)) held.set(g, new Set()); held.get(g)!.add(s.slot); }
+  const order = [...list].sort((a, b) => Number(live(b)) - Number(live(a)) || (a.bought ?? "").localeCompare(b.bought ?? ""));
+  const give = new Map<string, number>();
+  for (const s of order) {
+    if (s.slot != null) continue;
+    const g = spoolGroup(s); if (!held.has(g)) held.set(g, new Set()); const h = held.get(g)!;
+    let n = 1; while (h.has(n)) n++;
+    give.set(s.id, n); if (live(s)) h.add(n);
+  }
+  return list.map((s) => (give.has(s.id) ? { ...s, slot: give.get(s.id) } : s));
+}
+effect(() => { const l = spoolsSig.value; const n = assignSlots(l); if (n !== l) queueMicrotask(() => { spoolsSig.value = assignSlots(spoolsSig.value); }); });

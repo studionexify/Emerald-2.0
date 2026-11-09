@@ -21,7 +21,7 @@ export type Printer = { id: string; name: string; model: string; status: "printi
 export type SpoolStatus = "sealed" | "open" | "loaded" | "empty";
 export type Spool = { id: string; material: string; colour: string; brand: string; grams: number; size: number; spoolNo: string;
   hex?: string; finish?: string; diameter?: number; tare?: number; spoolMat?: string; gross?: number; costKg?: number; vendor?: string; bought?: string; lot?: string;
-  location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string };
+  location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string; slot?: number };
 export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number; vendor?: string; size?: string; location?: string; notes?: string; active?: boolean; cat?: string; machine?: string };
 export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";

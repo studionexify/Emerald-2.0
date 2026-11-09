@@ -125,7 +125,7 @@ export function Printers() {
 
 /* ================================================================ Filament */
 /** Similar spools (same material, colour, brand) share one card. */
-const groupSpools = (sp: Spool[]) => { const m = new Map<string, Spool[]>(); for (const s of sp) { const k = `${s.colour}|${s.brand}`.toLowerCase(); m.set(k, [...(m.get(k) ?? []), s]); } return [...m.values()].map((l) => l.sort((a, b) => a.spoolNo.localeCompare(b.spoolNo, undefined, { numeric: true }))); };
+const groupSpools = (sp: Spool[]) => { const m = new Map<string, Spool[]>(); for (const s of sp) { const k = `${s.material}|${s.colour}|${s.brand}`.toLowerCase(); m.set(k, [...(m.get(k) ?? []), s]); } return [...m.values()].map((l) => l.sort((a, b) => (a.slot ?? 1e9) - (b.slot ?? 1e9) || a.spoolNo.localeCompare(b.spoolNo, undefined, { numeric: true }))); };
 const setHex = (list: Spool[], hex: string) => { const ids = new Set(list.map((x) => x.id)); spoolsSig.value = spoolsSig.value.map((x) => ids.has(x.id) ? { ...x, hex } : x); };
 const SPOOL_MATS: Record<string, number> = { Plastic: 250, Cardboard: 150, "Refill (no spool)": 0 };
 const putSpool = (id: string, p: Partial<Spool>) => { spoolsSig.value = spoolsSig.value.map((x) => x.id === id ? { ...x, ...p } : x); };
@@ -197,12 +197,12 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
     <div class="mt-2 flex flex-col">
       {sealed.length > 1 && !showSealed && <button onClick={() => setShowSealed(true)} class="border-t border-line flex items-center gap-3 py-2 text-left cursor-pointer !min-h-0">
         <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{sealed.length}×</span>
-        <span class="flex-1 min-w-0"><span class="block h-1.5 rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined }} /><span class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Sealed · #{sealed.map((x) => spN(x.spoolNo)).slice(0, 4).join(", ")}{sealed.length > 4 ? "…" : ""}</span><b class="num">{(sealed.reduce((a, x) => a + x.grams, 0) / 1000).toFixed(1)} kg</b></span></span>
+        <span class="flex-1 min-w-0"><span class="block h-1.5 rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined }} /><span class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Sealed · #{sealed.map((x) => x.slot ?? spN(x.spoolNo)).slice(0, 4).join(", ")}{sealed.length > 4 ? "…" : ""}</span><b class="num">{(sealed.reduce((a, x) => a + x.grams, 0) / 1000).toFixed(1)} kg</b></span></span>
         <span class="h-7 px-2.5 rounded-lg border border-line text-[11px] font-semibold grid place-items-center">Show</span>
       </button>}
       {rows.map((s) => <div key={s.id} class="border-t border-line">
         <div class="flex items-center gap-3 py-2">
-          <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{spN(s.spoolNo)}</span>
+          <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{s.slot ?? spN(s.spoolNo)}</span>
           <div class="flex-1 min-w-0">
             <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined, width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
             <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net</span><b class="num">{s.grams.toLocaleString("en-IN")} g</b></div>
@@ -224,7 +224,7 @@ const sFields: FDef<Spool>[] = [
   { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS }, { k: "colour", group: "Essentials", label: "Colour" },
   { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" }, { k: "brand", group: "Essentials", label: "Brand" },
   { k: "finish", group: "Spec", label: "Finish / line", }, { k: "diameter", group: "Spec", label: "Diameter", type: "number", suffix: "mm" },
-  { k: "spoolNo", group: "Essentials", label: "Spool no." }, { k: "lot", group: "Purchase", label: "Batch / lot" },
+  { k: "slot", group: "Essentials", label: "Spool no.", type: "number" }, { k: "lot", group: "Purchase", label: "Batch / lot" },
   { k: "size", group: "Weight", label: "Nominal net", type: "number", suffix: "g" }, { k: "tare", group: "Weight", label: "Empty spool (tare)", type: "number", suffix: "g" },
   { k: "gross", group: "Weight", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", group: "Essentials", label: "Net remaining", type: "number", suffix: "g" },
   { k: "costKg", group: "Purchase", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", group: "Purchase", label: "Vendor" },
