@@ -69,26 +69,50 @@ function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: O
 }
 
 /** Live order row: client · type | items | stage | city | deadline | ⋯ */
+/* Live-orders table: fixed columns stay tight, flexible ones (client, items, city) share the extra width. */
+const COLS = "md:grid-cols-[minmax(130px,1.3fr)_minmax(104px,0.7fr)_minmax(150px,1.6fr)_minmax(100px,0.6fr)_minmax(70px,0.7fr)_80px_28px] xl:grid-cols-[minmax(140px,1.3fr)_minmax(110px,0.7fr)_minmax(160px,1.6fr)_minmax(150px,1fr)_minmax(104px,0.6fr)_minmax(80px,0.7fr)_84px_28px]";
+const TRACK: [Order["stage"], string][] = [["quotation", "doc"], ["po", "stamp"], ["production", "printer"], ["qc", "shield"], ["packing", "box"], ["invoice", "receipt"], ["shipping", "truck"]];
+const STAGE_HUE: Record<string, string> = { quotation: "#64748b", po: "#6366f1", production: "#2563eb", qc: "#d97706", packing: "#9333ea", invoice: "#0d9488", shipping: "#16a34a", archived: "#64748b", blocked: "#dc2626" };
+const KIND_HUE = (k: string) => (k.startsWith("B2B") ? "#2563eb" : k === "Bulk" ? "#9333ea" : k === "In-house" ? "#64748b" : "#0d9488");
+const tint = (h: string) => ({ color: h, background: `color-mix(in srgb, ${h} 13%, transparent)` });
+
+function Track({ o }: { o: Order }) {
+  const at = TRACK.findIndex(([k]) => k === o.stage);
+  const hue = o.blocked ? STAGE_HUE.blocked : STAGE_HUE[o.stage];
+  return (
+    <div class="flex items-center" aria-label={`Stage ${at + 1} of ${TRACK.length}`}>
+      {TRACK.map(([k, ic], i) => (
+        <span key={k} class="contents">
+          {i > 0 && <span class="h-[2px] flex-1 min-w-1.5" style={{ background: i <= at ? hue : "color-mix(in srgb, var(--c-2) 30%, transparent)" }} />}
+          <span title={STAGE_LABEL[k]} class="w-[18px] h-[18px] shrink-0 rounded-full grid place-items-center"
+            style={i <= at ? { background: hue, color: "#fff" } : { background: "transparent", color: "color-mix(in srgb, var(--c-2) 70%, transparent)", boxShadow: "inset 0 0 0 1.5px color-mix(in srgb, var(--c-2) 45%, transparent)" }}>
+            <Icon name={ic} size={10} />
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function OrderRow({ o, onOpen, onEdit }: { o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void }) {
   const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
-  const d = left(o.due);
+  const d = left(o.due), kind = kindOf(o, c), st = o.blocked ? "blocked" : o.stage;
   return (
     <div role="button" tabIndex={0} onClick={() => onOpen(o)} onKeyDown={(e) => e.key === "Enter" && onOpen(o)}
-      class="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)_110px_100px_120px_36px] items-start gap-x-4 gap-y-1 py-2.5 px-3 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0">
-      <div class="min-w-0">
-        <div class="text-[14px] font-semibold leading-snug">{o.customer}</div>
-        <span class="inline-flex mt-1 px-1.5 h-5 items-center rounded bg-c1 text-[11px] font-medium text-c3">{kindOf(o, c)}</span>
-      </div>
-      <ul class="min-w-0 max-md:col-span-2 max-md:row-start-2 text-[13px] leading-snug">
-        {o.items.map((i, k) => <li key={k} class="flex justify-between gap-3"><span class="min-w-0">{i.name}</span><span class="num text-c3 whitespace-nowrap">×{i.qty}</span></li>)}
+      class={`grid grid-cols-[minmax(0,1fr)_auto] ${COLS} items-center gap-x-4 2xl:gap-x-6 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0`}>
+      <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
+      <div class="max-md:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span></div>
+      <ul class="min-w-0 max-md:col-span-2 max-md:row-start-2 text-[13px] leading-[1.5]">
+        {o.items.map((i, k) => <li key={k} class="flex items-baseline gap-2 min-w-0"><span class="num font-semibold text-c4 w-10 shrink-0 text-right">{i.qty}×</span><span class="min-w-0 text-c3">{i.name}</span></li>)}
       </ul>
-      <span class="hidden md:inline-flex px-2 h-6 items-center rounded-full bg-c1 text-[12px] font-medium w-fit">{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span>
-      <span class="hidden md:block text-[13px] text-c3 leading-6">{c?.city || "—"}</span>
+      <div class="max-xl:hidden pr-2"><Track o={o} /></div>
+      <div class="max-md:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>
+      <span class="max-md:hidden text-[13px] text-c3 truncate">{c?.city || "—"}</span>
       <div class="text-right md:text-left max-md:col-start-2 max-md:row-start-1">
-        <div class="text-[13px] font-medium leading-6 whitespace-nowrap">{shortDate(o.due)}</div>
-        <div class={`text-[11px] whitespace-nowrap ${d < 0 ? "text-c4 font-semibold" : "text-c3"}`}>({leftLabel(d)})</div>
+        <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
+        <div class={`text-[11px] whitespace-nowrap font-medium`} style={{ color: d < 0 ? STAGE_HUE.blocked : d <= 2 ? STAGE_HUE.qc : "var(--c-3)" }}>{leftLabel(d)}</div>
       </div>
-      <div class="hidden md:block"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>
+      <div class="max-md:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>
     </div>
   );
 }
@@ -141,7 +165,7 @@ export default function Overview() {
 
       <Section title="Live orders" note={String(live.length)} action={<a href="/work/orders" class="t-meta whitespace-nowrap">Board →</a>}>
           <div class="rounded-[var(--radius-card)] bg-c0 border border-line">
-            <div class="hidden md:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)_110px_100px_120px_36px] gap-x-4 px-3 h-8 items-center border-b border-line t-meta uppercase tracking-[0.06em]"><span>Client · type</span><span>Items</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
+            <div class={`hidden md:grid ${COLS} gap-x-4 2xl:gap-x-6 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3`}><span>Client</span><span>Type</span><span>Items</span><span class="max-xl:hidden">Progress</span><span>Stage</span><span>City</span><span>Deadline</span><span /></div>
             {live.slice(0, n).map((o) => <OrderRow key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => { setOpen(null); setEdit(x); }} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>
