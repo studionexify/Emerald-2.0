@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
-import { Card, Icon, KV, Page, Section, Status } from "../ui";
+import { Card, Icon, KV, Page, Section, Status, Waterfall } from "../ui";
 import { Initials, StageStrip } from "../ui/stage-strip";
 import { financeSummary, moneySig, windowFor, attention as attn, batchesSig, inr, logsSig, ordersSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
 
@@ -38,8 +38,12 @@ export default function Dashboard() {
           : <Tile href="/todo" icon="check" label="To-do" value={todo.length} caption="Open tasks" />}
       </div>
 
-      <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] items-start">
-        <Section title="Action center" note={`${all.length} items`} action={<a href="/alerts" class="t-meta whitespace-nowrap">All →</a>}>
+      <Section title="Pipeline" action={<a href="/work" class="t-meta">Production →</a>}>
+        <StageStrip orders={ordersSig.value} showValue={can("mauny")} />
+      </Section>
+
+      <Waterfall min={360} max={4} items={[
+        [2 + Math.min(feed.length, 8) * 0.6, <div key="a"><Section title="Action center" note={`${all.length} items`} action={<a href="/alerts" class="t-meta whitespace-nowrap">All →</a>}>
           <div class="rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden">
             <div class="flex items-center gap-0.5 p-1 m-2 rounded-lg bg-c1 w-fit" role="tablist">
               {SEV.map(([k, l]) => { const c = all.filter((x) => x.t === k).length; return (
@@ -56,9 +60,8 @@ export default function Dashboard() {
             )) : <p class="t-meta px-3 py-3 border-t border-line">Nothing here.</p>}
             {feed.length > 8 && <a href="/alerts" class="block h-9 leading-9 px-3 border-t border-line t-meta">+{feed.length - 8} more</a>}
           </div>
-        </Section>
-        <div class="flex flex-col gap-4 min-w-0">
-        <Section title="Machines" action={<a href="/workshop/printers" class="t-meta">Printers →</a>}>
+        </Section></div>],
+        [1 + machines.length * 0.7, <div key="m"><Section title="Machines" action={<a href="/workshop/printers" class="t-meta">Printers →</a>}>
           <Card>
             {machines.length ? <div class="flex flex-col gap-3">{machines.map((p) => (
               <div key={p.id} class="flex items-center gap-3 min-w-0">
@@ -69,8 +72,8 @@ export default function Dashboard() {
                 </div>
               </div>))}</div> : <p class="t-meta">No printers yet.</p>}
           </Card>
-        </Section>
-        <Section title="Money flow" action={<a href="/mauny/finance" class="t-meta">Finance →</a>}>
+        </Section></div>],
+        [2.5, <div key="f"><Section title="Money flow" action={<a href="/mauny/finance" class="t-meta">Finance →</a>}>
           <Card>
             <div class="flex items-end justify-between gap-3">
               <div><div class="t-meta">Net this week</div><div class="num text-[22px] font-semibold leading-tight">{inr(wk)}</div></div>
@@ -81,26 +84,17 @@ export default function Dashboard() {
               <KV label={<span class="inline-flex items-center gap-1.5"><Icon name="wallet" size={13} />Spent · month</span>} value={inr(fm.spent)} />
             </div>
           </Card>
-        </Section>
-        </div>
-      </div>
-
-      <Section title="Pipeline" action={<a href="/work" class="t-meta">Production →</a>}>
-        <StageStrip orders={ordersSig.value} showValue={can("mauny")} />
-      </Section>
-
-      <div class="grid gap-4 md:grid-cols-2 items-start">
-        <Section title="Due soonest" action={<a href="/work/orders" class="t-meta">All →</a>}>
+        </Section></div>],
+        [1 + dueSoon.length * 0.7, <div key="d"><Section title="Due soonest" action={<a href="/work/orders" class="t-meta">All →</a>}>
           <Card class="!py-1">{dueSoon.map((o) => <KV key={o.id} label={<span class="flex items-center gap-2.5 min-w-0"><Initials name={o.customer} /><span class="min-w-0"><span class="block truncate font-semibold text-c4">{o.customer}</span><span class="block font-mono text-[11px] text-c2">{o.no}</span></span></span>} value={shortDate(o.due)} />)}</Card>
-        </Section>
-        <Section title="To-do" note={money ? String(todo.length) : undefined} action={<a href="/todo" class="t-meta">All →</a>}>
-          <Card class="!py-1">{todo.slice(0, 5).map((t) => <KV key={t.id} label={t.title} value={<span class="t-meta">{t.who} · {shortDate(t.due)}</span>} />)}</Card>
-        </Section>
-      </div>
-
-      <Section title="Recent activity" action={<a href="/logs" class="t-meta">Logs →</a>}>
-        <Card class="!py-1">{logsSig.value.slice(0, 5).map((l) => <KV key={l.id} label={<span><b class="text-c4">{l.who}</b> {l.action.toLowerCase()} · {l.target}</span>} value={<span class="t-meta">{l.at.slice(11)}</span>} />)}</Card>
-      </Section>
+        </Section></div>],
+        [1 + Math.max(1, Math.min(todo.length, 5)) * 0.6, <div key="t"><Section title="To-do" note={money ? String(todo.length) : undefined} action={<a href="/todo" class="t-meta">All →</a>}>
+          <Card class="!py-1">{!todo.length && <p class="t-meta py-2">No open tasks.</p>}{todo.slice(0, 5).map((t) => <KV key={t.id} label={t.title} value={<span class="t-meta">{t.who} · {shortDate(t.due)}</span>} />)}</Card>
+        </Section></div>],
+        [1 + Math.max(1, Math.min(logsSig.value.length, 5)) * 0.6, <div key="r"><Section title="Recent activity" action={<a href="/logs" class="t-meta">Logs →</a>}>
+        <Card class="!py-1">{!logsSig.value.length && <p class="t-meta py-2">Nothing logged yet.</p>}{logsSig.value.slice(0, 5).map((l) => <KV key={l.id} label={<span><b class="text-c4">{l.who}</b> {l.action.toLowerCase()} · {l.target}</span>} value={<span class="t-meta">{l.at.slice(11)}</span>} />)}</Card>
+      </Section></div>],
+      ]} />
     </Page>
   );
 }

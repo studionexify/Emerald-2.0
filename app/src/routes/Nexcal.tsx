@@ -1,7 +1,7 @@
 /** Nexcal · FDM — the studio's pricing calculator, ported from Emerald 1 (same engine, same numbers). */
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Field, Icon, inputCls, Page, Sheet, SubTabs } from "../ui";
+import { Button, Card, CardTitle, Field, Icon, inputCls, Page, Sheet, SubTabs, Waterfall } from "../ui";
 import { navigate } from "../router";
 import { createOrder, inr } from "../data";
 import { nexcalSig, NEXCAL_DEFAULTS, type NexcalSettings } from "../data/pricing";
@@ -77,7 +77,7 @@ function UploadCard({ parts, onFiles, onPart, onUnit, onAxis, onSize, onReset, o
                   </div>
                   <button type="button" aria-label="Remove" onClick={() => onRemove(p.id)} class="w-7 h-7 shrink-0 grid place-items-center rounded-full text-c3 hover:bg-c1 cursor-pointer"><Icon name="close" size={14} /></button>
                 </div>
-                <div class="mt-3 grid grid-cols-3 lg:grid-cols-5 gap-2">
+                <div class="mt-3 grid grid-cols-3 gap-2">
                   <Field label="Unit"><select class={sm} value={p.unit} onChange={(e) => onUnit(p, (e.target as HTMLSelectElement).value as MeshUnit)}>{UNITS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
                   <Field label="Size (mm)">
                     <span class="flex items-center gap-1">
@@ -144,7 +144,7 @@ function SetNum({ label, k }: { label: string; k: keyof NexcalSettings }) {
 function Advanced() {
   const s = nexcalSig.value, pr = computePrintTimeRate(s);
   return (
-    <div class="grid gap-6 lg:grid-cols-2 pt-3">
+    <div class="grid gap-6 pt-3">
       <div class="flex flex-col gap-5">
         <div><div class="t-section mb-2">General rates</div><div class="grid grid-cols-2 gap-3">
           <SetNum label="Material efficiency factor" k="materialEfficiencyFactor" /><SetNum label="Labour rate (₹/hr)" k="labourHourlyRate" />
@@ -265,91 +265,8 @@ export function Nexcal() {
     <Page title="Nexcal" sub="Cost-plus pricing, machine-time economics and bulk tiers" tabs={CALC_TABS}
       actions={<><Button variant="outline" icon="copy" onClick={copy}>Copy summary</Button><Button variant="outline" icon="printer" onClick={() => print()}>Print</Button><Button variant="outline" onClick={reset}>Reset</Button></>}>
       {toast && <div class="mb-3 rounded-xl bg-c1 px-3.5 py-2 text-[13px] font-medium" role="status">{toast}</div>}
-      <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] items-start">
-        <Card>
-          <div class="grid lg:grid-cols-2">
-            <section class={`min-w-0 pb-5 ${wide ? "lg:col-span-2" : "lg:pr-5 lg:pb-0 lg:border-r border-line"}`}>
-          <UploadCard parts={parts} agg={agg} busy={busy} onFiles={onFiles} onPart={upd} onClear={clear} onRemove={remove} onView={openView} onSize={onSize}
-            onUnit={(p, unit) => upd(p.id, { unit, scalePercent: 100, ...analyse({ ...p, unit, scalePercent: 100 }) })}
-            onAxis={(p, upAxis) => upd(p.id, { upAxis, ...analyse({ ...p, upAxis }) })}
-            onReset={(p) => p.baseMeshAnalysis && upd(p.id, { scalePercent: 100, meshAnalysis: scaleMeshAnalysis(p.baseMeshAnalysis, 1) })} />
-            </section>
-            <section class={`min-w-0 pt-5 border-t border-line ${wide ? "lg:col-span-2" : "lg:pt-0 lg:pl-5 lg:border-t-0"}`}>
-              <CardTitle>Print & pricing</CardTitle>
-            <div class={`grid gap-3 grid-cols-2 ${wide ? "md:grid-cols-4" : ""}`}>
-              <div class={`col-span-2 ${wide ? "md:col-span-4" : ""}`}><SpoolPick onPick={(c, m, col) => { patch({ filamentCostPerKg: c, ...(m && (NEXCAL_MATERIALS as readonly string[]).includes(m) ? { material: m } : {}) }); setQ({ ...q, material: m, colour: col }); }} /></div>
-              <Field label="Material used"><select class={inputCls} value={inputs.material} onChange={(e) => patch({ material: (e.target as HTMLSelectElement).value })}>{NEXCAL_MATERIALS.map((m) => <option key={m}>{m}</option>)}</select></Field>
-              <Field label="Filament cost (₹ / kg)"><input class={`${inputCls} num`} type="number" value={inputs.filamentCostPerKg} onInput={(e) => patch({ filamentCostPerKg: num(e) })} /></Field>
-              <Field label="Filament per part (g)"><input class={`${inputCls} num`} type="number" step="any" value={inputs.filamentGrams} onInput={(e) => patch({ filamentGrams: num(e) })} /></Field>
-              <Field label="Print time per part">
-                <span class="flex gap-1.5">
-                  <span class="relative flex-1"><input class={`${inputCls} num !pr-8 !pl-2 text-right`} type="number" aria-label="Hours" value={H} onInput={(e) => patch({ printHours: Math.max(0, Math.round(num(e))) + M / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">hr</span></span>
-                  <span class="relative flex-1"><input class={`${inputCls} num !pr-9 !pl-2 text-right`} type="number" aria-label="Minutes" value={M} onInput={(e) => patch({ printHours: (Math.max(0, Math.round(num(e))) + H * 60) / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">min</span></span>
-                </span>
-              </Field>
-              <Field label="Labour per part (min)"><input class={`${inputCls} num`} type="number" value={inputs.labourMinutes} onInput={(e) => patch({ labourMinutes: num(e) })} /></Field>
-              <Field label="Margin (%)"><input class={`${inputCls} num`} type="number" value={inputs.marginPercent} onInput={(e) => patch({ marginPercent: num(e) })} /></Field>
-            </div>
-            <p class="t-meta mt-3">GST <b class="text-c4">{settings.gstPercent}%</b> · machine <b class="text-c4">{dec(result.printTimeRate)}/hr</b> · <button type="button" class="underline cursor-pointer" onClick={() => setAdv(true)}>Advanced settings</button></p>
-            </section>
-          </div>
-          <div class="mt-5 pt-5 border-t border-line">
-            <CardTitle>Bill of materials</CardTitle>
-            <div class="grid lg:grid-cols-2 gap-y-5">
-              <section class="min-w-0 lg:pr-5 lg:border-r border-line">
-            <Lines title="Materials" rows={inputs.materialRows} locked={["Printed part (auto)", result.printedPartCost]} total={result.totalMaterialsCost} onChange={(r) => patch({ materialRows: r })} add="Add material" />
-              </section>
-              <section class="min-w-0 pt-5 border-t border-line lg:pt-0 lg:border-t-0 lg:pl-5">
-                <Lines title="Packaging & shipping" rows={inputs.packagingRows} total={result.totalPackagingCost} onChange={(r) => patch({ packagingRows: r })} add="Add item" />
-              </section>
-            </div>
-          </div>
-          <div class="mt-5 pt-5 border-t border-line">
-            <CardTitle>Bulk pricing</CardTitle>
-            <p class="t-meta -mt-1 mb-3">Spool-count tiers, mapped automatically to a part-quantity range.</p>
-            <div class="grid lg:grid-cols-2">
-              <section class="min-w-0 pb-5 lg:pb-0 lg:pr-5 lg:border-r border-line">
-                        <div class="grid grid-cols-2 gap-3">
-              <Field label="Order quantity"><input class={`${inputCls} num`} type="number" min={1} value={inputs.orderQty} onInput={(e) => patch({ orderQty: num(e) || 1 })} /></Field>
-              <Field label="Spool weight (g)"><input class={`${inputCls} num`} type="number" value={settings.spoolWeightGrams} onInput={(e) => (nexcalSig.value = { ...settings, spoolWeightGrams: num(e) || 1 })} /></Field>
-            </div>
-            <p class="t-meta mt-2">1 part = {inputs.filamentGrams} g · {perSpool >= 1 ? `${perSpool} part${perSpool === 1 ? "" : "s"} / spool` : `${Math.ceil(inputs.filamentGrams / Math.max(1, settings.spoolWeightGrams))} spools / part`}</p>
-            <div class="mt-3 flex items-center justify-between"><span class="t-meta uppercase tracking-[0.06em]">Spool qty tiers</span>
-              <Button variant="outline" icon="plus" onClick={() => { const s = [...settings.bulkTiers].sort((a, b) => a.min - b.min); nexcalSig.value = { ...settings, bulkTiers: [...settings.bulkTiers, { min: (s[s.length - 1]?.min ?? 0) + 1 }] }; }}>Add tier</Button></div>
-            <div class="mt-2 flex flex-wrap gap-2">
-              {settings.bulkTiers.map((t, i) => (
-                <span key={i} class="flex items-center gap-1 rounded-full border border-line bg-c1/50 pl-3 pr-1 h-8">
-                  <input type="number" min={1} class="num w-12 bg-transparent text-right text-[12px] font-semibold outline-none" value={t.min} aria-label="Tier starts at spools"
-                    onInput={(e) => (nexcalSig.value = { ...settings, bulkTiers: settings.bulkTiers.map((x, j) => (j === i ? { min: Math.max(1, num(e) || 1) } : x)) })} />
-                  {settings.bulkTiers.length > 1 && <button type="button" aria-label="Remove tier" onClick={() => (nexcalSig.value = { ...settings, bulkTiers: settings.bulkTiers.filter((_, j) => j !== i) })} class="w-6 h-6 grid place-items-center rounded-full text-c3 hover:bg-c1 cursor-pointer"><Icon name="close" size={11} /></button>}
-                </span>
-              ))}
-            </div>
-              </section>
-              <section class="min-w-0 pt-5 border-t border-line lg:pt-0 lg:border-t-0 lg:pl-5">
-                <ul class="flex flex-col gap-1.5">
-              <li class="grid grid-cols-[minmax(0,1fr)_40px_52px_52px] gap-2 px-3 t-meta uppercase tracking-[0.06em]"><span>Qty</span><span class="text-right">Off</span><span class="text-right">Ex GST</span><span class="text-right">Inc GST</span></li>
-              {bulk.map((r, i) => (
-                <li key={i} class={`grid grid-cols-[minmax(0,1fr)_40px_52px_52px] gap-2 items-center rounded-xl px-3 h-10 text-[13px] num ${r.isActive ? "bg-c4 text-c0" : "bg-c1/60"}`}>
-                  <span class="font-semibold whitespace-nowrap">{r.maxParts === null ? `${r.minParts}+` : `${r.minParts}–${r.maxParts}`} pcs</span>
-                  <span class="text-right">{r.discount ? `−${r.discount}%` : "—"}</span>
-                  <span class="text-right">{inr(r.priceExGst)}</span>
-                  <span class="text-right font-semibold">{inr(r.priceIncGst)}</span>
-                </li>
-              ))}
-                </ul>
-              </section>
-            </div>
-          </div>
-          <div class="mt-5 pt-4 border-t border-line">
-        <button type="button" onClick={() => setAdv(!adv)} aria-expanded={adv} class="w-full flex items-center justify-between text-left cursor-pointer">
-          <span class="text-[15px] font-semibold">Advanced settings</span><span class={`transition-transform ${adv ? "rotate-90" : ""}`}><Icon name="right" size={14} /></span>
-        </button>
-        {adv && <Advanced />}
-          </div>
-        </Card>
-
-        <Card class="xl:sticky xl:top-0">
+      <Waterfall min={380} max={3} items={[
+        [6, <Card key="sum" class="order-first">
           <CardTitle>Cost summary</CardTitle>
             <Row label="Total materials" value={dec(result.totalMaterialsCost)} />
             <Row label="Total labour" value={dec(result.totalLabourCost)} />
@@ -368,8 +285,76 @@ export function Nexcal() {
             </div>
             {below && <p class="mt-2 text-[12px] text-warn font-medium">Margin {result.marginSafe}% is below the {settings.marginFloorPct}% floor.</p>}
             <Button class="mt-3 w-full" onClick={quote}>Use in quotation</Button>
-        </Card>
-      </div>
+        </Card>],
+        [wide ? 9 : 5, <Card key="model">
+          <UploadCard parts={parts} agg={agg} busy={busy} onFiles={onFiles} onPart={upd} onClear={clear} onRemove={remove} onView={openView} onSize={onSize}
+            onUnit={(p, unit) => upd(p.id, { unit, scalePercent: 100, ...analyse({ ...p, unit, scalePercent: 100 }) })}
+            onAxis={(p, upAxis) => upd(p.id, { upAxis, ...analyse({ ...p, upAxis }) })}
+            onReset={(p) => p.baseMeshAnalysis && upd(p.id, { scalePercent: 100, meshAnalysis: scaleMeshAnalysis(p.baseMeshAnalysis, 1) })} />
+        </Card>],
+        [5, <Card key="print">
+          <CardTitle>Print & pricing</CardTitle>
+            <div class={`grid gap-3 grid-cols-2`}>
+              <div class={`col-span-2`}><SpoolPick onPick={(c, m, col) => { patch({ filamentCostPerKg: c, ...(m && (NEXCAL_MATERIALS as readonly string[]).includes(m) ? { material: m } : {}) }); setQ({ ...q, material: m, colour: col }); }} /></div>
+              <Field label="Material used"><select class={inputCls} value={inputs.material} onChange={(e) => patch({ material: (e.target as HTMLSelectElement).value })}>{NEXCAL_MATERIALS.map((m) => <option key={m}>{m}</option>)}</select></Field>
+              <Field label="Filament cost (₹ / kg)"><input class={`${inputCls} num`} type="number" value={inputs.filamentCostPerKg} onInput={(e) => patch({ filamentCostPerKg: num(e) })} /></Field>
+              <Field label="Filament per part (g)"><input class={`${inputCls} num`} type="number" step="any" value={inputs.filamentGrams} onInput={(e) => patch({ filamentGrams: num(e) })} /></Field>
+              <Field label="Print time per part">
+                <span class="flex gap-1.5">
+                  <span class="relative flex-1"><input class={`${inputCls} num !pr-8 !pl-2 text-right`} type="number" aria-label="Hours" value={H} onInput={(e) => patch({ printHours: Math.max(0, Math.round(num(e))) + M / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">hr</span></span>
+                  <span class="relative flex-1"><input class={`${inputCls} num !pr-9 !pl-2 text-right`} type="number" aria-label="Minutes" value={M} onInput={(e) => patch({ printHours: (Math.max(0, Math.round(num(e))) + H * 60) / 60 })} /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 t-meta">min</span></span>
+                </span>
+              </Field>
+              <Field label="Labour per part (min)"><input class={`${inputCls} num`} type="number" value={inputs.labourMinutes} onInput={(e) => patch({ labourMinutes: num(e) })} /></Field>
+              <Field label="Margin (%)"><input class={`${inputCls} num`} type="number" value={inputs.marginPercent} onInput={(e) => patch({ marginPercent: num(e) })} /></Field>
+            </div>
+            <p class="t-meta mt-3">GST <b class="text-c4">{settings.gstPercent}%</b> · machine <b class="text-c4">{dec(result.printTimeRate)}/hr</b> · <button type="button" class="underline cursor-pointer" onClick={() => setAdv(true)}>Advanced settings</button></p>
+        </Card>],
+        [6, <Card key="bom">
+          <CardTitle>Bill of materials</CardTitle>
+            <Lines title="Materials" rows={inputs.materialRows} locked={["Printed part (auto)", result.printedPartCost]} total={result.totalMaterialsCost} onChange={(r) => patch({ materialRows: r })} add="Add material" />
+          <div class="mt-4 pt-4 border-t border-line"><Lines title="Packaging & shipping" rows={inputs.packagingRows} total={result.totalPackagingCost} onChange={(r) => patch({ packagingRows: r })} add="Add item" /></div>
+        </Card>],
+        [7, <Card key="bulk">
+          <CardTitle>Bulk pricing</CardTitle>
+          <p class="t-meta -mt-1 mb-3">Spool-count tiers, mapped automatically to a part-quantity range.</p>
+                        <div class="grid grid-cols-2 gap-3">
+              <Field label="Order quantity"><input class={`${inputCls} num`} type="number" min={1} value={inputs.orderQty} onInput={(e) => patch({ orderQty: num(e) || 1 })} /></Field>
+              <Field label="Spool weight (g)"><input class={`${inputCls} num`} type="number" value={settings.spoolWeightGrams} onInput={(e) => (nexcalSig.value = { ...settings, spoolWeightGrams: num(e) || 1 })} /></Field>
+            </div>
+            <p class="t-meta mt-2">1 part = {inputs.filamentGrams} g · {perSpool >= 1 ? `${perSpool} part${perSpool === 1 ? "" : "s"} / spool` : `${Math.ceil(inputs.filamentGrams / Math.max(1, settings.spoolWeightGrams))} spools / part`}</p>
+            <div class="mt-3 flex items-center justify-between"><span class="t-meta uppercase tracking-[0.06em]">Spool qty tiers</span>
+              <Button variant="outline" icon="plus" onClick={() => { const s = [...settings.bulkTiers].sort((a, b) => a.min - b.min); nexcalSig.value = { ...settings, bulkTiers: [...settings.bulkTiers, { min: (s[s.length - 1]?.min ?? 0) + 1 }] }; }}>Add tier</Button></div>
+            <div class="mt-2 flex flex-wrap gap-2">
+              {settings.bulkTiers.map((t, i) => (
+                <span key={i} class="flex items-center gap-1 rounded-full border border-line bg-c1/50 pl-3 pr-1 h-8">
+                  <input type="number" min={1} class="num w-12 bg-transparent text-right text-[12px] font-semibold outline-none" value={t.min} aria-label="Tier starts at spools"
+                    onInput={(e) => (nexcalSig.value = { ...settings, bulkTiers: settings.bulkTiers.map((x, j) => (j === i ? { min: Math.max(1, num(e) || 1) } : x)) })} />
+                  {settings.bulkTiers.length > 1 && <button type="button" aria-label="Remove tier" onClick={() => (nexcalSig.value = { ...settings, bulkTiers: settings.bulkTiers.filter((_, j) => j !== i) })} class="w-6 h-6 grid place-items-center rounded-full text-c3 hover:bg-c1 cursor-pointer"><Icon name="close" size={11} /></button>}
+                </span>
+              ))}
+            </div>
+          <ul class="mt-4 pt-4 border-t border-line flex flex-col gap-1.5">
+                <ul class="flex flex-col gap-1.5">
+              <li class="grid grid-cols-[minmax(0,1fr)_40px_52px_52px] gap-2 px-3 t-meta uppercase tracking-[0.06em]"><span>Qty</span><span class="text-right">Off</span><span class="text-right">Ex GST</span><span class="text-right">Inc GST</span></li>
+              {bulk.map((r, i) => (
+                <li key={i} class={`grid grid-cols-[minmax(0,1fr)_40px_52px_52px] gap-2 items-center rounded-xl px-3 h-10 text-[13px] num ${r.isActive ? "bg-c4 text-c0" : "bg-c1/60"}`}>
+                  <span class="font-semibold whitespace-nowrap">{r.maxParts === null ? `${r.minParts}+` : `${r.minParts}–${r.maxParts}`} pcs</span>
+                  <span class="text-right">{r.discount ? `−${r.discount}%` : "—"}</span>
+                  <span class="text-right">{inr(r.priceExGst)}</span>
+                  <span class="text-right font-semibold">{inr(r.priceIncGst)}</span>
+                </li>
+              ))}
+                </ul>
+          </ul>
+        </Card>],
+        [adv ? 8 : 1, <Card key="adv">
+        <button type="button" onClick={() => setAdv(!adv)} aria-expanded={adv} class="w-full flex items-center justify-between text-left cursor-pointer">
+          <span class="text-[15px] font-bold">Advanced settings</span><span class={`transition-transform ${adv ? "rotate-90" : ""}`}><Icon name="right" size={14} /></span>
+        </button>
+        {adv && <Advanced />}
+        </Card>],
+      ]} />
 
 
       {view && <Sheet open onClose={() => setView(null)} title={view.name}><img src={view.src} alt={view.name} class="mx-auto max-h-[70vh] w-auto bg-white rounded-xl" /></Sheet>}

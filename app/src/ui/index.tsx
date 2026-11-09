@@ -30,7 +30,7 @@ export function Card({ children, class: c, dark, dashed }: { children: Component
 export function CardTitle({ children, action }: { children: ComponentChildren; action?: ComponentChildren }) {
   return (
     <div class="flex items-center justify-between gap-2 mb-2">
-      <h2 class="text-[13px] font-semibold min-w-0">{children}</h2>
+      <h2 class="text-[15px] font-bold text-c4 min-w-0">{children}</h2>
       {action}
     </div>
   );
@@ -251,7 +251,7 @@ export function Split({ detail, children }: { detail: ComponentChildren | null; 
   return (
     <div class={`min-h-0 h-full ${detail && !phone ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
       <div class="min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
-        <div class="flex flex-col gap-4 max-w-[1600px]">{children}</div>
+        <div class="flex flex-col gap-4">{children}</div>
       </div>
       {detail && !phone && <aside aria-label="Inspector (⌘I to hide)" class="sheet-fade min-w-0 min-h-0 h-full overflow-y-auto overscroll-contain bg-c0 border-l border-line p-4">{detail}</aside>}
       {detail && phone && <Sheet full onClose={close}><div ref={ref} class="pt-1">{detail}</div></Sheet>}
@@ -298,7 +298,7 @@ export function Page({ title, sub, actions, tabs, toolbar, strip, detail, childr
           <Split detail={detail}>{children}</Split>
         ) : (
           <div class="h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
-            <div class="flex flex-col gap-4 max-w-[1600px]">
+            <div class="flex flex-col gap-4">
               {children}
             </div>
           </div>
@@ -386,4 +386,18 @@ export function Meter({ value, label }: { value: number; label?: ComponentChildr
       {label !== undefined && <span class="num text-[11px] text-c3 whitespace-nowrap">{label}</span>}
     </span>
   );
+}
+
+/** Waterfall (masonry): items go, in order, into whichever column is shortest; column count follows the available width. */
+export function Waterfall({ items, min = 340, max = 4, gap = "gap-4" }: { items: [number, ComponentChildren][]; min?: number; max?: number; gap?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [n, setN] = useState(1);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const ro = new ResizeObserver(([e]) => setN(Math.max(1, Math.min(max, Math.floor((e.contentRect.width + 16) / (min + 16))))));
+    ro.observe(el); return () => ro.disconnect();
+  }, [min, max]);
+  const cols: ComponentChildren[][] = Array.from({ length: n }, () => []); const h = Array(n).fill(0);
+  items.forEach(([w, node]) => { const i = h.indexOf(Math.min(...h)); cols[i].push(node); h[i] += w; });
+  return <div ref={ref} class={`flex items-start ${gap}`}>{cols.map((c, i) => <div key={i} class={`flex-1 min-w-0 flex flex-col ${gap}`}>{c}</div>)}</div>;
 }
