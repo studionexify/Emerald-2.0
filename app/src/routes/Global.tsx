@@ -301,7 +301,7 @@ export function Business() {
 }
 
 function ImportE1() {
-  const [state, setState] = useState<{ busy?: boolean; m?: Migrated; err?: string; done?: boolean }>({});
+  const [state, setState] = useState<{ busy?: boolean; m?: Migrated; err?: string; done?: string }>({});
   const pick = async (e: Event) => {
     const files = [...((e.target as HTMLInputElement).files ?? [])];
     if (!files.length) return;
@@ -309,7 +309,9 @@ function ImportE1() {
     try { const m = mapEmerald1(await readExport(files)); setState(m.invoices.length || m.orders.length || m.spools.length ? { m } : { err: "No Emerald 1 tables found in those files." }); }
     catch (x) { setState({ err: String(x) }); }
   };
-  const go = () => { if (!state.m) return; applyEmerald1(state.m); log("Imported Emerald 1 data", `${state.m.invoices.length} invoices · ${state.m.orders.length} orders`); setState({ done: true }); };
+  const go = () => { if (!state.m) return; applyEmerald1(state.m); log("Imported Emerald 1 data", `${state.m.invoices.length} invoices · ${state.m.orders.length} orders`); setState({ done: "Replaced. Every list now shows the export's records." }); };
+  const merge = () => { if (!state.m) return; const a = mergeEmerald1(state.m); const n = Object.entries(a).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(" · ");
+    log("Merged Emerald 1 data", n || "print counts only"); setState({ done: `Merged. Your 2.0 edits were kept. Added: ${n || "nothing new"}; print counts filled in where missing.` }); };
   return (
     <Card class="space-y-3">
       <div><b>Import from Emerald 1</b></div>
@@ -318,9 +320,13 @@ function ImportE1() {
       {state.err && <p class="text-[var(--danger,red)]">{state.err}</p>}
       {state.m && <>
         <p class="t-meta">{summarise(state.m).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(" · ")}</p>
-        <Button onClick={go}>Replace data with this</Button>
+        <div class="flex flex-wrap gap-2">
+          <Button onClick={merge}>Merge — keep my edits</Button>
+          <Button variant="outline" onClick={async () => { if (await ask("Replace ALL data with the export? Edits, photos and new records made in 2.0 will be lost.", { ok: "Replace everything", danger: true })) go(); }}>Replace everything</Button>
+        </div>
+        <p class="t-meta">Merge adds only records that are new in the export and fills in printed / wasted counts; anything you edited, added or deleted here stays as it is.</p>
       </>}
-      {state.done && <p>Imported. Every list now shows the studio's real records.</p>}
+      {state.done && <p>{state.done}</p>}
     </Card>
   );
 }
@@ -347,7 +353,7 @@ export function Integrations() {
 
 import { RatesEditor } from "./Calculator";
 import { mapEmerald1, readExport, summarise, type Migrated } from "../data/e1-import";
-import { applyEmerald1 } from "../data/e1-apply";
+import { applyEmerald1, mergeEmerald1 } from "../data/e1-apply";
 import { navigate } from "../router";
 import { bizSig, type Biz } from "../data/biz";
 export function Rates() { return <SettingsShell><RatesEditor /></SettingsShell>; }

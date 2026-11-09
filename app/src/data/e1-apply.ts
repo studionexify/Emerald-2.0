@@ -13,6 +13,53 @@ import type { Migrated } from "./e1-import";
 /** Marks the store as real data: sample rows are never merged back in on a seed-version bump. */
 export const E1_FLAG = "emerald:e1";
 
+/** Merge an Emerald 1 export into what is already here: records you have edited, added or deleted in 2.0 are kept as they are;
+ *  only records that are new in the export are added. Existing orders and batches gain print counts (printed / wasted) they lack. */
+export function mergeEmerald1(m: Migrated) {
+  const gone = new Set(binSig.value.flatMap((b) => [b.id, (b.data as { id?: string } | undefined)?.id].filter(Boolean) as string[]));
+  const add = <T extends { id: string }>(s: Signal<T[]>, incoming: T[]) => {
+    const have = new Set(s.value.map((x) => x.id));
+    const fresh = incoming.filter((x) => !have.has(x.id) && !gone.has(x.id));
+    if (fresh.length) s.value = [...s.value, ...fresh];
+    return fresh.length;
+  };
+  const added: Record<string, number> = {};
+  batch(() => {
+    // Fill missing print counts on orders already here (matched by id, then line name). Values typed in 2.0 win.
+    const byId = new Map(m.orders.map((o) => [o.id, o]));
+    ordersSig.value = ordersSig.value.map((o) => {
+      const src = byId.get(o.id); if (!src) return o;
+      let touched = false;
+      const items = o.items.map((i) => {
+        const si = src.items.find((x) => x.name.trim().toLowerCase() === i.name.trim().toLowerCase());
+        if (!si || (i.printed !== undefined && i.failed !== undefined)) return i;
+        touched = true;
+        return { ...i, printed: i.printed ?? si.printed, failed: i.failed ?? si.failed };
+      });
+      return touched ? { ...o, items } : o;
+    });
+    const bById = new Map(m.batches.map((b) => [b.id, b]));
+    batchesSig.value = batchesSig.value.map((b) => (b.failed === undefined && bById.get(b.id)?.failed !== undefined ? { ...b, failed: bById.get(b.id)!.failed } : b));
+
+    added.clients = add(clientsSig, m.clients); added.invoices = add(invoicesSig, m.invoices); added.quotes = add(quotesSig, m.quotes);
+    added.orders = add(ordersSig, m.orders); added.batches = add(batchesSig, m.batches); added.jobs = add(jobsSig, m.jobs); added.qc = add(qcSig, m.qc);
+    added["pack records"] = add(packRecSig, m.packRecords); added.shipments = add(shipmentsSig, m.shipments); added.printers = add(printersSig, m.printers);
+    added.spools = add(spoolsSig, m.spools); added["pack stock"] = add(packSig, m.packStock); added.accessories = add(itemsSig, m.accessories);
+    added.movements = add(movesSig, m.movements2); added.expenses = add(expensesSig, m.expenses); added.bills = add(billsSig, m.bills);
+    added.accounts = add(accountsSig, m.accounts); added.money = add(moneySig, m.money); added.assets = add(assetsSig, m.assets);
+    added.goals = add(goalsSig, m.goals); added.tasks = add(tasksSig, m.tasks); added.logs = add(logsSig, m.logs);
+    const have = new Set(usersSig.value.map((u) => u.name.toLowerCase()));
+    usersSig.value = [...usersSig.value, ...m.team.filter((t) => !have.has(t.name.toLowerCase())).map((t) => ({ id: t.id, name: t.name, email: "", role: "operator" as const, pass: "", active: t.active, login: false, job: t.job }))];
+    // Settings: only fill keys that are still empty here.
+    ratesSig.value = { ...m.rates, ...ratesSig.value };
+    if (m.nexcal) nexcalSig.value = { ...(m.nexcal as object), ...nexcalSig.value };
+    if (m.nexres) nexresSig.value = { ...(m.nexres as object), ...nexresSig.value };
+    if (m.business) bizSig.value = { ...bizSig.value, ...Object.fromEntries(Object.entries(m.business).filter(([k]) => !(bizSig.value as Record<string, unknown>)[k])) };
+  });
+  try { localStorage.setItem(E1_FLAG, new Date().toISOString()); } catch {}
+  return added;
+}
+
 export function applyEmerald1(m: Migrated) {
   const set = <T>(s: Signal<T>, v: T) => (s.value = v);
   batch(() => {
