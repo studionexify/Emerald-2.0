@@ -47,9 +47,9 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
-    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute top-[2.5vh] bottom-[2.5vh] left-1/2 -translate-x-1/2 w-max min-w-[min(900px,95vw)] max-w-[95vw] bg-c0 rounded-2xl shadow-2xl overflow-y-auto overflow-x-hidden">
-      <button type="button" aria-label="Close Floor" onClick={onClose} class="sticky float-right top-3 mr-3 z-10 w-13 h-13 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
-      <div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8">
+    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute top-[2.5vh] bottom-[2.5vh] left-1/2 -translate-x-1/2 w-max min-w-[min(900px,95vw)] max-w-[95vw] bg-c0 rounded-2xl shadow-2xl flex flex-col">
+      <button type="button" aria-label="Close Floor" onClick={onClose} class="absolute -top-3 -right-3 z-20 w-13 h-13 ring-4 ring-c0 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
+      <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-2xl overscroll-contain"><div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8">
         <div class="flex flex-wrap items-start gap-3 pr-16">
           <div class="mr-auto min-w-0"><h2 class="text-[20px] font-semibold leading-tight">{o.no} · {o.customer}</h2>
             <div class="t-meta mt-1">Due {shortDate(o.due)} · {rows.length} designs · {tot.q} pcs</div></div>
@@ -62,9 +62,9 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <table class="w-auto border-collapse text-[15px] num">
           <thead class="sticky top-0 z-[5] bg-c4 text-c0"><tr>
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
-            {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-top w-11 max-w-11 max-[1300px]:w-7 max-[1300px]:max-w-7 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
-              <div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" />
-                <span class="text-[11px] font-semibold leading-[1.15] normal-case tracking-normal whitespace-normal [overflow-wrap:anywhere] text-center h-[2.4em] max-[1300px]:[writing-mode:vertical-rl] max-[1300px]:rotate-180 max-[1300px]:h-[78px] max-[1300px]:text-right max-[1300px]:whitespace-nowrap">{c}</span></div></th>; })}
+            {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-bottom !px-1 w-10 min-w-10 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
+              <div class="flex flex-col items-center justify-end gap-1.5">
+                <span class="text-[11px] font-semibold leading-none normal-case tracking-normal whitespace-nowrap [writing-mode:vertical-rl] rotate-180 bg-c4 rounded py-1 px-0.5" title={c}>{c}</span><Sq hex={colourHex(c)} size="w-4 h-4 ring-1 ring-white/70" /></div></th>; })}
           </tr></thead>
           <tbody>
             {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
@@ -93,7 +93,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
           </tfoot>
         </table>
         {!rows.length && <p class="t-meta py-6 text-center">No line items on the sheet. Use Edit line items to add one.</p>}
-      </div>
+      </div></div>
     </div>
     {logK !== null && (() => { const it = o.items[logK], run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === it.name && b.running); return run ? <FinishPrint o={o} k={logK} run={run} onClose={() => setLogK(null)} /> : <StartPrint o={o} k={logK} onClose={() => setLogK(null)} />; })()}
     {cols && <EditColours o={o} onClose={() => setCols(false)} />}
@@ -226,7 +226,7 @@ function EditColours({ o, onClose }: { o: Order; onClose: () => void }) {
     <p class="t-meta mb-3">Tap to tick the colours each design uses.</p>
     <table class="w-full border-collapse text-[13px]">
       <thead><tr class="border-b border-line"><th class="px-1 py-2 text-[11px] text-c2">Image</th><th class="px-1 py-2 text-left text-[11px] text-c2">Design</th>
-        {cols.map((c) => <th key={c} class={`px-1 py-2 align-top w-12 ${colourStore(c) ? "" : "floor-empty text-red"}`}><div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" /><span class="text-[10px] leading-[1.15] h-[2.4em] text-center">{c}</span></div></th>)}</tr></thead>
+        {cols.map((c) => <th key={c} class={`px-1 py-2 align-top w-12 ${colourStore(c) ? "" : "floor-empty text-red"}`}><div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" /><span class="text-[11px] leading-none whitespace-nowrap [writing-mode:vertical-rl] rotate-180 h-[88px] text-left">{c}</span></div></th>)}</tr></thead>
       <tbody>{o.items.map((i, k) => i.offFloor ? null : <tr key={k} class="border-b border-line">
         <td class="px-1 py-1.5"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-14 h-14" /></td>
         <td class="px-1 py-1.5">{i.name}</td>
