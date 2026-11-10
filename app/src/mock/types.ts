@@ -5,13 +5,16 @@ export type OrderSize = "small" | "bulk" | "b2b";
 export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bulk", b2b: "B2B" };
 export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string;
-  /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number };
+  /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number;
+  /** Floor sheet (internal): colour names from the filament library */ colours?: string[]; /** sliced grams per plate, by colour */ gpp?: Record<string, number>;
+  /** copies per plate */ perPlate?: number; /** assigned printer name */ machine?: string; /** model is paid (internal) */ paid?: boolean; /** hidden from the Floor sheet only */ offFloor?: boolean };
 export type Order = {
   /** Alpha = bank/UPI, Beta = cash. One mode per order. */ pay?: "alpha" | "beta";
   id: string; no: string; type: OrderType; customer: string; medium: string;
   stage: Stage; created: string; due: string; items: LineItem[]; blocked?: string; invoiced?: boolean;
   approved?: boolean; buildSheet?: boolean; jobsDone?: boolean; qcLogged?: boolean; packed?: boolean; tracking?: string;
   po?: string; paid?: boolean; skipPacking?: boolean;
+  /** Floor sheet: extra colour columns added from the library */ floorCols?: string[];
   /** Commercial type: Small / Bulk / B2B; b2b names the kind of business. */ size?: OrderSize; b2b?: string;
   /** How the order leaves the studio; address/pincode only for courier. */ delivery?: Delivery; supports?: boolean;
 };
@@ -24,7 +27,7 @@ export type Spool = { id: string; material: string; colour: string; brand: strin
   hex?: string; finish?: string; diameter?: number; tare?: number; spoolMat?: string; gross?: number; costKg?: number; vendor?: string; bought?: string; lot?: string;
   location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string; slot?: number };
 export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number; vendor?: string; size?: string; location?: string; notes?: string; active?: boolean; cat?: string; machine?: string };
-export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; /** units scrapped as bad prints */ failed?: number; /** machine(s) it ran on */ printer?: string; /** spool(s) used, as labels */ spool?: string; /** spool ids, same order */ spoolIds?: string[]; /** a print run still on the plate */ running?: boolean; at?: string; /** grams used per spool no. */ grams?: Record<string, number>; /** why pieces failed */ reason?: string; /** who logged it */ by?: string; /** consumption rows it created */ cons?: string[]; stage: BatchStage; invoiceNo?: string; tracking?: string };
+export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; /** units scrapped as bad prints */ failed?: number; /** machine(s) it ran on */ printer?: string; /** spool(s) used, as labels */ spool?: string; /** spool ids, same order */ spoolIds?: string[]; /** a print run still on the plate */ running?: boolean; /** Floor: plates and copies per plate */ plates?: number; perPlate?: number; /** Floor: colour each spool id stands for, same order as spoolIds */ colours?: string[]; at?: string; /** grams used per spool no. */ grams?: Record<string, number>; /** why pieces failed */ reason?: string; /** who logged it */ by?: string; /** consumption rows it created */ cons?: string[]; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";
 export type TaskStep = { id: string; title: string; done: boolean };
 export type PayMode = "alpha" | "beta";
