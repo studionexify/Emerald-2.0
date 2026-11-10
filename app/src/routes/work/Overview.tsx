@@ -164,7 +164,7 @@ function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
     const [res, ...def] = qc.split(" · "), g = batchesSig.value.filter((b) => b.orderNo === cur.no).reduce((t, b) => t + Object.values(b.grams ?? {}).reduce((a, x) => a + x, 0), 0);
     for (const i of cur.items) qcSig.value = [{ id: uid(), orderNo: cur.no, item: i.name, result: res.toLowerCase() as "pass", grams: g, defect: def.join(" · ") || undefined, by: me.value?.name ?? "You", date: today() }, ...qcSig.value];
     log(`QC ${qc}`, cur.no);
-    if (res === "Rework") { moveTo(patchOrder(cur, { items: cur.items.map((i) => ({ ...i, printed: 0 })) }), "production", `In-house QC: ${qc}`); return; }
+    if (res === "Rework") { moveTo(patchOrder(cur, { items: cur.items.map((i) => { const p = lineProgress(cur, i); return { ...i, printed: 0, failed: p.failed + p.printed }; }) }), "production", `In-house QC: ${qc}`); return; }
     moveTo(cur, "archived", `In-house QC: ${qc}`);
   };
   return <div class="border-t border-line first:border-0 px-4 py-3">
