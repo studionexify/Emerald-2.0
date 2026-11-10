@@ -60,7 +60,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
           {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${kg.toFixed(2)} kg`)}
         </div>
         <table class="w-full border-collapse text-[13px] num">
-          <thead><tr class="border-b border-line">
+          <thead class="sticky top-0 z-[5] bg-c0 shadow-[0_1px_0_var(--line)]"><tr class="border-b border-line">
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
             {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-top w-11 max-w-11 max-[1300px]:w-7 max-[1300px]:max-w-7 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
               <div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" />
