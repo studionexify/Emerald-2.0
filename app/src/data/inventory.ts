@@ -95,9 +95,9 @@ export const stockNames = (cat: string) =>
 try { localStorage.setItem("emerald:seedv", SEED_V); } catch {}
 
 /** Which spool a job draws from: its own, else the spool loaded on its printer. */
-/** True when a ledger/consumption item string names this exact spool ("PLA Black · SP-001", not SP-0011). */
+/** True when a ledger/consumption item string names this exact spool ("PLA Black · 12", not 120). */
 export const isSpoolItem = (item: string, no: string) => item === no || item.endsWith(` · ${no}`) || item.includes(` · ${no} `);
-export const nextSpoolNo = (k = 1) => { const max = spoolsSig.value.reduce((m, x) => Math.max(m, Number((x.spoolNo.match(/\d+/g) ?? ["0"]).pop())), 0); return `SP-${String(max + k).padStart(3, "0")}`; };
+export const nextSpoolNo = (k = 1) => { const max = spoolsSig.value.reduce((m, x) => Math.max(m, Number((x.spoolNo.match(/\d+/g) ?? ["0"]).pop())), 0); return String(max + k); };
 export const jobSpool = (j: Job) => spoolsSig.value.find((s) => s.spoolNo === j.spool) ?? spoolsSig.value.find((s) => s.status === "loaded" && s.printer === j.printer);
 /** Grams already promised to queued or printing jobs. */
 export const committed = (s: Spool) => jobsSig.value.filter((j) => (j.status === "queued" || j.status === "printing") && jobSpool(j)?.id === s.id).reduce((a, j) => a + j.grams, 0);
@@ -151,9 +151,9 @@ export function assignSlots(list: Spool[]): Spool[] {
 }
 effect(() => { const l = spoolsSig.value; const n = assignSlots(l); if (n !== l) queueMicrotask(() => { spoolsSig.value = assignSlots(spoolsSig.value); }); });
 
-/** Human label for a stock item string: "PLA Black · SP-0042" → "PLA Black Polymaker #3". */
+/** Human label for a stock item string: "PLA Black · 42" → "PLA Black Polymaker #3". */
 export function itemLabel(item: string): string {
-  const m = /· (SP-\d+)\s*$/.exec(item); if (!m) return item;
+  const m = /· ([^·\s]+)\s*$/.exec(item); if (!m) return item;
   const sp = spoolsSig.value.find((x) => x.spoolNo === m[1]); if (!sp) return item;
   return `${sp.material} ${sp.colour} ${sp.brand}${sp.slot != null ? ` #${sp.slot}` : ""}`;
 }

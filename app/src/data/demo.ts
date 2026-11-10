@@ -196,7 +196,7 @@ if (!done6 && !_sp6.value.length) {
     ["PETG", "Navy", "#3B4A6B", "Sunlu", 120, 1100, "open"], ["TPU", "Black", "#2B2B2B", "eSun", 520, 2100, "open"],
     ["ABS", "Grey", "#8A8A8A", "Elegoo", 0, 1300, "empty"], ["PLA Silk", "Gold", "#C9A45C", "Eryone", 760, 1600, "loaded", "Bambu P1S"],
   ];
-  _sp6.value = SP.map(([material, colour, hex, brand, grams, costKg, status, printer], k) => ({ id: `demo-sp${k}`, material, colour, hex, brand, grams, size: 1000, spoolNo: `SP-${String(k + 1).padStart(3, "0")}`,
+  _sp6.value = SP.map(([material, colour, hex, brand, grams, costKg, status, printer], k) => ({ id: `demo-sp${k}`, material, colour, hex, brand, grams, size: 1000, spoolNo: String(k + 1),
     tare: 250, gross: grams + 250, costKg, vendor: brand, bought: d(-40 + k * 3), status, printer, location: printer ? undefined : "Rack A", active: true, diameter: 1.75 }));
   const PK: [string, string, number, number, number, string, string?][] = [
     ["Mailer box 20×15×10", "pcs", 140, 50, 18, "Packing"], ["Mailer box 30×20×15", "pcs", 35, 40, 26, "Packing"], ["Bubble wrap roll", "m", 60, 20, 9, "Packing"],
@@ -208,18 +208,18 @@ if (!done6 && !_sp6.value.length) {
   _pk6.value = all.filter((x) => x.cat === "Packing").map(({ cat: _c, ...x }) => x);
   if (!_it6.value.length) _it6.value = all.filter((x) => x.cat !== "Packing");
   _mv6.value = [
-    { id: "demo-mv1", date: d(-12), cat: "filament", item: "PLA Black · SP-001", dir: "in", qty: 1000, unit: "g", unitCost: 1.25, vendor: "Polymaker", colour: "Black", brand: "Polymaker", notes: "New spool", by: "Owner" },
+    { id: "demo-mv1", date: d(-12), cat: "filament", item: "PLA Black · 1", dir: "in", qty: 1000, unit: "g", unitCost: 1.25, vendor: "Polymaker", colour: "Black", brand: "Polymaker", notes: "New spool", by: "Owner" },
     { id: "demo-mv2", date: d(-10), cat: "packing", item: "Mailer box 20×15×10", dir: "in", qty: 100, unit: "pcs", unitCost: 18, vendor: "PackMart", notes: "Purchase", by: "Owner" },
     { id: "demo-mv3", date: d(-6), cat: "part", item: "0.4 mm hardened nozzle", dir: "in", qty: 2, unit: "pcs", unitCost: 650, vendor: "Robu.in", notes: "Purchase", by: "Owner" },
-    { id: "demo-mv4", date: d(-4), cat: "filament", item: "PETG Navy · SP-007", dir: "out", qty: 60, unit: "g", unitCost: 1.1, vendor: "", notes: "Weigh-in variance", by: "Owner" },
+    { id: "demo-mv4", date: d(-4), cat: "filament", item: "PETG Navy · 7", dir: "out", qty: 60, unit: "g", unitCost: 1.1, vendor: "", notes: "Weigh-in variance", by: "Owner" },
     { id: "demo-mv5", date: d(-2), cat: "packing", item: "Bubble wrap roll", dir: "out", qty: 5, unit: "m", unitCost: 9, vendor: "", notes: "Damaged", by: "Owner" },
-    { id: "demo-mv6", date: d(-1), cat: "filament", item: "PLA White · SP-004", dir: "in", qty: 1000, unit: "g", unitCost: 1.15, vendor: "eSun", colour: "White", brand: "eSun", notes: "New spool", by: "Owner" },
+    { id: "demo-mv6", date: d(-1), cat: "filament", item: "PLA White · 4", dir: "in", qty: 1000, unit: "g", unitCost: 1.15, vendor: "eSun", colour: "White", brand: "eSun", notes: "New spool", by: "Owner" },
   ];
   _cs6.value = [
-    { id: "demo-cs1", at: d(-5), who: "Owner", orderNo: "EM-2101", printer: "Bambu X1C", kind: "filament", item: "PLA Black · SP-002", qty: 360, unit: "g", cost: 450 },
-    { id: "demo-cs2", at: d(-4), who: "Owner", orderNo: "EM-2103", printer: "Prusa MK4", kind: "filament", item: "PLA White · SP-003", qty: 180, unit: "g", cost: 207 },
+    { id: "demo-cs1", at: d(-5), who: "Owner", orderNo: "EM-2101", printer: "Bambu X1C", kind: "filament", item: "PLA Black · 2", qty: 360, unit: "g", cost: 450 },
+    { id: "demo-cs2", at: d(-4), who: "Owner", orderNo: "EM-2103", printer: "Prusa MK4", kind: "filament", item: "PLA White · 3", qty: 180, unit: "g", cost: 207 },
     { id: "demo-cs3", at: d(-3), who: "Owner", orderNo: "EM-2103", kind: "packing", item: "Mailer box 20×15×10", qty: 4, unit: "pcs", cost: 72 },
-    { id: "demo-cs4", at: d(-2), who: "Owner", orderNo: "EM-2105", printer: "Bambu P1S", kind: "filament", item: "PLA Silk Gold · SP-010", qty: 240, unit: "g", cost: 384 },
+    { id: "demo-cs4", at: d(-2), who: "Owner", orderNo: "EM-2105", printer: "Bambu P1S", kind: "filament", item: "PLA Silk Gold · 10", qty: 240, unit: "g", cost: 384 },
     { id: "demo-cs5", at: d(-1), who: "Owner", orderNo: "EM-2105", kind: "packing", item: "Bubble wrap roll", qty: 3, unit: "m", cost: 27 },
   ] as never;
 }
@@ -239,7 +239,7 @@ if (!done7) {
     const status = x < 0.6 ? "sealed" : x < 0.93 ? "open" : x < 0.97 ? "loaded" : "empty";
     const grams = status === "sealed" ? 1000 : status === "empty" ? 0 : Math.round(50 + rnd() * 900);
     kg += grams / 1000; k++;
-    out.push({ id: `demo-big${k}`, material, colour, hex, brand, grams, size: 1000, spoolNo: `SP-${String(base + k).padStart(4, "0")}`, tare: 250, gross: grams + 250,
+    out.push({ id: `demo-big${k}`, material, colour, hex, brand, grams, size: 1000, spoolNo: String(base + k), tare: 250, gross: grams + 250,
       costKg, vendor: brand, bought: d(-Math.floor(rnd() * 180)), status, location: `Rack ${"ABCDEFGH"[Math.floor(rnd() * 8)]}`, active: true, diameter: 1.75 });
   }
   _sp6.value = [..._sp6.value, ...out];
