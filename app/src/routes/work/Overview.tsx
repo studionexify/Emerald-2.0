@@ -3,9 +3,10 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
+import { moveTo, type Batch, inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
-import { Floor } from "./Floor";
+import { Floor, StartPrint, FinishPrint } from "./Floor";
+import { lineRun } from "../../data/floor";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
@@ -144,6 +145,34 @@ function SegRow({ seg, o, onOpen, onEdit, onFloor }: { seg: Segment; o: Order; o
       <span class="block text-[17px] font-bold tracking-wide leading-tight">FLOOR</span><span class="block text-[11px] opacity-80">{tp} item{tp === 1 ? "" : "s"} · open sheet</span></button>
   </div>;
 }
+/** In-house order: every line item with its own Start / Finish, all on this tab. QC & close once every line is printed. */
+function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
+  const [go, setGo] = useState<{ k: number; run?: Batch } | null>(null);
+  const cur = ordersSig.value.find((x) => x.id === o.id) ?? o;
+  const rows = cur.items.map((i, k) => ({ i, k, p: lineProgress(cur, i), run: lineRun(cur, i) }));
+  const allDone = rows.every((r) => r.p.pending === 0 && !r.run);
+  const wasted = rows.reduce((t, r) => t + r.p.failed, 0);
+  const close = () => { log("QC passed · closed", cur.no); moveTo(cur, "archived", "In-house QC passed"); };
+  return <div class="border-t border-line first:border-0 px-4 py-3">
+    <div class="flex items-center gap-3 mb-2">
+      <button type="button" class="min-w-0 flex-1 text-left cursor-pointer !min-h-0" onClick={() => onOpen(cur)}><span class="text-[14px] font-semibold">{cur.customer}</span> <span class="t-meta font-mono ml-1">{cur.no}</span></button>
+      {wasted > 0 && <span class="text-[11px] font-semibold text-red">{wasted} wasted</span>}
+      <StagePill o={cur} /><Due o={cur} />
+    </div>
+    <ul class="grid gap-1.5">{rows.map(({ i, k, p, run }) => <li key={k} class={`flex items-center gap-3 rounded-xl border border-line px-3 py-2 ${p.pending === 0 && !run ? "bg-c1 text-c2 [&_img]:grayscale" : "bg-c0"}`}>
+      <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 !rounded-lg shrink-0" />
+      <div class="min-w-0 flex-1"><div class="text-[14px] font-semibold truncate">{i.name}</div>
+        <div class="t-meta truncate">{[i.material, ...(i.colours ?? (i.colour ? [i.colour] : []))].filter(Boolean).join(" · ")} · Qty {i.qty}</div></div>
+      <div class="num text-[12px] text-right whitespace-nowrap"><b class="text-grn">{Math.min(p.printed, i.qty)}</b><span class="text-c3">/{i.qty}</span>{p.failed > 0 && <span class="text-red"> · {p.failed} wasted</span>}</div>
+      {run ? <button type="button" onClick={() => setGo({ k, run })} class="h-9 px-4 !min-h-0 rounded-lg bg-amb text-c0 text-[13px] font-bold cursor-pointer whitespace-nowrap">■ Finish{run.printer ? ` · ${run.printer}` : ""}</button>
+        : p.pending > 0 ? <button type="button" onClick={() => setGo({ k })} class="h-9 px-4 !min-h-0 rounded-lg bg-grn text-c0 text-[13px] font-bold cursor-pointer">▶ Start</button>
+        : <span class="text-[12px] font-semibold px-2">Done ✓</span>}
+    </li>)}</ul>
+    {allDone && cur.stage !== "archived" && <div class="mt-2 flex justify-end"><Button onClick={close}>QC pass &amp; close</Button></div>}
+    {go && !go.run && <StartPrint simple o={cur} k={go.k} onClose={() => setGo(null)} />}
+    {go?.run && <FinishPrint simple o={cur} k={go.k} run={go.run} onClose={() => setGo(null)} />}
+  </div>;
+}
 function Kpis({ items }: { items: [string, string | number, string?][] }) {
   return <div class="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))` }}>
     {items.map(([k, v, cl]) => <div key={k} class="rounded-[var(--radius-card)] bg-c0 border border-line px-4 py-3"><div class="t-meta">{k}</div><div class={`num text-[22px] font-semibold leading-tight ${cl ?? ""}`}>{v}</div></div>)}
@@ -268,8 +297,8 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
             </select>
           </div>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
-            <div class={`${HEAD} ${SEG_COLS[seg].cols}`}>{SEG_COLS[seg].head.map((h, i) => <span key={i}>{h}</span>)}</div>
-            {live.slice(0, n).map((o) => <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} onFloor={(x) => setFloor(x)} />)}
+            {seg !== "inhouse" && <div class={`${HEAD} ${SEG_COLS[seg].cols}`}>{SEG_COLS[seg].head.map((h, i) => <span key={i}>{h}</span>)}</div>}
+            {live.slice(0, n).map((o) => seg === "inhouse" ? <InHouseCard key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} /> : <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} onFloor={(x) => setFloor(x)} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>
         </Section>
