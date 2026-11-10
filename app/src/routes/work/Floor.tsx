@@ -39,15 +39,15 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const put = (k: number, p: Partial<LineItem>) => patchOrder(o, { items: o.items.map((x, j) => (j === k ? { ...x, ...p } : x)) });
   const attach = async (k: number, file?: File | null) => { if (!file?.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); put(k, { img: storeMedia(full, `${o.no} ${o.items[k].name}`), thumb }); };
 
-  const th = "px-1 py-2 text-[11px] font-semibold text-c2 whitespace-nowrap select-none cursor-pointer hover:text-c4 align-bottom";
+  const th = "px-2.5 py-2.5 text-[12px] font-bold uppercase tracking-wide !text-c0 whitespace-nowrap select-none cursor-pointer hover:opacity-75 align-bottom";
   const H = ({ k, children, left }: { k: SortKey; children: preact.ComponentChildren; left?: boolean }) =>
     <th class={`${th} ${left ? "text-left" : "text-center"}`} onClick={() => setSort({ k, up: sort.k === k ? !sort.up : true })} aria-sort={sort.k === k ? (sort.up ? "ascending" : "descending") : "none"}>
-      {children}<span class={`ml-0.5 text-[9px] max-[1100px]:hidden ${sort.k === k ? "text-grn" : "text-c2/60"}`}>{sort.k === k ? (sort.up ? "▲" : "▼") : "⇅"}</span></th>;
-  const td = "px-1 py-2 text-center";
+      {children}<span class={`ml-0.5 text-[9px] max-[1100px]:hidden ${sort.k === k ? "text-grn-bg" : "opacity-50"}`}>{sort.k === k ? (sort.up ? "▲" : "▼") : "⇅"}</span></th>;
+  const td = "px-2.5 py-2 text-center";
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
-    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute inset-[2.5vh_2.5vw] bg-c0 rounded-2xl shadow-2xl overflow-y-auto overflow-x-hidden">
+    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute top-[2.5vh] bottom-[2.5vh] left-1/2 -translate-x-1/2 w-max min-w-[min(900px,95vw)] max-w-[95vw] bg-c0 rounded-2xl shadow-2xl overflow-y-auto overflow-x-hidden">
       <button type="button" aria-label="Close Floor" onClick={onClose} class="sticky float-right top-3 mr-3 z-10 w-13 h-13 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
       <div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8">
         <div class="flex flex-wrap items-start gap-3 pr-16">
@@ -59,22 +59,22 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <div class="flex flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
           {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${kg.toFixed(2)} kg`)}
         </div>
-        <table class="w-full border-collapse text-[13px] num">
-          <thead class="sticky top-0 z-[5] bg-c0 shadow-[0_1px_0_var(--line)]"><tr class="border-b border-line">
+        <table class="w-auto border-collapse text-[15px] num">
+          <thead class="sticky top-0 z-[5] bg-c4 text-c0"><tr>
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
             {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-top w-11 max-w-11 max-[1300px]:w-7 max-[1300px]:max-w-7 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
               <div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" />
-                <span class="text-[10px] leading-[1.15] normal-case tracking-normal whitespace-normal [overflow-wrap:anywhere] text-center h-[2.4em] max-[1300px]:[writing-mode:vertical-rl] max-[1300px]:rotate-180 max-[1300px]:h-[78px] max-[1300px]:text-right max-[1300px]:whitespace-nowrap">{c}</span></div></th>; })}
+                <span class="text-[11px] font-semibold leading-[1.15] normal-case tracking-normal whitespace-normal [overflow-wrap:anywhere] text-center h-[2.4em] max-[1300px]:[writing-mode:vertical-rl] max-[1300px]:rotate-180 max-[1300px]:h-[78px] max-[1300px]:text-right max-[1300px]:whitespace-nowrap">{c}</span></div></th>; })}
           </tr></thead>
           <tbody>
             {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
-              <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2" : ""}`}>
+              <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2 [&>td]:grayscale [&>td]:opacity-60" : ""}`}>
                 <td class={td}>{k + 1}</td>
                 <td class={td}>{(() => { const run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return run
                   ? <button type="button" onClick={() => setLogK(k)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">on plate · {run.units} pcs</span></button>
                   : <button type="button" onClick={() => setLogK(k)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">▶ Start</button>; })()}</td>
                 <td class={td}><div class="inline-block align-middle"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-12 h-12 max-[1100px]:w-9 max-[1100px]:h-9" onAdd={(fl) => attach(k, fl)} /></div></td>
-                <td class="px-1 py-2 text-left font-sans leading-snug">{i.name}</td>
+                <td class="px-2.5 py-2 text-left font-sans font-semibold leading-snug min-w-[8rem]">{i.name}</td>
                 <td class={td}>{i.qty}</td>
                 <td class={`${td} font-semibold`}>{f.printed}</td>
                 <td class={`${td} ${f.wasted ? "text-red" : ""}`}>{f.wasted}</td>
