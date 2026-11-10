@@ -102,7 +102,9 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
 }
 
 /** Spool search: matches for the colour first, every other spool in store below in grey. */
-function SpoolPicker({ colour, machine, value, onPick }: { colour: string; machine?: string; value?: string; onPick: (id: string) => void }) {
+/** The unfinished run a spool is on (it stays locked until that run is completed or cancelled). */
+const spoolBusy = (id: string, self?: string) => batchesSig.value.find((b) => b.running && b.id !== self && b.spoolIds?.includes(id));
+function SpoolPicker({ colour, machine, value, onPick, self }: { colour: string; machine?: string; value?: string; onPick: (id: string) => void; self?: string }) {
   const [q, setQ] = useState(""), [mat, setMat] = useState(""), [brand, setBrand] = useState("");
   const all = spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0);
   const mats = [...new Set(all.map((s) => s.material))].sort(), brands = [...new Set(all.map((s) => s.brand).filter(Boolean))].sort();
@@ -111,11 +113,11 @@ function SpoolPicker({ colour, machine, value, onPick }: { colour: string; machi
   const loaded = (s: Spool) => s.status === "loaded" && !!machine && eq(s.printer, machine);
   const rank = (a: Spool, b: Spool) => Number(loaded(b)) - Number(loaded(a)) || b.grams - a.grams;
   const match = all.filter((s) => eq(s.colour, colour) && hit(s)).sort(rank), other = all.filter((s) => !eq(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
-  const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = value === s.id; return (
-    <button type="button" onClick={() => onPick(s.id)} aria-pressed={on} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 cursor-pointer ${on ? "border-2 border-grn bg-grn-bg" : "border border-line hover:bg-c1"} ${dim && !on ? "opacity-55" : ""}`}>
+  const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = value === s.id, busy = spoolBusy(s.id, self); return (
+    <button type="button" disabled={!!busy} onClick={() => !busy && onPick(s.id)} aria-pressed={on} title={busy ? "In use until that print is completed" : undefined} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 ${busy ? "cursor-not-allowed border border-dashed border-red/50 bg-red-bg/40" : "cursor-pointer"} ${on ? "border-2 border-grn bg-grn-bg" : busy ? "" : "border border-line hover:bg-c1"} ${(dim || busy) && !on ? "opacity-60" : ""}`}>
       <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
-      <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · {s.spoolNo}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span></span>
-      {loaded(s) ? <span class="text-[10px] font-bold text-grn bg-grn-bg rounded px-1.5 py-0.5 whitespace-nowrap">LOADED</span> : <span />}
+      <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · {s.spoolNo}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span>{busy && <span class="block text-[11px] font-semibold text-red truncate">In use · {busy.orderNo} · {busy.name}{busy.printer ? ` · ${busy.printer}` : ""}</span>}</span>
+      {busy ? <span class="text-[10px] font-bold text-red bg-red-bg rounded px-1.5 py-0.5 whitespace-nowrap">IN USE</span> : loaded(s) ? <span class="text-[10px] font-bold text-grn bg-grn-bg rounded px-1.5 py-0.5 whitespace-nowrap">LOADED</span> : <span />}
       <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{Math.round(s.grams)} g</span></button>); };
   const chip = (on: boolean, l: string, f: () => void) => <button type="button" onClick={f} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${on ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>;
   return <div>
@@ -132,7 +134,7 @@ function SpoolPicker({ colour, machine, value, onPick }: { colour: string; machi
 }
 const spoolName = (id?: string) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? { s, t: `${s.material} · ${s.colour} · ${s.spoolNo}` } : null; };
 /** Fullest spool of a colour, preferring the one loaded on this machine. */
-const bestSpool = (colour: string, machine?: string) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && eq(s.colour, colour)).sort((a, b) => Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
+const bestSpool = (colour: string, machine?: string) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && eq(s.colour, colour) && !spoolBusy(s.id)).sort((a, b) => Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
 
 function Head({ i, k, f, children }: { i: LineItem; k: number; f: ReturnType<typeof floorLine>; children?: preact.ComponentChildren }) {
   return <div class="flex gap-4 mb-4"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-24 h-24 !rounded-xl" />
@@ -147,7 +149,7 @@ function StartPrint({ o, k, onClose }: { o: Order; k: number; onClose: () => voi
   const [machine, setMachine] = useState(i.machine ?? ""), [plates, setPlates] = useState(1), [per, setPer] = useState(i.perPlate ?? 1), [bad, setBad] = useState(0);
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c) => [c, bestSpool(c, i.machine) ?? ""])));
   const [tab, setTab] = useState(cs.find((c) => !sp[c]) ?? cs[0]);
-  const pcs = plates * per, ready = cs.every((c) => sp[c]);
+  const pcs = plates * per, ready = cs.every((c) => sp[c] && !spoolBusy(sp[c]));
   const start = () => { startPlates(o, k, { machine: machine || undefined, plates, perPlate: per, spools: Object.fromEntries(cs.map((c) => [c, sp[c]])) }); onClose(); };
   const skip = () => { logPlates(o, k, { good: pcs - Math.min(bad, pcs), wasted: Math.min(bad, pcs), plates, perPlate: per, gpp: {}, deduct: false }); onClose(); };
   return <Sheet huge open onClose={onClose} title={`▶ Start print · ${i.name}`}
@@ -200,7 +202,7 @@ function FinishPrint({ o, k, run, onClose }: { o: Order; k: number; run: Batch; 
         <button type="button" onClick={() => setChg(chg === c ? null : c)} class="text-[12px] font-semibold text-grn !min-h-0 cursor-pointer">{chg === c ? "Done" : "Change"}</button>
         <input type="number" min={0} aria-label={`${c} grams per plate`} class="h-8 w-16 px-1.5 rounded-md border border-line bg-c0 text-right num" value={g[c] || ""} placeholder="0" onInput={(e) => setG({ ...g, [c]: n0((e.target as HTMLInputElement).value) })} /><span class="text-c2 text-[12px]">g</span>
       </div>
-      {chg === c && <div class="mt-1.5 p-2 rounded-lg bg-c1"><SpoolPicker colour={c} machine={run.printer} value={sp[c]} onPick={(id) => { setSp({ ...sp, [c]: id }); setChg(null); }} /></div>}
+      {chg === c && <div class="mt-1.5 p-2 rounded-lg bg-c1"><SpoolPicker colour={c} machine={run.printer} self={run.id} value={sp[c]} onPick={(id) => { setSp({ ...sp, [c]: id }); setChg(null); }} /></div>}
     </div>; })}
     <div class="mt-3 text-[13px]">Deduct <b class="num">{perG * plates} g</b> from store <span class="text-c2">· {plates} plate{plates > 1 ? "s" : ""} × {perG} g</span></div>
     </div>
