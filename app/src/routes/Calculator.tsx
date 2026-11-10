@@ -3,7 +3,7 @@ import { CALC_TABS } from "../nav";
 import { Button, Card, CardTitle, Field, Flow, Icon, inputCls, isPhone, KV, Page, Sheet } from "../ui";
 import { navigate } from "../router";
 import { Reveal } from "../ui/disclose";
-import { createOrder, type Delivery, inr, spoolsSig, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
+import { createOrder, type Delivery, inr, spoolsSig, spoolGross, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
 import { ladder, machineRate, nexcalSig, nexres, nexresSig, NEXCAL_DEFAULTS, NEXRES_DEFAULTS, type NexcalSettings, type NexResSettings } from "../data/pricing";
 
 type Fields = Record<string, number>;
@@ -115,7 +115,7 @@ export function SpoolPick({ onPick }: { onPick: (costKg: number, material?: stri
     <Field label="Material from stock">
       <select class={inputCls} onChange={(e) => { const s = spools.find((x) => x.id === (e.target as HTMLSelectElement).value); if (s) onPick(s.costKg ?? rate("pla"), s.material, s.colour); }}>
         <option value="">Custom price</option>
-        {spools.map((s) => <option key={s.id} value={s.id}>{s.material} {s.colour} · {s.spoolNo} · {s.grams} g</option>)}
+        {spools.map((s) => <option key={s.id} value={s.id}>{s.material} {s.colour} · {s.spoolNo} · {spoolGross(s)} g gross</option>)}
       </select>
     </Field>
   );

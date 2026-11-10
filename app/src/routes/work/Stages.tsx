@@ -4,7 +4,7 @@ import { signal } from "@preact/signals";
 import { navigate } from "../../router";
 import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { Menu, MetaRow } from "../../ui/disclose";
-import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
+import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, spoolGross, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
 import { ConsumeForm, OrderDetail, WorkShell , useOpenOrder } from "./shared";
 
@@ -59,11 +59,11 @@ function JobRun({ j, put }: { j: Job; put: (p: Partial<Job>, why?: string) => vo
   const sp = js ? spoolLabel(js) : "";
   const setSp = (v: string) => put({ spool: spoolsSig.value.find((s) => spoolLabel(s) === v)?.spoolNo }, `Spool → ${v}`);
   const [reason, setReason] = useState("");
-  const after = js ? js.grams - j.grams : 0;
+  const after = js ? spoolGross(js) - j.grams : 0;
   return (
     <PaneSection title="Run">
       <Field label="Spool used"><select class={inputCls} value={sp} onChange={(e) => setSp((e.target as HTMLSelectElement).value)}><option value="">Choose spool</option>{spoolOpts().map((o) => <option key={o}>{o}</option>)}</select></Field>
-      {js && j.status !== "done" && <div class="rounded-xl bg-c1 px-3 py-2.5 text-sm flex items-center justify-between gap-3"><span>Spool after this job</span><b class="num">{js.grams.toLocaleString("en-IN")} − {j.grams} = {after.toLocaleString("en-IN")} g</b></div>}
+      {js && j.status !== "done" && <div class="rounded-xl bg-c1 px-3 py-2.5 text-sm flex items-center justify-between gap-3"><span>Spool after this job (gross)</span><b class="num">{spoolGross(js).toLocaleString("en-IN")} − {j.grams} = {after.toLocaleString("en-IN")} g</b></div>}
       {js && j.status !== "done" && after < 250 && <p class="text-xs font-semibold">{after < 0 ? `⚠ Not enough filament — short by ${-after} g. Load another spool.` : "⚠ Spool will be low after this job."}</p>}
       <Actions>
         {j.status === "queued" && <Button onClick={() => startJob(j)}>Start print</Button>}
@@ -96,7 +96,7 @@ export function Production() {
             { key: "s", label: "Status", card: "status", render: (j) => <Status tone={jobTone(j.status)}>{j.status}</Status> },
             { key: "e", label: "Est.", card: "foot", align: "right", render: (j) => `${j.hours} h` },
             { key: "op", label: "Operator", level: 2, render: (j) => j.operator },
-            { key: "sp", label: "Spool", level: 2, render: (j) => { const s = jobSpool(j); return s ? `${spoolLabel(s)} · ${s.grams.toLocaleString("en-IN")} g left` : "—"; } },
+            { key: "sp", label: "Spool", level: 2, render: (j) => { const s = jobSpool(j); return s ? `${spoolLabel(s)} · ${spoolGross(s).toLocaleString("en-IN")} g gross` : "—"; } },
             { key: "c", label: "Customer", level: 2, render: (j) => vOrders().find((o) => o.no === j.orderNo)?.customer ?? "—" },
           ]} />
         </Card>

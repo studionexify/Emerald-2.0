@@ -76,6 +76,9 @@ registerBin("Task", tasksSig); registerBin("Client", clientsSig);
 
 /** Spool maths — net is always gross − tare. */
 export const spoolPct = (s: Spool) => Math.max(0, Math.min(100, Math.round((s.grams / (s.size || 1000)) * 100)));
+/** Gross weight on the scale (filament + empty spool). Shown everywhere outside the store. */
+export const spoolTare = (s: Spool) => s.tare ?? bodyTare(s.spoolMat) ?? filMasterSig.value.tare;
+export const spoolGross = (s: Spool) => Math.round(Math.max(0, s.grams) + spoolTare(s));
 export const spoolValue = (s: Spool) => (s.grams / 1000) * (s.costKg ?? 1250);
 export const REORDER_G = 1000;
 

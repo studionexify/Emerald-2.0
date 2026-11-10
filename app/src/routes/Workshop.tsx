@@ -5,7 +5,7 @@ import { navigate } from "../router";
 import { Sheet, Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import { itemLabel, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, renameMaster, masterUse, type FilMaster,
+import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, renameMaster, masterUse, type FilMaster,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -79,7 +79,7 @@ export function Printers() {
       const jobs = jobsSig.value.filter((j) => j.printer === p.name);
       const used = consSig.value.filter((c) => c.printer === p.name);
       return <>
-        <PaneSection title="Loaded spools">{loaded.length ? loaded.map((s) => <div key={s.id} class="flex items-center justify-between text-sm"><span class="flex items-center gap-2"><Swatch hex={s.hex} />{s.material} {s.colour} · {s.spoolNo}</span><span class="num font-semibold">{s.grams} g</span></div>) : <p class="text-sm text-c3">Nothing loaded.</p>}</PaneSection>
+        <PaneSection title="Loaded spools">{loaded.length ? loaded.map((s) => <div key={s.id} class="flex items-center justify-between text-sm"><span class="flex items-center gap-2"><Swatch hex={s.hex} />{s.material} {s.colour} · {s.spoolNo}</span><span class="num font-semibold">{spoolGross(s)} g gross</span></div>) : <p class="text-sm text-c3">Nothing loaded.</p>}</PaneSection>
         <PaneSection title="Service">{p.serviceEvery ? <><div class="flex justify-between text-sm"><span>Next service in</span><b class="num">{Math.max(0, p.serviceEvery - (p.hours % p.serviceEvery))} h</b></div><Progress value={((p.hours % p.serviceEvery) / p.serviceEvery) * 100} /></> : <p class="text-sm text-c3">No interval set.</p>}</PaneSection>
         <PaneSection title={`Jobs · ${jobs.length}`}>{jobs.length ? jobs.map((j) => <div key={j.id} class="flex justify-between gap-2 text-sm"><span class="min-w-0"><b>{j.orderNo}</b> · {j.item}</span><Status tone={j.status === "done" ? "done" : j.status === "failed" ? "blocked" : j.status === "printing" ? "active" : "waiting"}>{j.status}</Status></div>) : <p class="text-sm text-c3">No jobs.</p>}</PaneSection>
         <PaneSection title="Spares for this machine">{parts.length ? parts.map((i) => <div key={i.id} class="flex justify-between text-sm"><span>{i.name}</span><span class="num">{i.qty} {i.unit}</span></div>) : <p class="text-sm text-c3">None tagged.</p>}</PaneSection>
@@ -131,7 +131,7 @@ const SPOOL_MATS = (): Record<string, number> => ({ ...Object.fromEntries(filMas
 const putSpool = (id: string, p: Partial<Spool>) => { spoolsSig.value = spoolsSig.value.map((x) => x.id === id ? { ...x, ...p } : x); };
 const fIn = "w-full h-7 rounded-lg border border-line bg-c1 px-2 text-[12px] !min-h-0";
 function SpoolEdit({ s, done }: { s: Spool; done: () => void }) {
-  const [gross, setGross] = useState(String(s.gross ?? s.grams + (s.tare ?? 0)));
+  const [gross, setGross] = useState(String(spoolGross(s)));
   const [mat, setMat] = useState(s.spoolMat ?? (s.tare === 150 ? "Cardboard" : s.tare === 0 ? "Refill (no spool)" : "Plastic"));
   const [hex, setHx] = useState(s.hex ?? spHex(s)); const [price, setPrice] = useState(String(s.costKg ?? ""));
   const tare = SPOOL_MATS()[mat] ?? filMasterSig.value.tare; const net = Math.max(0, (Number(gross) || 0) - tare);
@@ -205,7 +205,7 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
           <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{s.slot ?? spN(s.spoolNo)}</span>
           <div class="flex-1 min-w-0">
             <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined, width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
-            <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net</span><b class="num">{s.grams.toLocaleString("en-IN")} g</b></div>
+            <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net <b class="num text-c4">{s.grams.toLocaleString("en-IN")} g</b></span><span class="text-c2">Gross <b class="num text-c4">{spoolGross(s).toLocaleString("en-IN")} g</b></span></div>
           </div>
           <button class={`h-7 !min-h-0 px-2.5 rounded-lg border text-[11px] font-semibold ${ed === s.id ? "bg-c4 text-c0 border-c4" : "border-line"}`} onClick={() => setEd(ed === s.id ? null : s.id)}>{ed === s.id ? "Done" : "Edit"}</button>
         </div>
@@ -291,7 +291,7 @@ export function Filament() {
       if (isNew) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "in", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: s.vendor ?? "", colour: s.colour, brand: s.brand, notes: "New spool", by: who() }, ...movesSig.value]; },
     facts: (s) => [
       ["Net remaining", <span class="text-lg font-extrabold num">{s.grams.toLocaleString("en-IN")} g</span>], ["Remaining", <span class="flex items-center gap-2"><span class="num">{spoolPct(s)}%</span><span class="flex-1"><Progress value={spoolPct(s)} /></span></span>],
-      ["Gross · tare", `${(s.gross ?? s.grams + (s.tare ?? 0)).toLocaleString("en-IN")} g · ${s.tare ?? 0} g`], ["Value left", inr(spoolValue(s))],
+      ["Gross · tare", `${spoolGross(s).toLocaleString("en-IN")} g · ${s.tare ?? 0} g`], ["Value left", inr(spoolValue(s))],
       ["Committed to queued jobs", `${committed(s).toLocaleString("en-IN")} g`], ["Expected after queue", <span class="num">{(s.grams - committed(s)).toLocaleString("en-IN")} g</span>],
       ["Cost per gram", `₹${((s.costKg ?? 0) / 1000).toFixed(2)}`], ["State", spTone(s)],
     ],

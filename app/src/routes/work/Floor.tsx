@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
-import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch } from "../../data";
+import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross } from "../../data";
 import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -118,7 +118,7 @@ function SpoolPicker({ colour, machine, value, onPick, self }: { colour: string;
       <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
       <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · {s.spoolNo}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span>{busy && <span class="block text-[11px] font-semibold text-red truncate">In use · {busy.orderNo} · {busy.name}{busy.printer ? ` · ${busy.printer}` : ""}</span>}</span>
       {busy ? <span class="text-[10px] font-bold text-red bg-red-bg rounded px-1.5 py-0.5 whitespace-nowrap">IN USE</span> : loaded(s) ? <span class="text-[10px] font-bold text-grn bg-grn-bg rounded px-1.5 py-0.5 whitespace-nowrap">LOADED</span> : <span />}
-      <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{Math.round(s.grams)} g</span></button>); };
+      <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{spoolGross(s)} g</span></button>); };
   const chip = (on: boolean, l: string, f: () => void) => <button type="button" onClick={f} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${on ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>;
   return <div>
     <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search colour, material, brand or spool no. — e.g. “white petg”, “esun”, “12”" class="w-full h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] mb-2" />
@@ -179,7 +179,9 @@ function FinishPrint({ o, k, run, onClose }: { o: Order; k: number; run: Batch; 
   const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0);
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c, j) => [c, run.spoolIds?.[j] ?? bestSpool(c, run.printer) ?? ""])));
   const [g, setG] = useState<Record<string, number>>(() => Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
-  const [chg, setChg] = useState<string | null>(null);
+  const [chg, setChg] = useState<string | null>(null), [w, setW] = useState<Record<string, number>>({});
+  /** Spool weighed after the print (gross): grams used = gross before − gross now, spread over the plates. */
+  const weigh = (c: string, v: number) => { setW({ ...w, [c]: v }); const n = spoolName(sp[c]); if (n && v > 0) setG({ ...g, [c]: Math.max(0, Math.round((spoolGross(n.s) - v) / plates)) }); };
   const pcs = plates * per, wasted = Math.min(bad, pcs), perG = cs.reduce((a, c) => a + (g[c] || 0), 0);
   const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g }); onClose(); };
   const when = run.at ? new Date(run.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -194,12 +196,13 @@ function FinishPrint({ o, k, run, onClose }: { o: Order; k: number; run: Batch; 
       <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2">Wasted (of these)<input type="number" min={0} max={pcs} class={`${inp} !border-red/40`} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
     </div>
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
-    <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Material used per plate · spools from start</div>
+    <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Material used · weigh each spool now (gross), or type grams per plate</div>
     {cs.map((c) => { const n = spoolName(sp[c]); return <div key={c} class="mb-1.5">
-      <div class="grid grid-cols-[16px_minmax(0,1fr)_auto_64px_12px] items-center gap-2.5 px-2.5 py-2 rounded-lg border border-line">
+      <div class="grid grid-cols-[16px_minmax(0,1fr)_auto_auto_64px_12px] items-center gap-2.5 px-2.5 py-2 rounded-lg border border-line">
         <Sq hex={n?.s.hex ?? colourHex(c)} size="w-4 h-4" />
-        <span class="min-w-0"><b class="block text-[13px] truncate">{n ? n.t : `${c} · no spool picked`}</b><span class="block text-[11px] text-c2 truncate">{n?.s.brand ?? "Pick a spool"}</span></span>
+        <span class="min-w-0"><b class="block text-[13px] truncate">{n ? n.t : `${c} · no spool picked`}</b><span class="block text-[11px] text-c2 truncate">{n ? `${n.s.brand} · ${spoolGross(n.s)} g gross before` : "Pick a spool"}</span></span>
         <button type="button" onClick={() => setChg(chg === c ? null : c)} class="text-[12px] font-semibold text-grn !min-h-0 cursor-pointer">{chg === c ? "Done" : "Change"}</button>
+        <label class="flex items-center gap-1 text-[11px] text-c2">Now<input type="number" min={0} aria-label={`${c} spool weight now, gross`} class="h-8 w-20 px-1.5 rounded-md border border-line bg-c0 text-right num" value={w[c] || ""} placeholder="gross g" onInput={(e) => weigh(c, n0((e.target as HTMLInputElement).value))} /></label>
         <input type="number" min={0} aria-label={`${c} grams per plate`} class="h-8 w-16 px-1.5 rounded-md border border-line bg-c0 text-right num" value={g[c] || ""} placeholder="0" onInput={(e) => setG({ ...g, [c]: n0((e.target as HTMLInputElement).value) })} /><span class="text-c2 text-[12px]">g</span>
       </div>
       {chg === c && <div class="mt-1.5 p-2 rounded-lg bg-c1"><SpoolPicker colour={c} machine={run.printer} self={run.id} value={sp[c]} onPick={(id) => { setSp({ ...sp, [c]: id }); setChg(null); }} /></div>}
