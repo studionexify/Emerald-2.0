@@ -102,9 +102,10 @@ function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () =>
   );
 }
 
+export const PURPOSES = ["Jig / tool", "Sample", "R&D", "Display", "Own use"];
 function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
   const [t, setT] = useState<OrderType>("client");
-  const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "", size: "small" as OrderSize, b2b: B2B_TYPES[0], pay: "alpha" as "alpha" | "beta" });
+  const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "", purpose: "Jig / tool", size: "small" as OrderSize, b2b: B2B_TYPES[0], pay: "alpha" as "alpha" | "beta" });
   const f = (k: keyof typeof d) => ({ value: d[k], class: inputCls, onInput: (e: Event) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, [k]: typeof d[k] === "number" ? Number(v) || 0 : v }); } });
   return (
     <div>
@@ -118,13 +119,13 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
         {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} onInput={(e) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, customer: v, ...(b2bFor(v) ?? {}) }); }} /></Field></div>}
         <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} /></Field></div>
         <Field label="Quantity"><input type="number" {...f("qty")} /></Field>
-        {t !== "inhouse" ? <Field label="Unit price (₹)"><input type="number" {...f("price")} /></Field> : <Field label="Purpose"><select class={inputCls}><option>Jig / tool</option><option>Sample</option><option>R&D</option><option>Display</option></select></Field>}
+        {t !== "inhouse" ? <Field label="Unit price (₹)"><input type="number" {...f("price")} /></Field> : <Field label="Purpose"><select class={inputCls} value={d.purpose} onChange={(e) => setD({ ...d, purpose: (e.target as HTMLSelectElement).value })}>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select></Field>}
         {t !== "inhouse" && <Field label="Order type"><select class={inputCls} value={d.size} onChange={(e) => setD({ ...d, size: (e.target as HTMLSelectElement).value as OrderSize })}>{Object.entries(SIZE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>}
         {t !== "inhouse" && canSwitchMode() && <Field label="Payment mode"><select class={inputCls} value={d.pay} onChange={(e) => setD({ ...d, pay: (e.target as HTMLSelectElement).value as "alpha" | "beta" })}><option value="alpha">{PAY_LABEL.alpha}</option><option value="beta">{PAY_LABEL.beta}</option></select></Field>}
         {t !== "inhouse" && d.size === "b2b" && <Field label="B2B type"><select class={inputCls} value={d.b2b} onChange={(e) => setD({ ...d, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((x) => <option key={x}>{x}</option>)}</select></Field>}
         {t !== "inhouse" && <Field label="Came via"><select class={inputCls} value={d.medium} onChange={(e) => setD({ ...d, medium: (e.target as HTMLSelectElement).value })}>{["Instagram", "WhatsApp", "Website", "Referral", "Word of mouth", "Exhibition", "Phone", "Email"].map((m) => <option key={m}>{m}</option>)}</select></Field>}
         {t === "bulk" && <Field label="GSTIN"><input class={inputCls} placeholder="24…" /></Field>}
-        <Field label="Due"><input type="date" {...f("due")} /></Field>
+        {t !== "inhouse" && <Field label="Due"><input type="date" {...f("due")} /></Field>}
       </div>
       <Button class="mt-3" onClick={() => onDone(createOrder({ type: t, ...d }))}>{t === "inhouse" ? "Start in Production" : "Create quotation"}</Button>
     </div>

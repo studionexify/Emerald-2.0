@@ -104,16 +104,16 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
 /** Spool search: matches for the colour first, every other spool in store below in grey. */
 /** The unfinished run a spool is on (it stays locked until that run is completed or cancelled). */
 const spoolBusy = (id: string, self?: string) => batchesSig.value.find((b) => b.running && b.id !== self && b.spoolIds?.includes(id));
-function SpoolPicker({ colour, machine, value, onPick, self }: { colour: string; machine?: string; value?: string; onPick: (id: string) => void; self?: string }) {
+function SpoolPicker({ colour, machine, value, onPick, self, picked }: { colour: string; machine?: string; value?: string; onPick: (id: string) => void; self?: string; picked?: string[] }) {
   const [q, setQ] = useState(""), [mat, setMat] = useState(""), [brand, setBrand] = useState("");
   const all = spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0);
   const mats = [...new Set(all.map((s) => s.material))].sort(), brands = [...new Set(all.map((s) => s.brand).filter(Boolean))].sort();
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const hit = (s: Spool) => (!mat || s.material === mat) && (!brand || s.brand === brand) && words.every((w) => `${s.material} ${s.colour} ${s.brand} ${s.spoolNo}`.toLowerCase().includes(w));
-  const loaded = (s: Spool) => s.status === "loaded" && !!machine && eq(s.printer, machine);
+  const loaded = (s: Spool) => s.status === "loaded" && !!machine && machine.split(" + ").some((m) => eq(s.printer, m));
   const rank = (a: Spool, b: Spool) => Number(loaded(b)) - Number(loaded(a)) || b.grams - a.grams;
   const match = all.filter((s) => eq(s.colour, colour) && hit(s)).sort(rank), other = all.filter((s) => !eq(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
-  const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = value === s.id, busy = spoolBusy(s.id, self); return (
+  const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = picked ? picked.includes(s.id) : value === s.id, busy = spoolBusy(s.id, self); return (
     <button type="button" disabled={!!busy} onClick={() => !busy && onPick(s.id)} aria-pressed={on} title={busy ? "In use until that print is completed" : undefined} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 ${busy ? "cursor-not-allowed border border-dashed border-red/50 bg-red-bg/40" : "cursor-pointer"} ${on ? "border-2 border-grn bg-grn-bg" : busy ? "" : "border border-line hover:bg-c1"} ${(dim || busy) && !on ? "opacity-60" : ""}`}>
       <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
       <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · {s.spoolNo}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span>{busy && <span class="block text-[11px] font-semibold text-red truncate">In use · {busy.orderNo} · {busy.name}{busy.printer ? ` · ${busy.printer}` : ""}</span>}</span>
@@ -125,10 +125,10 @@ function SpoolPicker({ colour, machine, value, onPick, self }: { colour: string;
     <div class="flex flex-wrap gap-1.5 mb-2">{chip(!mat, "All materials", () => setMat(""))}{mats.map((m) => chip(mat === m, m, () => setMat(mat === m ? "" : m)))}
       <select value={brand} onChange={(e) => setBrand((e.target as HTMLSelectElement).value)} class="h-7 px-2 rounded-full border border-line text-[11px] bg-c0 cursor-pointer"><option value="">Brand ▾</option>{brands.map((b) => <option key={b}>{b}</option>)}</select></div>
     <div class="max-h-[38vh] overflow-y-auto pr-1">
-      <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase my-1">{colour} · matches</div>
+      {!picked && <><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase my-1">{colour} · matches</div>
       {match.length ? match.map((s) => <Row key={s.id} s={s} />) : <p class="t-meta mb-2">No {colour} spool in store{q || mat || brand ? " for this search" : ""}.</p>}
-      {other.length > 0 && <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-3 mb-1">Other spools in store</div>}
-      {other.map((s) => <Row key={s.id} s={s} dim />)}
+      {other.length > 0 && <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-3 mb-1">Other spools in store</div>}</>}
+      {picked ? [...match, ...other].map((s) => <Row key={s.id} s={s} />) : other.map((s) => <Row key={s.id} s={s} dim />)}
     </div>
   </div>;
 }
@@ -149,14 +149,18 @@ export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onC
   const [machine, setMachine] = useState(i.machine ?? ""), [plates, setPlates] = useState(1), [per, setPer] = useState(simple ? Math.max(1, f.remaining) : i.perPlate ?? 1), [bad, setBad] = useState(0);
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c) => [c, bestSpool(c, i.machine) ?? ""])));
   const [tab, setTab] = useState(cs.find((c) => !sp[c]) ?? cs[0]);
-  const pcs = plates * per, ready = cs.every((c) => sp[c] && !spoolBusy(sp[c]));
-  const start = () => { startPlates(o, k, { machine: machine || undefined, plates, perPlate: per, spools: Object.fromEntries(cs.map((c) => [c, sp[c]])) }); onClose(); };
+  const [machines, setMachines] = useState<string[]>(i.machine ? i.machine.split(" + ") : []), [picked, setPicked] = useState<string[]>([]);
+  const pcs = plates * per, ready = simple ? picked.length > 0 && !picked.some((id) => spoolBusy(id)) : cs.every((c) => sp[c] && !spoolBusy(sp[c]));
+  /** Free choice of spools: any material, colour or brand. Keys are the colour name, made unique when a colour repeats. */
+  const freeSpools = () => { const out: Record<string, string> = {}; for (const id of picked) { const s = spoolsSig.value.find((x) => x.id === id); let key = s?.colour || "Spool"; if (out[key]) key = `${key} · ${s?.spoolNo}`; out[key] = id; } return out; };
+  const start = () => { startPlates(o, k, { machine: simple ? machines.join(" + ") || undefined : machine || undefined, plates, perPlate: per, spools: simple ? freeSpools() : Object.fromEntries(cs.map((c) => [c, sp[c]])) }); onClose(); };
   const skip = () => { logPlates(o, k, { good: pcs - Math.min(bad, pcs), wasted: Math.min(bad, pcs), plates, perPlate: per, gpp: {}, deduct: false }); onClose(); };
   return <Sheet huge open onClose={onClose} title={`▶ Start print · ${i.name}`}
-    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>{!simple && <Button variant="outline" onClick={skip} title="Already printed before: log the counts only, no grams">Skip (already printed)</Button>}<Button onClick={start} disabled={!ready && cs.length > 0}>▶ Start print</Button></>}>
+    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>{!simple && <Button variant="outline" onClick={skip} title="Already printed before: log the counts only, no grams">Skip (already printed)</Button>}<Button onClick={start} disabled={!ready && (simple || cs.length > 0)}>▶ Start print</Button></>}>
     <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f} />
     <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1 mb-1">
-      <label class="flex flex-col gap-1 text-[11px] text-c2">Machine<MachineSelect value={machine} onChange={setMachine} cls="!h-9 !bg-c0 border border-line" /></label>
+      {simple ? <div class="flex flex-col gap-1 text-[11px] text-c2 w-full">Machines · pick one or more<div class="flex flex-wrap gap-1.5">{printersSig.value.filter((p) => p.active !== false).map((p) => { const on = machines.includes(p.name); return <button key={p.id} type="button" aria-pressed={on} onClick={() => setMachines(on ? machines.filter((m) => m !== p.name) : [...machines, p.name])} class={`h-8 px-3 !min-h-0 rounded-full text-[12px] cursor-pointer border ${on ? "bg-c4 text-c0 border-c4 font-semibold" : "border-line bg-c0 text-c4"}`}>{p.name}</button>; })}</div></div>
+      : <label class="flex flex-col gap-1 text-[11px] text-c2">Machine<MachineSelect value={machine} onChange={setMachine} cls="!h-9 !bg-c0 border border-line" /></label>}
       {simple ? <label class="flex flex-col gap-1 text-[11px] text-c2">Quantity to print<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label> : <>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Plates<input type="number" min={1} class={inp} value={plates} onInput={(e) => setPlates(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
       <span class="pb-2 text-c2">×</span>
@@ -164,7 +168,11 @@ export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onC
       <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b></>}
       {!simple && <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2" title="Only for Skip (already printed)">Wasted (if skipping)<input type="number" min={0} class={inp} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>}
     </div>
-    {cs.length ? <>
+    {simple ? <>
+      <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Filaments · tap any spools: multi-material, multi-colour, any brand</div>
+      <div class="flex flex-wrap gap-1.5 mb-2 min-h-8">{picked.length ? picked.map((id) => { const n = spoolName(id); return n && <button key={id} type="button" onClick={() => setPicked(picked.filter((x) => x !== id))} class="h-8 px-2.5 !min-h-0 rounded-full bg-c4 text-c0 text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer"><Sq hex={n.s.hex ?? colourHex(n.s.colour)} size="w-3.5 h-3.5" />{n.t} ✕</button>; }) : <span class="t-meta">None picked yet</span>}</div>
+      <SpoolPicker colour="" machine={machines.join(" + ")} picked={picked} onPick={(id) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id])} />
+    </> : cs.length ? <>
       <div class="flex flex-wrap gap-1.5 mt-4 mb-2">{cs.map((c) => { const n = spoolName(sp[c]); return <button key={c} type="button" onClick={() => setTab(c)} class={`h-8 px-3 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] font-semibold cursor-pointer ${tab === c ? "bg-c4 text-c0" : "bg-c1 text-c4"}`}>
         <Sq hex={colourHex(c)} size="w-3.5 h-3.5" />{c}{n ? <span class={tab === c ? "opacity-80" : "text-grn"}>✓ {n.s.spoolNo}</span> : <span class="opacity-70">· pick spool</span>}</button>; })}</div>
       {tab && <SpoolPicker colour={tab} machine={machine} value={sp[tab]} onPick={(id) => { const next = { ...sp, [tab]: id }; setSp(next); const nx = cs.find((c) => !next[c]); if (nx) setTab(nx); }} />}

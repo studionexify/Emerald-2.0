@@ -7,7 +7,7 @@ export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Archi
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string;
   /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number;
   /** Floor sheet (internal): colour names from the filament library */ colours?: string[]; /** sliced grams per plate, by colour */ gpp?: Record<string, number>;
-  /** copies per plate */ perPlate?: number; /** assigned printer name */ machine?: string; /** model is paid (internal) */ paid?: boolean; /** hidden from the Floor sheet only */ offFloor?: boolean };
+  /** copies per plate */ perPlate?: number; /** assigned printer name */ machine?: string; /** model is paid (internal) */ paid?: boolean; /** hidden from the Floor sheet only */ offFloor?: boolean; /** in-house only: why it is being made */ purpose?: string };
 export type Order = {
   /** Alpha = bank/UPI, Beta = cash. One mode per order. */ pay?: "alpha" | "beta";
   id: string; no: string; type: OrderType; customer: string; medium: string;
