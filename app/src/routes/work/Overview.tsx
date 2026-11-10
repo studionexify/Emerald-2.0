@@ -4,7 +4,8 @@ import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
-import { OrderDetail, PrintRuns, WorkShell , useOpenOrder } from "./shared";
+import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
+import { Floor } from "./Floor";
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
@@ -84,7 +85,7 @@ const HEAD = "hidden @lg:grid gap-x-4 px-4 h-10 items-center bg-c1 rounded-t-[va
 const ROW = "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0";
 const SEG_COLS: Record<Segment, { cols: string; head: string[] }> = {
   client: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(170px,1.6fr)_96px_110px_120px_84px_28px]", head: ["Client", "Items", "Amount", "Payment", "Stage", "Deadline", ""] },
-  bulk: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(104px,0.6fr)_minmax(160px,1.4fr)_minmax(180px,1.3fr)_120px_84px_28px]", head: ["Client", "Type", "Items", "Print progress", "Stage", "Deadline", ""] },
+  bulk: { cols: "@lg:grid-cols-[minmax(150px,0.7fr)_minmax(150px,1.2fr)_minmax(200px,2fr)_110px_minmax(150px,170px)]", head: ["Type", "Client", "Print progress", "Deadline", ""] },
   inhouse: { cols: "@lg:grid-cols-[minmax(150px,1.3fr)_minmax(170px,1.6fr)_minmax(120px,0.9fr)_120px_84px_28px]", head: ["Build", "Items", "Machine", "Stage", "Due", ""] },
 };
 function Items({ o, seg, all, setAll }: { o: Order; seg?: Segment; all?: boolean; setAll?: (v: boolean) => void }) {
@@ -96,25 +97,6 @@ function Items({ o, seg, all, setAll }: { o: Order; seg?: Segment; all?: boolean
     {(o.items.length > 2 || bulk) && <li class="pl-[48px]"><button class={`cursor-pointer !min-h-0 ${bulk ? `mt-1 h-7 px-2.5 rounded-md text-[12px] font-semibold ${open ? "bg-c4 text-c0" : "bg-c1 text-c4"}` : "t-meta underline"}`} onClick={(e) => { e.stopPropagation(); bulk ? setAll?.(!open) : setMore(!more); }} aria-expanded={open}>
       {bulk ? (open ? "Close print desk" : `${o.items.length > 2 ? `All ${o.items.length} items · ` : ""}Log printing ▾`) : more ? "Show less" : `+${o.items.length - 2} more — show all`}</button></li>}
   </ul>;
-}
-/** Bulk print desk: every line of the order, with start / finish print right on the main screen. */
-function PrintDesk({ o }: { o: Order }) {
-  const [pk, setPk] = useState<number | null>(null);
-  return <div class="border-t border-line bg-c1/40 px-2 md:px-4 py-3 pop-in" onClick={(e) => e.stopPropagation()}>
-    <ul class="flex flex-col divide-y divide-line rounded-lg bg-c0 border border-line">
-      {o.items.map((i, k) => { const p = lineProgress(o, i), pct = i.qty ? Math.min(100, (p.printed / i.qty) * 100) : 0, wp = i.qty ? Math.min(100 - pct, (p.failed / i.qty) * 100) : 0;
-        return <li key={k} class="px-3 py-2">
-          <div class="grid grid-cols-[28px_minmax(0,1fr)_auto] md:grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
-            <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-7 h-7 !rounded-md" />
-            <div class="min-w-0"><div class="text-[13px] font-semibold truncate">{i.name}</div><div class="t-meta">×{i.qty}</div></div>
-            <div class="min-w-0 col-span-full row-start-2 md:col-span-1 md:row-start-auto"><div class="flex h-1.5 rounded-full bg-c1 overflow-hidden"><span class="bg-grn" style={{ width: `${pct}%` }} /><span class="bg-red" style={{ width: `${wp}%` }} /></div>
-              <div class="text-[11px] font-medium mt-0.5 whitespace-nowrap"><span class="text-grn">{p.printed} done</span> · <span class="text-red">{p.failed} failed</span> · <span class="text-c3">{p.pending} left</span>{p.printing > 0 && <b class="text-c4"> · {p.printing} on plate</b>}</div></div>
-            <button class={`h-8 px-3 !min-h-0 rounded-lg text-[12px] font-semibold cursor-pointer ${pk === k ? "bg-c1 text-c4" : "bg-c4 text-c0"}`} onClick={() => setPk(pk === k ? null : k)}>{pk === k ? "Close" : p.printing ? "Finish / print" : "Print"}</button>
-          </div>
-          {pk === k && <div class="mt-2 max-w-xl md:ml-10 text-xs"><PrintRuns order={o} item={i} onOpen={() => {}} /></div>}
-        </li>; })}
-    </ul>
-  </div>;
 }
 const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : o.stage; return <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>; };
 const Due = ({ o }: { o: Order }) => { const d = left(o.due); return <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
@@ -134,10 +116,9 @@ function Progress({ o }: { o: Order }) {
     <div class="text-[11px] font-medium mt-1 whitespace-nowrap"><span class="text-grn">{t.printed}</span><span class="text-c3">/{t.qty} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></div>
   </div>;
 }
-function SegRow({ seg, o, onOpen, onEdit }: { seg: Segment; o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void }) {
+function SegRow({ seg, o, onOpen, onEdit, onFloor }: { seg: Segment; o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void; onFloor: (o: Order) => void }) {
   const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
   const kind = kindOf(o, c);
-  const [desk, setDesk] = useState(false);
   const open = { role: "button" as const, tabIndex: 0, onClick: () => onOpen(o), onKeyDown: (e: KeyboardEvent) => e.key === "Enter" && onOpen(o), class: `${ROW} ${SEG_COLS[seg].cols}` };
   const menu = <div class="@max-lg:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>;
   if (seg === "client") return <div {...open}>
@@ -153,12 +134,15 @@ function SegRow({ seg, o, onOpen, onEdit }: { seg: Segment; o: Order; onOpen: (o
     <span class="@max-lg:hidden text-[13px] text-c3 truncate">{ms.join(", ") || "—"}</span>
     <StagePill o={o} /><Due o={o} />{menu}
   </div>; }
-  return <div class="border-t border-line first:border-0"><div {...open} class={`${open.class} !border-0`}>
-    <div class="min-w-0 text-[14px] font-semibold leading-snug">{o.customer}</div>
-    <div class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class="ml-1.5 inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
-    <Items o={o} seg={seg} all={desk} setAll={setDesk} /><Progress o={o} />
-    <StagePill o={o} /><div class="@max-lg:col-start-2 @max-lg:row-start-1"><Due o={o} /><Pace o={o} /></div>{menu}
-  </div>{desk && <PrintDesk o={o} />}</div>;
+  const tp = o.items.filter((i) => !i.offFloor).length;
+  return <div {...open}>
+    <div class="@max-lg:hidden flex flex-wrap gap-1.5"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold whitespace-nowrap" style={tint(KIND_HUE(kind))}>{kind}</span>{canSwitchMode() && booksModeSig.value === "both" && <span class=" inline-flex px-1.5 h-6 items-center rounded-md text-[11px] font-bold" style={tint(o.pay === "beta" ? "#B39567" : "#6B8DB5")}>{o.pay === "beta" ? "β" : "α"}</span>}</div>
+    <div class="min-w-0 text-[15px] font-semibold leading-snug">{o.customer}</div>
+    <Progress o={o} />
+    <div class="@max-lg:col-start-2 @max-lg:row-start-1"><Due o={o} /><Pace o={o} /></div>
+    <button type="button" onClick={(e) => { e.stopPropagation(); onFloor(o); }} class="@max-lg:col-span-2 !min-h-0 rounded-xl bg-grn text-c0 py-3 px-4 text-center cursor-pointer hover:opacity-90">
+      <span class="block text-[17px] font-bold tracking-wide leading-tight">FLOOR</span><span class="block text-[11px] opacity-80">{tp} item{tp === 1 ? "" : "s"} · open sheet</span></button>
+  </div>;
 }
 function Kpis({ items }: { items: [string, string | number, string?][] }) {
   return <div class="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))` }}>
@@ -247,6 +231,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [f, setF] = useState<string>("all");
   const [open, setOpen] = useOpenOrder();
   const [edit, setEdit] = useState<Order | null>(null);
+  const [floor, setFloor] = useState<Order | null>(null);
   const [n, setN] = useState(PAGE);
   const [st, setSt] = useState("");
   const [q, setQ] = useState(""), [sort, setSort] = useState<"due" | "done" | "pending">("due");
@@ -271,7 +256,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         return [["Units ordered", t.q], ["Printed", t.p, "text-grn"], ["Wasted", t.f, "text-red"], ["Pending", t.n], ["Waste rate", t.p + t.f ? `${Math.round((t.f / (t.p + t.f)) * 100)}%` : "—"]] as [string, string | number, string?][]; })()
     : [["Builds live", all.length], ["Units to print", all.reduce((t, o) => t + orderProgress(o).pending, 0)], ["Printing now", myJobs.filter((j) => j.status === "printing").length], ["Queued jobs", myJobs.filter((j) => j.status === "queued").length]];
   return (
-    <>{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+    <>{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Kpis items={kpis} />
       <Section title="Pipeline" note={`${live.length} live`}><StageStrip list={list} active={st} onPick={setSt} stages={stages} /></Section>
 
@@ -284,7 +269,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
           </div>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
             <div class={`${HEAD} ${SEG_COLS[seg].cols}`}>{SEG_COLS[seg].head.map((h, i) => <span key={i}>{h}</span>)}</div>
-            {live.slice(0, n).map((o) => <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} />)}
+            {live.slice(0, n).map((o) => <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} onFloor={(x) => setFloor(x)} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>
         </Section>
