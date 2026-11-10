@@ -13,6 +13,8 @@ import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
 
 const PAGE = 25;
+/** A run can span several machines, stored as "A + B". */
+const ranOn = (printer: string | undefined, name: string) => !!printer && printer.split(" + ").includes(name);
 
 
 const DAY = 86400000;
@@ -167,7 +169,7 @@ function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
     <div class="flex items-center gap-3 mb-2">
       <button type="button" class="min-w-0 flex-1 text-left cursor-pointer !min-h-0" onClick={() => onOpen(cur)}><span class="t-meta font-mono">{cur.no}</span></button>
       {wasted > 0 && <span class="text-[11px] font-semibold text-red">{wasted} wasted</span>}
-      <StagePill o={cur} /><Due o={cur} />
+      <StagePill o={cur} />
     </div>
     <ul class="grid gap-1.5">{rows.map(({ i, k, p, run }) => <li key={k} class={`flex items-center gap-3 rounded-xl border border-line px-3 py-2 ${p.pending === 0 && !run ? "bg-c1 text-c2 [&_img]:grayscale" : "bg-c0"}`}>
       <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 !rounded-lg shrink-0" />
@@ -291,10 +293,10 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const ql = q.trim().toLowerCase();
   const pctDone = (o: Order) => { const t = orderProgress(o); return t.qty ? t.printed / t.qty : 0; };
   const live = list.filter((o) => (st ? o.stage === st : o.stage !== "archived")).filter((o) => !ql || o.customer.toLowerCase().includes(ql) || o.no.toLowerCase().includes(ql) || o.items.some((i) => i.name.toLowerCase().includes(ql)))
-    .sort((a, b) => sort === "done" ? pctDone(b) - pctDone(a) : sort === "pending" ? orderProgress(b).pending - orderProgress(a).pending : Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
+    .sort((a, b) => sort === "done" ? pctDone(b) - pctDone(a) : sort === "pending" ? orderProgress(b).pending - orderProgress(a).pending : seg === "inhouse" ? b.created.localeCompare(a.created) || b.no.localeCompare(a.no) : Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const nos = new Set(mine.map((o) => o.no));
-  const isOn = (p: (typeof fleet)[number]) => p.status === "printing" || batchesSig.value.some((b) => b.running && b.printer === p.name);
+  const isOn = (p: (typeof fleet)[number]) => p.status === "printing" || batchesSig.value.some((b) => b.running && ranOn(b.printer, p.name));
   const activeFleet = fleet.filter(isOn);
   const myJobs = jobsSig.value.filter((j) => nos.has(j.orderNo));
   const flow = SUGGESTED[seg === "client" ? "client" : seg === "inhouse" ? "inhouse" : "bulk"];
@@ -318,7 +320,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
           <div class="flex flex-wrap items-center gap-2 mb-2">
             <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search client, order no. or product" aria-label="Search live orders" class="h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] flex-1 min-w-[180px]" />
             <select value={sort} onChange={(e) => setSort((e.target as HTMLSelectElement).value as typeof sort)} aria-label="Sort live orders" class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer">
-              <option value="due">Sort: deadline</option>{seg !== "client" && <option value="done">Sort: most done</option>}{seg !== "client" && <option value="pending">Sort: most pending</option>}
+              <option value="due">{seg === "inhouse" ? "Sort: newest" : "Sort: deadline"}</option>{seg !== "client" && <option value="done">Sort: most done</option>}{seg !== "client" && <option value="pending">Sort: most pending</option>}
             </select>
           </div>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
@@ -332,7 +334,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         <Waterfall min={260} max={5} gap="gap-3" items={[
           ...activeFleet.map((p): [number, preact.ComponentChildren] => {
             const j = myJobs.find((x) => x.printer === p.name && x.status === "printing");
-            const run = batchesSig.value.find((b) => b.running && b.printer === p.name);
+            const run = batchesSig.value.find((b) => b.running && ranOn(b.printer, p.name));
             const ord = j ? mine.find((o) => o.no === j.orderNo) : run && mine.find((o) => o.no === run.orderNo);
             const hot = !!j || !!run || p.status === "printing";
             return [j || (run && ord) ? 3 : 2,

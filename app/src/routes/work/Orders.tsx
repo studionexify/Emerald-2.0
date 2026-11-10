@@ -125,7 +125,7 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
         {t !== "inhouse" && d.size === "b2b" && <Field label="B2B type"><select class={inputCls} value={d.b2b} onChange={(e) => setD({ ...d, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((x) => <option key={x}>{x}</option>)}</select></Field>}
         {t !== "inhouse" && <Field label="Came via"><select class={inputCls} value={d.medium} onChange={(e) => setD({ ...d, medium: (e.target as HTMLSelectElement).value })}>{["Instagram", "WhatsApp", "Website", "Referral", "Word of mouth", "Exhibition", "Phone", "Email"].map((m) => <option key={m}>{m}</option>)}</select></Field>}
         {t === "bulk" && <Field label="GSTIN"><input class={inputCls} placeholder="24…" /></Field>}
-        <Field label="Due"><input type="date" {...f("due")} /></Field>
+        {t !== "inhouse" && <Field label="Due"><input type="date" {...f("due")} /></Field>}
       </div>
       <Button class="mt-3" onClick={() => onDone(createOrder({ type: t, ...d }))}>{t === "inhouse" ? "Start in Production" : "Create quotation"}</Button>
     </div>
