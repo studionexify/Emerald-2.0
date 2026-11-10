@@ -165,7 +165,7 @@ function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
   };
   return <div class="border-t border-line first:border-0 px-4 py-3">
     <div class="flex items-center gap-3 mb-2">
-      <button type="button" class="min-w-0 flex-1 text-left cursor-pointer !min-h-0" onClick={() => onOpen(cur)}><span class="text-[14px] font-semibold">{cur.customer}</span> <span class="t-meta font-mono ml-1">{cur.no}</span></button>
+      <button type="button" class="min-w-0 flex-1 text-left cursor-pointer !min-h-0" onClick={() => onOpen(cur)}><span class="t-meta font-mono">{cur.no}</span></button>
       {wasted > 0 && <span class="text-[11px] font-semibold text-red">{wasted} wasted</span>}
       <StagePill o={cur} /><Due o={cur} />
     </div>
