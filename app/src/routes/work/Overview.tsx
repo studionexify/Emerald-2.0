@@ -3,11 +3,12 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
-import { createOrder, filMasterSig, qcSig, uid, patchOrder, moveTo, type Batch, inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
+import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
-import { PURPOSES } from "./Orders";
-import { Floor, StartPrint, FinishPrint } from "./Floor";
-import { lineRun } from "../../data/floor";
+import { lazy } from "../../router";
+const Floor = lazy(() => import("./Floor").then((m) => m.Floor));
+const QuickCreate = lazy(() => import("./InHouseParts").then((m) => m.QuickCreate));
+const InHouseCard = lazy(() => import("./InHouseParts").then((m) => m.InHouseCard));
 import { Pick } from "../../ui";
 import { booksModeSig, canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { segmentOf, SEGMENT_LABEL, type Segment } from "../../data/inventory";
@@ -81,7 +82,7 @@ function Items({ o, seg, all, setAll }: { o: Order; seg?: Segment; all?: boolean
       {bulk ? (open ? "Close print desk" : `${o.items.length > 2 ? `All ${o.items.length} items · ` : ""}Log printing ▾`) : more ? "Show less" : `+${o.items.length - 2} more — show all`}</button></li>}
   </ul>;
 }
-const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : o.stage; return <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>; };
+export const StagePill = ({ o }: { o: Order }) => { const st = o.blocked ? "blocked" : o.stage; return <div class="@max-lg:hidden"><span class="inline-flex items-center gap-1.5 px-2 h-6 rounded-full text-[12px] font-semibold whitespace-nowrap" style={tint(STAGE_HUE[st])}><span class="w-1.5 h-1.5 rounded-full" style={{ background: STAGE_HUE[st] }} />{o.blocked ? "Blocked" : STAGE_LABEL[o.stage]}</span></div>; };
 const Due = ({ o }: { o: Order }) => { const d = left(o.due); return <div class="text-right @lg:text-left @max-lg:col-start-2 @max-lg:row-start-1">
   <div class="text-[13px] font-semibold whitespace-nowrap">{shortDate(o.due)}</div>
   <div class="text-[11px] whitespace-nowrap font-medium" style={{ color: d < 0 ? STAGE_HUE.blocked : d <= 2 ? STAGE_HUE.qc : "var(--c-3)" }}>{leftLabel(d)}</div></div>; };
@@ -125,68 +126,6 @@ function SegRow({ seg, o, onOpen, onEdit, onFloor }: { seg: Segment; o: Order; o
     <div class="@max-lg:col-start-2 @max-lg:row-start-1"><Due o={o} /><Pace o={o} /></div>
     <button type="button" onClick={(e) => { e.stopPropagation(); onFloor(o); }} class="@max-lg:col-span-2 !min-h-0 rounded-xl bg-grn text-c0 py-3 px-4 text-center cursor-pointer hover:opacity-90">
       <span class="block text-[17px] font-bold tracking-wide leading-tight">FLOOR</span><span class="block text-[11px] opacity-80">{tp} item{tp === 1 ? "" : "s"} · open sheet</span></button>
-  </div>;
-}
-/** In-house quick create: what, how many, colour, purpose, optional photo, then straight into Start. */
-function QuickCreate({ onClose }: { onClose: () => void }) {
-  const cols = filMasterSig.value.colours.map((c) => c.name);
-  const [d, setD] = useState({ name: "", qty: 1, material: "PLA", colours: [cols[0] ?? "Black"] as string[], purpose: "Jig / tool" }), [pic, setPic] = useState<{ img: string; thumb: string } | null>(null);
-  const [made, setMade] = useState<string | null>(null);
-  const f = "h-10 px-3 rounded-lg border border-line bg-c0 text-[14px] w-full min-w-0";
-  const attach = async (file?: File | null) => { if (!file || !file.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); setPic({ img: storeMedia(full, d.name || file.name), thumb }); };
-  const create = () => { const o = createOrder({ type: "inhouse", customer: "", item: d.name.trim(), qty: d.qty, price: 0, medium: "Internal", due: today(), material: d.material, colour: d.colours[0], purpose: d.purpose });
-    patchOrder(o, { items: o.items.map((i) => ({ ...i, colours: d.colours, colour: d.colours[0], ...(pic ?? {}) })) }); setMade(o.id); };
-  const mo = made ? ordersSig.value.find((x) => x.id === made) : null;
-  if (mo) return <StartPrint simple o={mo} k={0} onClose={onClose} />;
-  const L = (t: string, c: preact.ComponentChildren) => <label class="flex flex-col gap-1 text-[12px] text-c2">{t}{c}</label>;
-  return <Sheet open onClose={onClose} title="New in-house print" footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={create} disabled={!d.name.trim() || !d.colours.length}>Next · pick filament</Button></>}>
-    <div class="max-w-[520px] mx-auto grid grid-cols-2 gap-3">
-      <div class="col-span-2">{L("What are we printing", <input class={f} value={d.name} placeholder="e.g. Fixture clip v2" onInput={(e) => setD({ ...d, name: (e.target as HTMLInputElement).value })} />)}</div>
-      {L("Quantity", <input type="number" min={1} class={f} value={d.qty} onInput={(e) => setD({ ...d, qty: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} />)}
-      {L("Purpose", <select class={f} value={d.purpose} onChange={(e) => setD({ ...d, purpose: (e.target as HTMLSelectElement).value })}>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select>)}
-      {L("Material", <select class={f} value={d.material} onChange={(e) => setD({ ...d, material: (e.target as HTMLSelectElement).value })}>{["PLA", "PETG", "ABS", "ASA", "TPU", "Resin", "Other"].map((x) => <option key={x}>{x}</option>)}</select>)}
-      <div class="col-span-2"><div class="text-[12px] text-c2 mb-1">Colours in this part · tap to add or remove</div>
-        <div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">{cols.map((x) => { const on = d.colours.includes(x), hex = filMasterSig.value.colours.find((c) => c.name === x)?.hex;
-          return <button key={x} type="button" aria-pressed={on} onClick={() => setD({ ...d, colours: on ? d.colours.filter((c) => c !== x) : [...d.colours, x] })} class={`h-8 px-2.5 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] cursor-pointer border ${on ? "bg-c4 text-c0 border-c4 font-semibold" : "border-line bg-c0"}`}><span class="w-3.5 h-3.5 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.2)]" style={{ background: hex ?? "var(--c-1)" }} />{x}</button>; })}</div></div>
-      <div class="col-span-2">{L("Photo (optional)", <input type="file" accept="image/*" class="text-[13px]" onChange={(e) => attach((e.target as HTMLInputElement).files?.[0])} />)}</div>
-    </div></Sheet>;
-}
-const DEFECTS = ["Warping", "Layer shift", "Stringing", "Dimension off", "Surface defect", "Broken / weak"];
-/** In-house order: every line item with its own Start / Finish, all on this tab. QC & close once every line is printed. */
-function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
-  const [go, setGo] = useState<{ k: number; run?: Batch } | null>(null);
-  const cur = ordersSig.value.find((x) => x.id === o.id) ?? o;
-  const rows = cur.items.map((i, k) => ({ i, k, p: lineProgress(cur, i), run: lineRun(cur, i) }));
-  const allDone = rows.every((r) => r.p.pending === 0 && !r.run);
-  const wasted = rows.reduce((t, r) => t + r.p.failed, 0);
-  const [qc, setQc] = useState("Pass");
-  const close = () => {
-    const [res, ...def] = qc.split(" · "), g = batchesSig.value.filter((b) => b.orderNo === cur.no).reduce((t, b) => t + Object.values(b.grams ?? {}).reduce((a, x) => a + x, 0), 0);
-    for (const i of cur.items) qcSig.value = [{ id: uid(), orderNo: cur.no, item: i.name, result: res.toLowerCase() as "pass", grams: g, defect: def.join(" · ") || undefined, by: me.value?.name ?? "You", date: today() }, ...qcSig.value];
-    log(`QC ${qc}`, cur.no); moveTo(cur, "archived", `In-house QC: ${qc}`);
-  };
-  return <div class="border-t border-line first:border-0 px-4 py-3">
-    <div class="flex items-center gap-3 mb-2">
-      <button type="button" class="min-w-0 flex-1 text-left cursor-pointer !min-h-0" onClick={() => onOpen(cur)}><span class="t-meta font-mono">{cur.no}</span></button>
-      {wasted > 0 && <span class="text-[11px] font-semibold text-red">{wasted} wasted</span>}
-      <StagePill o={cur} />
-    </div>
-    <ul class="grid gap-1.5">{rows.map(({ i, k, p, run }) => <li key={k} class={`flex items-center gap-3 rounded-xl border border-line px-3 py-2 ${p.pending === 0 && !run ? "bg-c1 text-c2 [&_img]:grayscale" : "bg-c0"}`}>
-      <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 !rounded-lg shrink-0" />
-      <div class="min-w-0 flex-1"><div class="text-[14px] font-semibold truncate">{i.name}</div>
-        <div class="t-meta truncate">{[i.material, ...(i.colours ?? (i.colour ? [i.colour] : []))].filter(Boolean).join(" · ")} · Qty {i.qty}</div></div>
-      <select value={i.purpose ?? ""} aria-label="Purpose" onChange={(e) => patchOrder(cur, { items: cur.items.map((x, j) => (j === k ? { ...x, purpose: (e.target as HTMLSelectElement).value } : x)) })} class="h-8 px-2 rounded-lg border border-line bg-c1 text-[12px] cursor-pointer max-w-[120px]"><option value="">Purpose…</option>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select>
-      <div class="num text-[12px] text-right whitespace-nowrap"><b class="text-grn">{Math.min(p.printed, i.qty)}</b><span class="text-c3">/{i.qty}</span>{p.failed > 0 && <span class="text-red"> · {p.failed} wasted</span>}</div>
-      {run ? <button type="button" onClick={() => setGo({ k, run })} class="h-9 px-4 !min-h-0 rounded-lg bg-amb text-c0 text-[13px] font-bold cursor-pointer whitespace-nowrap">■ Finish{run.printer ? ` · ${run.printer}` : ""}</button>
-        : p.pending > 0 ? <button type="button" onClick={() => setGo({ k })} class="h-9 px-4 !min-h-0 rounded-lg bg-grn text-c0 text-[13px] font-bold cursor-pointer">▶ Start</button>
-        : <span class="text-[12px] font-semibold px-2">Done ✓</span>}
-    </li>)}</ul>
-    {allDone && cur.stage !== "archived" && <div class="mt-2 flex items-center justify-end gap-2"><span class="t-meta">QC</span>
-      <select value={qc} onChange={(e) => setQc((e.target as HTMLSelectElement).value)} aria-label="QC result" class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer">
-        <option>Pass</option>{["Rework", "Scrap"].map((r) => DEFECTS.map((d) => <option key={r + d}>{`${r} · ${d}`}</option>))}</select>
-      <Button onClick={close}>Complete</Button></div>}
-    {go && !go.run && <StartPrint simple o={cur} k={go.k} onClose={() => setGo(null)} />}
-    {go?.run && <FinishPrint simple o={cur} k={go.k} run={go.run} onClose={() => setGo(null)} />}
   </div>;
 }
 /** One strip: key numbers, queue and the pipeline stages, each with a glyph. Stages filter the list. */
