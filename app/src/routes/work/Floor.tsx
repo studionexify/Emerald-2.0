@@ -144,24 +144,25 @@ function Head({ i, k, f, children }: { i: LineItem; k: number; f: ReturnType<typ
 const inp = "h-9 w-16 px-2 rounded-lg border border-line bg-c0 text-[15px] num";
 
 /** ▶ Start: machine, plates × copies, and the spool for each colour. Skip logs counts for prints made before. */
-function StartPrint({ o, k, onClose }: { o: Order; k: number; onClose: () => void }) {
+export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onClose: () => void; simple?: boolean }) {
   const i = o.items[k], f = floorLine(o, i), cs = lineColours(i);
-  const [machine, setMachine] = useState(i.machine ?? ""), [plates, setPlates] = useState(1), [per, setPer] = useState(i.perPlate ?? 1), [bad, setBad] = useState(0);
+  const [machine, setMachine] = useState(i.machine ?? ""), [plates, setPlates] = useState(1), [per, setPer] = useState(simple ? Math.max(1, f.remaining) : i.perPlate ?? 1), [bad, setBad] = useState(0);
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c) => [c, bestSpool(c, i.machine) ?? ""])));
   const [tab, setTab] = useState(cs.find((c) => !sp[c]) ?? cs[0]);
   const pcs = plates * per, ready = cs.every((c) => sp[c] && !spoolBusy(sp[c]));
   const start = () => { startPlates(o, k, { machine: machine || undefined, plates, perPlate: per, spools: Object.fromEntries(cs.map((c) => [c, sp[c]])) }); onClose(); };
   const skip = () => { logPlates(o, k, { good: pcs - Math.min(bad, pcs), wasted: Math.min(bad, pcs), plates, perPlate: per, gpp: {}, deduct: false }); onClose(); };
   return <Sheet huge open onClose={onClose} title={`▶ Start print · ${i.name}`}
-    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant="outline" onClick={skip} title="Already printed before: log the counts only, no grams">Skip (already printed)</Button><Button onClick={start} disabled={!ready && cs.length > 0}>▶ Start print</Button></>}>
+    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>{!simple && <Button variant="outline" onClick={skip} title="Already printed before: log the counts only, no grams">Skip (already printed)</Button>}<Button onClick={start} disabled={!ready && cs.length > 0}>▶ Start print</Button></>}>
     <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f} />
     <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1 mb-1">
       <label class="flex flex-col gap-1 text-[11px] text-c2">Machine<MachineSelect value={machine} onChange={setMachine} cls="!h-9 !bg-c0 border border-line" /></label>
+      {simple ? <label class="flex flex-col gap-1 text-[11px] text-c2">Quantity to print<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label> : <>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Plates<input type="number" min={1} class={inp} value={plates} onInput={(e) => setPlates(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
       <span class="pb-2 text-c2">×</span>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Per plate<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
-      <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b>
-      <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2" title="Only for Skip (already printed)">Wasted (if skipping)<input type="number" min={0} class={inp} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
+      <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b></>}
+      {!simple && <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2" title="Only for Skip (already printed)">Wasted (if skipping)<input type="number" min={0} class={inp} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>}
     </div>
     {cs.length ? <>
       <div class="flex flex-wrap gap-1.5 mt-4 mb-2">{cs.map((c) => { const n = spoolName(sp[c]); return <button key={c} type="button" onClick={() => setTab(c)} class={`h-8 px-3 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] font-semibold cursor-pointer ${tab === c ? "bg-c4 text-c0" : "bg-c1 text-c4"}`}>
@@ -173,7 +174,7 @@ function StartPrint({ o, k, onClose }: { o: Order; k: number; onClose: () => voi
 }
 
 /** ■ Finish: pieces off the plates (good + wasted) and grams per plate from the spools picked at Start. */
-function FinishPrint({ o, k, run, onClose }: { o: Order; k: number; run: Batch; onClose: () => void }) {
+export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: number; run: Batch; onClose: () => void; simple?: boolean }) {
   const i = o.items[k], f = floorLine(o, i);
   const cs = run.colours?.length ? run.colours : lineColours(i);
   const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0);
@@ -189,14 +190,15 @@ function FinishPrint({ o, k, run, onClose }: { o: Order; k: number; run: Batch; 
     footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs}>Complete log</Button></>}>
     <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f}><span class="inline-block rounded-md bg-amb-bg text-amb text-[11px] font-bold px-2 py-0.5 mb-1">ON PLATE{run.printer ? ` · ${run.printer}` : ""}{when ? ` · started ${when}` : ""}</span></Head>
     <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1">
+      {simple ? <label class="flex flex-col gap-1 text-[11px] text-c2">Pieces printed<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label> : <>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Plates<input type="number" min={1} class={inp} value={plates} onInput={(e) => setPlates(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
       <span class="pb-2 text-c2">×</span>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Per plate<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
-      <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b>
-      <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2">Wasted (of these)<input type="number" min={0} max={pcs} class={`${inp} !border-red/40`} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
+      <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b></>}
+      <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2">{simple ? "Failed (of these)" : "Wasted (of these)"}<input type="number" min={0} max={pcs} class={`${inp} !border-red/40`} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
     </div>
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
-    <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Material used · weigh each spool now (gross), or type grams per plate</div>
+    <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Material used · weigh each spool now (gross), or type grams {simple ? "used" : "per plate"}</div>
     {cs.map((c) => { const n = spoolName(sp[c]); return <div key={c} class="mb-1.5">
       <div class="grid grid-cols-[16px_minmax(0,1fr)_auto_auto_64px_12px] items-center gap-2.5 px-2.5 py-2 rounded-lg border border-line">
         <Sq hex={n?.s.hex ?? colourHex(c)} size="w-4 h-4" />
