@@ -68,7 +68,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
           </tr></thead>
           <tbody>
             {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
-              <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2" : ""}`}>
+              <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2 [&>td]:grayscale [&>td]:opacity-60" : ""}`}>
                 <td class={td}>{k + 1}</td>
                 <td class={td}>{(() => { const run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return run
                   ? <button type="button" onClick={() => setLogK(k)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">on plate · {run.units} pcs</span></button>
