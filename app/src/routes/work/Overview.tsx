@@ -128,22 +128,24 @@ function SegRow({ seg, o, onOpen, onEdit, onFloor }: { seg: Segment; o: Order; o
 /** In-house quick create: what, how many, colour, purpose, optional photo, then straight into Start. */
 function QuickCreate({ onClose }: { onClose: () => void }) {
   const cols = filMasterSig.value.colours.map((c) => c.name);
-  const [d, setD] = useState({ name: "", qty: 1, material: "PLA", colour: cols[0] ?? "Black", purpose: "Jig / tool" }), [pic, setPic] = useState<{ img: string; thumb: string } | null>(null);
+  const [d, setD] = useState({ name: "", qty: 1, material: "PLA", colours: [cols[0] ?? "Black"] as string[], purpose: "Jig / tool" }), [pic, setPic] = useState<{ img: string; thumb: string } | null>(null);
   const [made, setMade] = useState<string | null>(null);
   const f = "h-10 px-3 rounded-lg border border-line bg-c0 text-[14px] w-full min-w-0";
   const attach = async (file?: File | null) => { if (!file || !file.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); setPic({ img: storeMedia(full, d.name || file.name), thumb }); };
-  const create = () => { const o = createOrder({ type: "inhouse", customer: "", item: d.name.trim(), qty: d.qty, price: 0, medium: "Internal", due: today(), material: d.material, colour: d.colour, purpose: d.purpose });
-    patchOrder(o, { items: o.items.map((i) => ({ ...i, colours: [d.colour], ...(pic ?? {}) })) }); setMade(o.id); };
+  const create = () => { const o = createOrder({ type: "inhouse", customer: "", item: d.name.trim(), qty: d.qty, price: 0, medium: "Internal", due: today(), material: d.material, colour: d.colours[0], purpose: d.purpose });
+    patchOrder(o, { items: o.items.map((i) => ({ ...i, colours: d.colours, colour: d.colours[0], ...(pic ?? {}) })) }); setMade(o.id); };
   const mo = made ? ordersSig.value.find((x) => x.id === made) : null;
   if (mo) return <StartPrint simple o={mo} k={0} onClose={onClose} />;
   const L = (t: string, c: preact.ComponentChildren) => <label class="flex flex-col gap-1 text-[12px] text-c2">{t}{c}</label>;
-  return <Sheet open onClose={onClose} title="New in-house print" footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={create} disabled={!d.name.trim()}>Next · pick filament</Button></>}>
+  return <Sheet open onClose={onClose} title="New in-house print" footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={create} disabled={!d.name.trim() || !d.colours.length}>Next · pick filament</Button></>}>
     <div class="max-w-[520px] mx-auto grid grid-cols-2 gap-3">
       <div class="col-span-2">{L("What are we printing", <input class={f} value={d.name} placeholder="e.g. Fixture clip v2" onInput={(e) => setD({ ...d, name: (e.target as HTMLInputElement).value })} />)}</div>
       {L("Quantity", <input type="number" min={1} class={f} value={d.qty} onInput={(e) => setD({ ...d, qty: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} />)}
       {L("Purpose", <select class={f} value={d.purpose} onChange={(e) => setD({ ...d, purpose: (e.target as HTMLSelectElement).value })}>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select>)}
       {L("Material", <select class={f} value={d.material} onChange={(e) => setD({ ...d, material: (e.target as HTMLSelectElement).value })}>{["PLA", "PETG", "ABS", "ASA", "TPU", "Resin", "Other"].map((x) => <option key={x}>{x}</option>)}</select>)}
-      {L("Colour", <select class={f} value={d.colour} onChange={(e) => setD({ ...d, colour: (e.target as HTMLSelectElement).value })}>{cols.map((x) => <option key={x}>{x}</option>)}</select>)}
+      <div class="col-span-2"><div class="text-[12px] text-c2 mb-1">Colours in this part · tap to add or remove</div>
+        <div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">{cols.map((x) => { const on = d.colours.includes(x), hex = filMasterSig.value.colours.find((c) => c.name === x)?.hex;
+          return <button key={x} type="button" aria-pressed={on} onClick={() => setD({ ...d, colours: on ? d.colours.filter((c) => c !== x) : [...d.colours, x] })} class={`h-8 px-2.5 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] cursor-pointer border ${on ? "bg-c4 text-c0 border-c4 font-semibold" : "border-line bg-c0"}`}><span class="w-3.5 h-3.5 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.2)]" style={{ background: hex ?? "var(--c-1)" }} />{x}</button>; })}</div></div>
       <div class="col-span-2">{L("Photo (optional)", <input type="file" accept="image/*" class="text-[13px]" onChange={(e) => attach((e.target as HTMLInputElement).files?.[0])} />)}</div>
     </div></Sheet>;
 }
