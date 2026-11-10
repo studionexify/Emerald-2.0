@@ -71,3 +71,33 @@ export function saveFloorLines(o: Order, items: LineItem[]): Order {
   return n;
 }
 export const orderById = (id: string) => ordersSig.value.find((x) => x.id === id);
+
+/** The run on the plate for a line, if any. */
+export const lineRun = (o: Order, i: LineItem) => batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running);
+
+/** Start plates: remember machine, plates, copies and the spool picked for each colour. */
+export function startPlates(o: Order, k: number, d: { machine?: string; plates: number; perPlate: number; spools: Record<string, string> }): Order {
+  const i = o.items[k], cs = Object.keys(d.spools);
+  const ids = cs.map((c) => d.spools[c]);
+  const labels = ids.map((id) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? spoolLabel(s) : id; });
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.plates * d.perPlate, done: 0, printer: d.machine, spool: labels.join(" + ") || undefined, spoolIds: ids, colours: cs, plates: d.plates, perPlate: d.perPlate, running: true, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
+  log("Started print", `${o.no} · ${d.plates * d.perPlate}× ${i.name}${d.machine ? ` on ${d.machine}` : ""}`);
+  return setLine(o, k, { machine: d.machine ?? i.machine, perPlate: d.perPlate });
+}
+
+/** Complete plates: good + wasted pieces, grams per plate per spool all consumed from those exact spools. */
+export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number> }): Order {
+  const i = o.items[k], p = lineProgress(o, i), b = batchesSig.value.find((x) => x.id === runId);
+  const pcs = d.plates * d.perPlate, bad = Math.min(d.wasted, pcs), grams: Record<string, number> = {}, cons: string[] = [];
+  for (const [colour, id] of Object.entries(d.spools)) {
+    const qty = Math.round((d.gpp[colour] ?? 0) * d.plates); if (qty <= 0) continue;
+    const sp = spoolsSig.value.find((s) => s.id === id);
+    cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : colour, qty, orderNo: o.no, batch: i.name, printer: b?.printer ?? i.machine, spoolId: sp?.id }).id);
+    grams[id] = (grams[id] ?? 0) + qty;
+  }
+  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, units: pcs, done: pcs - bad, failed: bad, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams, cons, by: me.value?.name ?? x.by } : x));
+  log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${Object.values(grams).reduce((a, x) => a + x, 0)} g`);
+  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp: { ...i.gpp, ...d.gpp } });
+}
+/** Cancel a run that never finished. */
+export const cancelRun = (id: string) => { batchesSig.value = batchesSig.value.filter((b) => b.id !== id); };

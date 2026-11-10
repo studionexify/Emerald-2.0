@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
-import { ordersSig, printersSig, filMasterSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem } from "../../data";
-import { colourHex, colourStore, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, returnGrams, saveFloorLines } from "../../data/floor";
+import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch } from "../../data";
+import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 const n0 = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
@@ -46,7 +46,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const td = "px-1 py-2 text-center";
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
-  return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={onClose}>
+  return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
     <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute inset-[2.5vh_2.5vw] bg-c0 rounded-2xl shadow-2xl overflow-y-auto overflow-x-hidden">
       <button type="button" aria-label="Close Floor" onClick={onClose} class="sticky float-right top-3 mr-3 z-10 w-13 h-13 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
       <div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8">
@@ -61,16 +61,18 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         </div>
         <table class="w-full border-collapse text-[13px] num">
           <thead><tr class="border-b border-line">
-            <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Log</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
+            <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
             {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-top w-11 max-w-11 max-[1300px]:w-7 max-[1300px]:max-w-7 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
               <div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" />
-                <span class="text-[10px] leading-[1.15] whitespace-normal text-center h-[2.4em] max-[1300px]:[writing-mode:vertical-rl] max-[1300px]:rotate-180 max-[1300px]:h-[78px] max-[1300px]:text-right max-[1300px]:whitespace-nowrap">{c}</span></div></th>; })}
+                <span class="text-[10px] leading-[1.15] normal-case tracking-normal whitespace-normal [overflow-wrap:anywhere] text-center h-[2.4em] max-[1300px]:[writing-mode:vertical-rl] max-[1300px]:rotate-180 max-[1300px]:h-[78px] max-[1300px]:text-right max-[1300px]:whitespace-nowrap">{c}</span></div></th>; })}
           </tr></thead>
           <tbody>
             {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
               <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2" : ""}`}>
                 <td class={td}>{k + 1}</td>
-                <td class={td}><button type="button" onClick={() => setLogK(k)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">＋ Log</button></td>
+                <td class={td}>{(() => { const run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return run
+                  ? <button type="button" onClick={() => setLogK(k)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">on plate · {run.units} pcs</span></button>
+                  : <button type="button" onClick={() => setLogK(k)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">▶ Start</button>; })()}</td>
                 <td class={td}><div class="inline-block align-middle"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-12 h-12 max-[1100px]:w-9 max-[1100px]:h-9" onAdd={(fl) => attach(k, fl)} /></div></td>
                 <td class="px-1 py-2 text-left font-sans leading-snug">{i.name}</td>
                 <td class={td}>{i.qty}</td>
@@ -93,45 +95,115 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         {!rows.length && <p class="t-meta py-6 text-center">No line items on the sheet. Use Edit line items to add one.</p>}
       </div>
     </div>
-    {logK !== null && <LogPrint o={o} k={logK} onClose={() => setLogK(null)} />}
+    {logK !== null && (() => { const it = o.items[logK], run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === it.name && b.running); return run ? <FinishPrint o={o} k={logK} run={run} onClose={() => setLogK(null)} /> : <StartPrint o={o} k={logK} onClose={() => setLogK(null)} />; })()}
     {cols && <EditColours o={o} onClose={() => setCols(false)} />}
     {lines && <EditLines o={o} onClose={() => setLines(false)} />}
   </div>;
 }
 
-/** Log plates: plates × copies = pieces, of which some wasted; grams per plate per colour come off the store. */
-function LogPrint({ o, k, onClose }: { o: Order; k: number; onClose: () => void }) {
-  const i = o.items[k], f = floorLine(o, i), cs = lineColours(i);
-  const [plates, setPlates] = useState(1), [per, setPer] = useState(i.perPlate ?? 1), [bad, setBad] = useState(0);
-  const [g, setG] = useState<Record<string, number>>(Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
-  const pcs = plates * per, wasted = Math.min(bad, pcs), grams = Object.values(g).reduce((a, x) => a + x, 0) * plates;
-  const go = (deduct: boolean) => { logPlates(o, k, { good: pcs - wasted, wasted, plates, perPlate: per, gpp: g, deduct }); onClose(); };
-  const inp = "h-9 w-16 px-2 rounded-lg border border-line bg-c0 text-[15px] num";
-  return <Sheet open onClose={onClose} title={`＋ Log print · ${i.name}`}
-    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant="outline" onClick={() => go(false)} disabled={!pcs}>Skip (already printed)</Button><Button onClick={() => go(true)} disabled={!pcs}>Complete log</Button></>}>
-    <div class="flex gap-4">
-      <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-28 h-28 !rounded-xl" />
-      <div class="min-w-0 text-[13px] leading-relaxed">
-        <div class="t-meta">Sr {k + 1} · Qty {i.qty}</div>
-        <div><b>{f.printed} printed · {f.remaining} pending</b> <span class="text-red">· {f.wasted} wasted</span></div>
-        <div class="text-c3">{i.machine || "Any machine"} · {i.paid ? "Paid" : "Free"} model</div>
-        <div class="flex flex-wrap items-center gap-1 mt-1">{cs.map((c) => <Sq key={c} hex={colourHex(c)} size="w-4 h-4" />)}<span class="text-c3 ml-1">{cs.join(" · ") || "No colours set"}</span></div>
-      </div>
+/** Spool search: matches for the colour first, every other spool in store below in grey. */
+function SpoolPicker({ colour, machine, value, onPick }: { colour: string; machine?: string; value?: string; onPick: (id: string) => void }) {
+  const [q, setQ] = useState(""), [mat, setMat] = useState(""), [brand, setBrand] = useState("");
+  const all = spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0);
+  const mats = [...new Set(all.map((s) => s.material))].sort(), brands = [...new Set(all.map((s) => s.brand).filter(Boolean))].sort();
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (s: Spool) => (!mat || s.material === mat) && (!brand || s.brand === brand) && words.every((w) => `${s.material} ${s.colour} ${s.brand} ${s.spoolNo}`.toLowerCase().includes(w));
+  const loaded = (s: Spool) => s.status === "loaded" && !!machine && eq(s.printer, machine);
+  const rank = (a: Spool, b: Spool) => Number(loaded(b)) - Number(loaded(a)) || b.grams - a.grams;
+  const match = all.filter((s) => eq(s.colour, colour) && hit(s)).sort(rank), other = all.filter((s) => !eq(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
+  const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = value === s.id; return (
+    <button type="button" onClick={() => onPick(s.id)} aria-pressed={on} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 cursor-pointer ${on ? "border-2 border-grn bg-grn-bg" : "border border-line hover:bg-c1"} ${dim && !on ? "opacity-55" : ""}`}>
+      <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
+      <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · {s.spoolNo}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span></span>
+      {loaded(s) ? <span class="text-[10px] font-bold text-grn bg-grn-bg rounded px-1.5 py-0.5 whitespace-nowrap">LOADED</span> : <span />}
+      <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{Math.round(s.grams)} g</span></button>); };
+  const chip = (on: boolean, l: string, f: () => void) => <button type="button" onClick={f} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${on ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>;
+  return <div>
+    <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search colour, material, brand or spool no. — e.g. “white petg”, “esun”, “SP-0”" class="w-full h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] mb-2" />
+    <div class="flex flex-wrap gap-1.5 mb-2">{chip(!mat, "All materials", () => setMat(""))}{mats.map((m) => chip(mat === m, m, () => setMat(mat === m ? "" : m)))}
+      <select value={brand} onChange={(e) => setBrand((e.target as HTMLSelectElement).value)} class="h-7 px-2 rounded-full border border-line text-[11px] bg-c0 cursor-pointer"><option value="">Brand ▾</option>{brands.map((b) => <option key={b}>{b}</option>)}</select></div>
+    <div class="max-h-[38vh] overflow-y-auto pr-1">
+      <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase my-1">{colour} · matches</div>
+      {match.length ? match.map((s) => <Row key={s.id} s={s} />) : <p class="t-meta mb-2">No {colour} spool in store{q || mat || brand ? " for this search" : ""}.</p>}
+      {other.length > 0 && <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-3 mb-1">Other spools in store</div>}
+      {other.map((s) => <Row key={s.id} s={s} dim />)}
     </div>
-    <div class="flex flex-wrap items-end gap-2 mt-4 p-3 rounded-xl bg-c1">
+  </div>;
+}
+const spoolName = (id?: string) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? { s, t: `${s.material} · ${s.colour} · ${s.spoolNo}` } : null; };
+/** Fullest spool of a colour, preferring the one loaded on this machine. */
+const bestSpool = (colour: string, machine?: string) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && eq(s.colour, colour)).sort((a, b) => Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
+
+function Head({ i, k, f, children }: { i: LineItem; k: number; f: ReturnType<typeof floorLine>; children?: preact.ComponentChildren }) {
+  return <div class="flex gap-4 mb-4"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-24 h-24 !rounded-xl" />
+    <div class="min-w-0 text-[13px] leading-relaxed">{children}<div class="text-c3">Sr {k + 1} · Qty {i.qty} · <b class="text-c4">{f.printed} printed · {f.remaining} pending</b>{f.wasted ? <span class="text-red"> · {f.wasted} wasted</span> : null}</div>
+      <div class="flex flex-wrap items-center gap-1 mt-1">{lineColours(i).map((c) => <Sq key={c} hex={colourHex(c)} size="w-3.5 h-3.5" />)}<span class="text-c3 ml-1">{lineColours(i).join(" · ") || "No colours set — use Edit colours"}</span></div></div></div>;
+}
+const inp = "h-9 w-16 px-2 rounded-lg border border-line bg-c0 text-[15px] num";
+
+/** ▶ Start: machine, plates × copies, and the spool for each colour. Skip logs counts for prints made before. */
+function StartPrint({ o, k, onClose }: { o: Order; k: number; onClose: () => void }) {
+  const i = o.items[k], f = floorLine(o, i), cs = lineColours(i);
+  const [machine, setMachine] = useState(i.machine ?? ""), [plates, setPlates] = useState(1), [per, setPer] = useState(i.perPlate ?? 1), [bad, setBad] = useState(0);
+  const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c) => [c, bestSpool(c, i.machine) ?? ""])));
+  const [tab, setTab] = useState(cs.find((c) => !sp[c]) ?? cs[0]);
+  const pcs = plates * per, ready = cs.every((c) => sp[c]);
+  const start = () => { startPlates(o, k, { machine: machine || undefined, plates, perPlate: per, spools: Object.fromEntries(cs.map((c) => [c, sp[c]])) }); onClose(); };
+  const skip = () => { logPlates(o, k, { good: pcs - Math.min(bad, pcs), wasted: Math.min(bad, pcs), plates, perPlate: per, gpp: {}, deduct: false }); onClose(); };
+  return <Sheet huge open onClose={onClose} title={`▶ Start print · ${i.name}`}
+    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant="outline" onClick={skip} title="Already printed before: log the counts only, no grams">Skip (already printed)</Button><Button onClick={start} disabled={!ready && cs.length > 0}>▶ Start print</Button></>}>
+    <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f} />
+    <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1 mb-1">
+      <label class="flex flex-col gap-1 text-[11px] text-c2">Machine<MachineSelect value={machine} onChange={setMachine} cls="!h-9 !bg-c0 border border-line" /></label>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Plates<input type="number" min={1} class={inp} value={plates} onInput={(e) => setPlates(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
       <span class="pb-2 text-c2">×</span>
       <label class="flex flex-col gap-1 text-[11px] text-c2">Per plate<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
-      <span class="pb-2 text-c2">=</span><b class="pb-1.5 text-[17px] num">{pcs} pcs</b>
+      <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b>
+      <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2" title="Only for Skip (already printed)">Wasted (if skipping)<input type="number" min={0} class={inp} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
+    </div>
+    {cs.length ? <>
+      <div class="flex flex-wrap gap-1.5 mt-4 mb-2">{cs.map((c) => { const n = spoolName(sp[c]); return <button key={c} type="button" onClick={() => setTab(c)} class={`h-8 px-3 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] font-semibold cursor-pointer ${tab === c ? "bg-c4 text-c0" : "bg-c1 text-c4"}`}>
+        <Sq hex={colourHex(c)} size="w-3.5 h-3.5" />{c}{n ? <span class={tab === c ? "opacity-80" : "text-grn"}>✓ {n.s.spoolNo}</span> : <span class="opacity-70">· pick spool</span>}</button>; })}</div>
+      {tab && <SpoolPicker colour={tab} machine={machine} value={sp[tab]} onPick={(id) => { const next = { ...sp, [tab]: id }; setSp(next); const nx = cs.find((c) => !next[c]); if (nx) setTab(nx); }} />}
+    </> : <p class="t-meta mt-3">No colours set for this design. Use Edit colours first, or Skip to log counts only.</p>}
+    </div>
+  </Sheet>;
+}
+
+/** ■ Finish: pieces off the plates (good + wasted) and grams per plate from the spools picked at Start. */
+function FinishPrint({ o, k, run, onClose }: { o: Order; k: number; run: Batch; onClose: () => void }) {
+  const i = o.items[k], f = floorLine(o, i);
+  const cs = run.colours?.length ? run.colours : lineColours(i);
+  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0);
+  const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c, j) => [c, run.spoolIds?.[j] ?? bestSpool(c, run.printer) ?? ""])));
+  const [g, setG] = useState<Record<string, number>>(() => Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
+  const [chg, setChg] = useState<string | null>(null);
+  const pcs = plates * per, wasted = Math.min(bad, pcs), perG = cs.reduce((a, c) => a + (g[c] || 0), 0);
+  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g }); onClose(); };
+  const when = run.at ? new Date(run.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
+  return <Sheet huge open onClose={onClose} title={`■ Complete print · ${i.name}`}
+    footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs}>Complete log</Button></>}>
+    <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f}><span class="inline-block rounded-md bg-amb-bg text-amb text-[11px] font-bold px-2 py-0.5 mb-1">ON PLATE{run.printer ? ` · ${run.printer}` : ""}{when ? ` · started ${when}` : ""}</span></Head>
+    <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1">
+      <label class="flex flex-col gap-1 text-[11px] text-c2">Plates<input type="number" min={1} class={inp} value={plates} onInput={(e) => setPlates(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
+      <span class="pb-2 text-c2">×</span>
+      <label class="flex flex-col gap-1 text-[11px] text-c2">Per plate<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label>
+      <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b>
       <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2">Wasted (of these)<input type="number" min={0} max={pcs} class={`${inp} !border-red/40`} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
     </div>
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
-    <div class="text-[11px] text-c2 mt-4 mb-1.5">Material per plate <span class="text-c2/70">(from slicer)</span></div>
-    {cs.length ? <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-1.5">
-      {cs.map((c) => <label key={c} class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-line text-[12px]"><Sq hex={colourHex(c)} size="w-3.5 h-3.5" /><span class="truncate">{c}</span>
-        <input type="number" min={0} class="ml-auto h-7 w-12 px-1 rounded-md border border-line bg-c0 text-right num" value={g[c] || ""} placeholder="0" onInput={(e) => setG({ ...g, [c]: n0((e.target as HTMLInputElement).value) })} /><span class="text-c2">g</span></label>)}
-    </div> : <p class="t-meta">Set this design's colours in Edit colours to track grams.</p>}
-    <div class="mt-3 text-[13px]">Deduct <b class="num">{grams} g</b> from store <span class="text-c2">· {plates} plate{plates > 1 ? "s" : ""} × {grams / plates} g</span></div>
+    <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Material used per plate · spools from start</div>
+    {cs.map((c) => { const n = spoolName(sp[c]); return <div key={c} class="mb-1.5">
+      <div class="grid grid-cols-[16px_minmax(0,1fr)_auto_64px_12px] items-center gap-2.5 px-2.5 py-2 rounded-lg border border-line">
+        <Sq hex={n?.s.hex ?? colourHex(c)} size="w-4 h-4" />
+        <span class="min-w-0"><b class="block text-[13px] truncate">{n ? n.t : `${c} · no spool picked`}</b><span class="block text-[11px] text-c2 truncate">{n?.s.brand ?? "Pick a spool"}</span></span>
+        <button type="button" onClick={() => setChg(chg === c ? null : c)} class="text-[12px] font-semibold text-grn !min-h-0 cursor-pointer">{chg === c ? "Done" : "Change"}</button>
+        <input type="number" min={0} aria-label={`${c} grams per plate`} class="h-8 w-16 px-1.5 rounded-md border border-line bg-c0 text-right num" value={g[c] || ""} placeholder="0" onInput={(e) => setG({ ...g, [c]: n0((e.target as HTMLInputElement).value) })} /><span class="text-c2 text-[12px]">g</span>
+      </div>
+      {chg === c && <div class="mt-1.5 p-2 rounded-lg bg-c1"><SpoolPicker colour={c} machine={run.printer} value={sp[c]} onPick={(id) => { setSp({ ...sp, [c]: id }); setChg(null); }} /></div>}
+    </div>; })}
+    <div class="mt-3 text-[13px]">Deduct <b class="num">{perG * plates} g</b> from store <span class="text-c2">· {plates} plate{plates > 1 ? "s" : ""} × {perG} g</span></div>
+    </div>
   </Sheet>;
 }
 
