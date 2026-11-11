@@ -171,7 +171,8 @@ export function fixClashes(list: Spool[], log = false): Spool[] {
 }
 let logFix: (a: string, t: string) => void = () => {};
 export const setFixLogger = (f: typeof logFix) => { logFix = f; };
-effect(() => { const l = spoolsSig.value; if (fixClashes(l) !== l) queueMicrotask(() => { const c = spoolsSig.value, n = fixClashes(c, true); if (n !== c) spoolsSig.value = n; }); });
+// Disabled during spool-number recovery: never auto-rewrite slots.
+// effect(() => { const l = spoolsSig.value; if (fixClashes(l) !== l) queueMicrotask(() => { const c = spoolsSig.value, n = fixClashes(c, true); if (n !== c) spoolsSig.value = n; }); });
 /** Spool ids whose number is shared with another in-stock spool of the same material + colour + brand. */
 export const clashIds = (list: Spool[]) => { const m = new Map<string, string[]>(); for (const s of list) if (s.slot != null && s.grams > 0 && s.active !== false) { const k = `${spoolGroup(s)}#${s.slot}`; m.set(k, [...(m.get(k) ?? []), s.id]); }
   return new Set([...m.values()].filter((v) => v.length > 1).flat()); };
