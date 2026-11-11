@@ -158,7 +158,7 @@ export async function initSync() {
   c.auth.onAuthStateChange((ev, s) => {
     if (ev === "SIGNED_OUT") { channel?.unsubscribe(); memberChannel?.unsubscribe(); setSyncSink(null); org = ""; cloudUser.value = null; sessionSig.value = null; syncState.value = "signed-out"; }
     else if (s?.user && !org && (ev === "SIGNED_IN" || ev === "INITIAL_SESSION")) setTimeout(() => start(s.user.id));
-    else if (ev === "INITIAL_SESSION" && !s) syncState.value = "signed-out";
+    else if (ev === "INITIAL_SESSION" && !s) { sessionSig.value = null; syncState.value = "signed-out"; }
   });
 }
 export async function cloudSignIn(username: string, password: string) {

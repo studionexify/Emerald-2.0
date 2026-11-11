@@ -3,6 +3,11 @@ import { can, isExternal, me, moduleOf, sessionSig, usersSig } from "./data";
 import { Frame } from "./frame/Frame";
 import { Empty, Page } from "./ui";
 import { cloudEnabled, syncState } from "./data/sync";
+import { signal } from "@preact/signals";
+
+/* Never leave a blank screen: if the cloud check hangs (bad network), show sign-in after 5 s. */
+const slowCheck = signal(false);
+if (cloudEnabled) setTimeout(() => (slowCheck.value = true), 5000);
 import { SignIn } from "./frame/SignIn";
 
 const L = <T extends Record<string, any>>(load: () => Promise<T>, name: keyof T) => lazy(() => load().then((m) => m[name]));
@@ -75,8 +80,8 @@ function NoAccess() {
 export function App() {
   if (cloudEnabled) {
     const st = syncState.value;
-    if (st === "checking") return null;
-    if (!me.value) return st === "signed-out" || st === "error" ? <SignIn /> : null;
+    // A device that was signed in opens straight away from its local copy; the cloud check finishes in the background.
+    if (!me.value) return st === "signed-out" || st === "error" || slowCheck.value ? <SignIn /> : null;
   }
   if (!me.value) { sessionSig.value = { userId: usersSig.value.find((u) => u.role === "owner")!.id, at: Date.now() }; return null; }
   if (isExternal() && !path.value.startsWith("/mauny/gst") && path.value !== "/settings") { navigate("/mauny/gst"); return null; }
@@ -84,6 +89,11 @@ export function App() {
   const ok = path.value === "/search" || path.value === "/settings" || can(moduleOf(path.value));
   return <Frame>{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
 }
+
+/* Fetch a page's code the moment a finger/pointer lands on its link, ahead of the click. */
+const warm = (e: Event) => { const a = (e.target as Element)?.closest?.("a[href^='/']"); if (a) (table.get(a.getAttribute("href")!.split("?")[0]) as any)?.preload?.(); };
+document.addEventListener("pointerdown", warm, { passive: true });
+document.addEventListener("pointerover", warm, { passive: true });
 
 /* Warm the main sections once the browser is idle, so the first tap on a tab is instant. Skipped on data saver. */
 const conn = (navigator as any).connection;
