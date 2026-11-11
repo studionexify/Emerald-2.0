@@ -305,7 +305,7 @@ export function Filament() {
   const [st, setSt] = useState("in stock");
   const [q, setQ] = useState(""); const [set, setSet] = useState(false);
   const r = useRecord<Spool>({
-    sig: spoolsSig, kind: "Spool", title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
+    sig: spoolsSig, kind: "Spool", noDuplicate: true, title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
     blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, copies: 1, spoolMat: defaultBody(""), tare: bodyTare(defaultBody("")) ?? t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
     onSave: (s0, isNew) => { let s = s0; if (isNew) { const n = Math.max(1, s0.copies ?? 1), sl = freeSlots(s0, n); const { copies: _c, ...base } = s0; s = { ...base, slot: sl[0] };
         const extra = sl.slice(1).map((k) => ({ ...base, id: uid(), slot: k, spoolNo: "" }) as Spool);
