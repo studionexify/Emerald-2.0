@@ -7,7 +7,7 @@ import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLin
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 const n0 = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
-const Sq = ({ hex, size = "w-6 h-6" }: { hex?: string; size?: string }) => <span class={`${size} inline-block rounded-[5px] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.15)] align-middle`} style={{ background: hex ?? "var(--c-1)" }} />;
+const Sq = ({ hex, size = "w-6 h-6" }: { hex?: string; size?: string }) => <span class={`${size} inline-block rounded-[5px] shadow-[inset_0_0_0_1px_rgb(128_128_128/0.7)] align-middle`} style={{ background: hex || "repeating-linear-gradient(45deg,#9a9a9a 0 3px,#d8d8d8 3px 6px)" }} />;
 
 function Toggle({ paid, onChange }: { paid: boolean; onChange: (v: boolean) => void }) {
   const b = (on: boolean, l: string, tone: string) => <button type="button" onClick={(e) => { e.stopPropagation(); onChange(l === "Paid"); }} class={`h-6 px-2 rounded-full text-[11px] font-semibold !min-h-0 cursor-pointer ${on ? tone : "text-c2"}`}>{l}</button>;
@@ -39,11 +39,11 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const put = (k: number, p: Partial<LineItem>) => patchOrder(o, { items: o.items.map((x, j) => (j === k ? { ...x, ...p } : x)) });
   const attach = async (k: number, file?: File | null) => { if (!file?.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); put(k, { img: storeMedia(full, `${o.no} ${o.items[k].name}`), thumb }); };
 
-  const th = "px-2.5 py-2.5 text-[12px] font-bold uppercase tracking-wide !text-c0 whitespace-nowrap select-none cursor-pointer hover:opacity-75 align-bottom";
+  const th = "px-2 py-2.5 text-[11.5px] font-bold uppercase tracking-wide !text-c0 whitespace-nowrap select-none cursor-pointer hover:opacity-75 align-bottom";
   const H = ({ k, children, left }: { k: SortKey; children: preact.ComponentChildren; left?: boolean }) =>
     <th class={`${th} ${left ? "text-left" : "text-center"}`} onClick={() => setSort({ k, up: sort.k === k ? !sort.up : true })} aria-sort={sort.k === k ? (sort.up ? "ascending" : "descending") : "none"}>
       {children}<span class={`ml-0.5 text-[9px] max-[1100px]:hidden ${sort.k === k ? "text-grn-bg" : "opacity-50"}`}>{sort.k === k ? (sort.up ? "▲" : "▼") : "⇅"}</span></th>;
-  const td = "px-2.5 py-2 text-center";
+  const td = "px-2 py-2 text-center";
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -59,10 +59,10 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <div class="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] sm:flex sm:flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
           {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${kg.toFixed(2)} kg`)}
         </div>
-        <div class="overflow-auto overscroll-contain max-h-[max(320px,calc(100dvh-300px))] max-[640px]:max-h-[calc(100dvh-250px)] rounded-lg border border-line"><table class="w-auto border-collapse text-[15px] num">
+        <div class="max-[1099px]:hidden"><table class="w-full border-collapse text-[14px] num">
           <thead class="sticky top-0 z-[5] bg-c4 text-c0"><tr>
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
-            {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-bottom !px-1 w-10 min-w-10 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
+            {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-bottom !px-0.5 w-6 min-w-0 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
               <div class="flex flex-col items-center justify-end gap-1.5">
                 <span class="text-[11px] font-semibold leading-none normal-case tracking-normal whitespace-nowrap [writing-mode:vertical-rl] rotate-180 bg-c4 rounded py-1 px-0.5" title={c}>{c}</span><Sq hex={colourHex(c)} size="w-4 h-4 ring-1 ring-white/70" /></div></th>; })}
           </tr></thead>
@@ -82,7 +82,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
                 <td class={`${td} text-acc font-semibold`}>{f.extra ? `+${f.extra}` : ""}</td>
                 <td class={td}><Toggle paid={!!i.paid} onChange={(v) => put(k, { paid: v })} /></td>
                 <td class={td}><MachineSelect value={i.machine} onChange={(v) => put(k, { machine: v || undefined })} /></td>
-                {columns.map((c) => <td key={c} class={`${td} ${store[c] ? "" : "floor-empty"}`}>{cs.some((x) => eq(x, c)) && <Sq hex={colourHex(c)} size="w-6 h-6 max-[1100px]:w-[18px] max-[1100px]:h-[18px]" />}</td>)}
+                {columns.map((c) => <td key={c} class={`${td} !px-0.5 ${store[c] ? "" : "floor-empty"}`}>{cs.some((x) => eq(x, c)) && <Sq hex={colourHex(c)} size="w-6 h-6 max-[1100px]:w-[18px] max-[1100px]:h-[18px]" />}</td>)}
               </tr>); })}
           </tbody>
           <tfoot class="text-[12px] text-c3">
@@ -92,7 +92,26 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
             <tr><td colSpan={11} class="px-1 py-1.5 text-right">Balance after job (g)</td>{columns.map((c) => { const b = store[c] - need[c]; return <td key={c} class={`${td} font-semibold ${b < 0 ? "text-red" : "text-grn"} ${store[c] ? "" : "floor-empty"}`}>{b > 0 ? "+" : ""}{b}</td>; })}</tr>
           </tfoot>
         </table></div>
-        {columns.length > 0 && <p class="t-meta mt-2 min-[1100px]:hidden">← Swipe the sheet sideways to see all {columns.length} colour columns →</p>}
+        <div class="min-[1100px]:hidden grid gap-2">
+          {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i), run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return (
+            <div key={k} class={`rounded-xl border border-line p-3 ${fin ? "bg-c1 text-c2 grayscale opacity-70" : "bg-c0"}`}>
+              <div class="flex items-center gap-3">
+                <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 shrink-0" onAdd={(fl) => attach(k, fl)} />
+                <div class="min-w-0 flex-1"><div class="font-semibold text-[14px] leading-snug">{k + 1}. {i.name}</div>
+                  <div class="t-meta">Qty {i.qty} · {f.printed} printed · {f.remaining} left{f.wasted ? <span class="text-red"> · {f.wasted} wasted</span> : null}{f.extra ? ` · +${f.extra} extra` : ""}</div></div>
+                {run ? <button type="button" onClick={() => setLogK(k)} class="!min-h-0 shrink-0 rounded-full bg-amb-bg text-amb px-3 py-1.5 text-[12px] font-semibold cursor-pointer leading-tight">■ Finish<span class="block text-[10px] font-medium">{run.units} pcs</span></button>
+                  : <button type="button" onClick={() => setLogK(k)} class="h-8 px-3 !min-h-0 shrink-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold cursor-pointer">▶ Start</button>}
+              </div>
+              <div class="flex flex-wrap items-center gap-2 mt-2"><Toggle paid={!!i.paid} onChange={(v) => put(k, { paid: v })} /><MachineSelect value={i.machine} onChange={(v) => put(k, { machine: v || undefined })} /></div>
+              {cs.length > 0 && <div class="flex flex-wrap gap-1.5 mt-2">{cs.map((c) => <span key={c} class="inline-flex items-center gap-1.5 rounded-full bg-c1 px-2 py-0.5 text-[12px]"><Sq hex={colourHex(c)} size="w-3.5 h-3.5" />{c}</span>)}</div>}
+            </div>); })}
+          {columns.length > 0 && <div class="rounded-xl border border-line p-3">
+            <div class="grid grid-cols-[16px_minmax(0,1fr)_auto_auto_auto] gap-x-3 gap-y-1.5 text-[12px] items-center num">
+              <span /><b class="font-sans">Colour (g)</b><span class="text-c3 text-right">Store</span><span class="text-c3 text-right">Need</span><span class="text-c3 text-right">Balance</span>
+              {columns.map((c) => { const b = store[c] - need[c]; return <>
+                <Sq hex={colourHex(c)} size="w-4 h-4" /><span class={`font-sans truncate ${store[c] ? "" : "text-red"}`}>{c}</span><span class="text-right">{store[c]}</span><span class="text-right">{need[c] || "—"}</span><span class={`text-right font-semibold ${b < 0 ? "text-red" : "text-grn"}`}>{b > 0 ? "+" : ""}{b}</span></>; })}
+            </div></div>}
+        </div>
         {!rows.length && <p class="t-meta py-6 text-center">No line items on the sheet. Use Edit line items to add one.</p>}
       </div></div>
     </div>
