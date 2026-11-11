@@ -1,3 +1,4 @@
+import { sortAbc } from "../../mock/types";
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { ordersSig } from "../../data";
 import { vOrders, vQuotes } from "../../data";
@@ -245,7 +246,7 @@ export function Shipping() {
         <Card class="flex flex-col gap-2">
           <div class="grid gap-2 grid-cols-2 md:grid-cols-3 xl:grid-cols-6 items-end">
             <Field label="Order"><select class={inputCls} value={orderNo} onChange={(e) => setOrderNo((e.target as HTMLSelectElement).value)}>{vOrders().filter((x) => x.stage !== "archived").map((x) => <option key={x.id} value={x.no}>{x.no} · {x.customer}</option>)}</select></Field>
-            <Field label="Courier"><select class={inputCls} value={d.courier} onChange={(e) => setD({ ...d, courier: (e.target as HTMLSelectElement).value })}>{["Delhivery", "DTDC", "Blue Dart", "India Post", "Shiprocket", "Hand delivery"].map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Courier"><select class={inputCls} value={d.courier} onChange={(e) => setD({ ...d, courier: (e.target as HTMLSelectElement).value })}>{sortAbc(["Delhivery", "DTDC", "Blue Dart", "India Post", "Shiprocket", "Hand delivery"]).map((c) => <option key={c}>{c}</option>)}</select></Field>
             <Field label="Service"><input class={inputCls} value={d.service} onInput={(e) => setD({ ...d, service: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Tracking no."><input class={inputCls} value={d.tracking} onInput={(e) => setD({ ...d, tracking: (e.target as HTMLInputElement).value })} /></Field>
             <Field label="Freight paid ₹"><input class={inputCls} type="number" value={d.paid} onInput={(e) => setD({ ...d, paid: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>

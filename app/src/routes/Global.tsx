@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 import { vOrders } from "../data";
 import { useState } from "preact/hooks";
 import { clientsSig } from "../data/inventory";
@@ -270,7 +271,7 @@ export function Users() {
           </Card>
         )}
         <Card class="!py-1">
-          <Table rows={usersSig.value} rowKey={(m) => m.id} onRow={owner ? setEdit : undefined} cols={[
+          <Table rows={sortAbc(usersSig.value, (u) => u.name)} rowKey={(m) => m.id} onRow={owner ? setEdit : undefined} cols={[
             { key: "n", label: "Name", render: (m) => <b class="whitespace-nowrap">{m.name}</b> },
             { key: "j", label: "Job", render: (m) => m.job || "—" },
             { key: "r", label: "Access", render: (m) => ROLE_LABEL[m.role] },

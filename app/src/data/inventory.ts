@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
 import { computed, effect, signal } from "@preact/signals";
@@ -90,10 +91,10 @@ export function applyMove(m: Movement, record = true) {
   else itemsSig.value = itemsSig.value.map((p) => (p.name === m.item ? { ...p, qty: Math.max(0, p.qty + d), cost: m.dir === "in" && m.unitCost ? m.unitCost : p.cost } : p));
   if (record) movesSig.value = [m, ...movesSig.value];
 }
-export const stockNames = (cat: string) =>
+export const stockNames = (cat: string) => sortAbc(
   cat === "filament" ? spoolsSig.value.filter((s) => s.active !== false).map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`)
   : cat === "packing" ? packSig.value.filter((p) => p.active !== false).map((p) => p.name)
-  : itemsSig.value.filter((p) => p.active !== false && (cat === "part" ? p.cat === "Part" : cat === "accessory" ? p.cat === "Accessory" : true)).map((p) => p.name);
+  : itemsSig.value.filter((p) => p.active !== false && (cat === "part" ? p.cat === "Part" : cat === "accessory" ? p.cat === "Accessory" : true)).map((p) => p.name));
 
 try { localStorage.setItem("emerald:seedv", SEED_V); } catch {}
 
@@ -202,6 +203,9 @@ function fixBodies(list: Spool[]): Spool[] {
 }
 effect(() => { const l = spoolsSig.value; if (fixBodies(l) !== l) queueMicrotask(() => { spoolsSig.value = fixBodies(spoolsSig.value); }); });
 export const masterMat = (name: string) => filMasterSig.value.materials.find((x) => eqi(x.name, name));
+export const NAMED: [RegExp, string][] = [[/black/, "#1a1a1a"], [/white|natural|ivory/, "#f4f2ec"], [/ash|grey|gray|silver/, "#9a9a9a"], [/red/, "#d22f2f"], [/orange/, "#f07c1a"], [/yellow|gold/, "#f2c418"], [/green/, "#2e9a4b"], [/blue|navy/, "#2a5cc9"], [/purple|violet/, "#7a3fc0"], [/pink|magenta/, "#e05a9c"], [/brown|wood/, "#7a4e2a"], [/beige|skin|cream/, "#e3c9a0"], [/transparent|clear/, "#d9e6ea"]];
+/** Swatch colour: the saved hex, else a guess from the colour name. */
+export const spHex = (s: { hex?: string; colour?: string }) => masterColour(s.colour)?.hex || (s.hex && s.hex !== "#000000" ? s.hex : NAMED.find(([r]) => r.test((s.colour ?? "").toLowerCase()))?.[1] ?? s.hex ?? "#888888");
 export const masterColour = (name?: string) => filMasterSig.value.colours.find((x) => eqi(x.name, name));
 /** Rename a master entry and every spool that uses it. */
 export function renameMaster(field: "material" | "colour" | "brand" | "finish", from: string, to: string) {

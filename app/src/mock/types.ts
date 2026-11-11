@@ -3,7 +3,11 @@ export type Stage = "quotation" | "po" | "production" | "qc" | "packing" | "invo
 
 export type OrderSize = "small" | "bulk" | "b2b";
 export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bulk", b2b: "B2B" };
-export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
+const LAST = new Set(["other", "others", "misc"]);
+/** A–Z (case-insensitive, numbers in natural order); blank/"—" stay first, "Other" stays last. */
+export const byAbc = (a = "", b = "") => { const r = (x: string) => !x || x === "—" ? 0 : LAST.has(x.toLowerCase()) ? 2 : 1; return r(a) - r(b) || a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }); };
+export const sortAbc = <T,>(xs: readonly T[], k: (x: T) => string = (x) => String(x)) => [...xs].sort((a, b) => byAbc(k(a), k(b)));
+export const B2B_TYPES = sortAbc(["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"]);
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string;
   /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number;
   /** Floor sheet (internal): colour names from the filament library */ colours?: string[]; /** sliced grams per plate, by colour */ gpp?: Record<string, number>;

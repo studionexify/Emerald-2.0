@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Signal } from "@preact/signals";
 import { WORKSHOP_TABS } from "../nav";
@@ -5,7 +6,7 @@ import { navigate } from "../router";
 import { Sheet, Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, renameMaster, masterUse, type FilMaster,
+import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, renameMaster, masterUse, type FilMaster,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -126,7 +127,6 @@ export function Printers() {
 /** Similar spools (same material, colour, brand) share one card. */
 const abc = (a = "", b = "") => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
 const groupSpools = (sp: Spool[]) => { const m = new Map<string, Spool[]>(); for (const s of sp) { const k = `${s.material}|${s.colour}|${s.brand}`.toLowerCase(); m.set(k, [...(m.get(k) ?? []), s]); } return [...m.values()].map((l) => l.sort((a, b) => (a.slot ?? 1e9) - (b.slot ?? 1e9) || a.spoolNo.localeCompare(b.spoolNo, undefined, { numeric: true }))).sort((a, b) => abc(a[0].colour, b[0].colour) || abc(a[0].brand, b[0].brand)); };
-const setHex = (list: Spool[], hex: string) => { const c = list[0]?.colour; if (c) filMasterSig.value = { ...filMasterSig.value, colours: filMasterSig.value.colours.map((x) => x.name.toLowerCase() === c.toLowerCase() ? { ...x, hex } : x) }; const ids = new Set(list.map((x) => x.id)); spoolsSig.value = spoolsSig.value.map((x) => ids.has(x.id) ? { ...x, hex } : x); };
 const SPOOL_MATS = (): Record<string, number> => ({ ...Object.fromEntries(filMasterSig.value.bodies.map((b) => [b.name, b.tare])), "Refill (no spool)": 0 });
 const putSpool = (id: string, p: Partial<Spool>) => { spoolsSig.value = spoolsSig.value.map((x) => x.id === id ? { ...x, ...p } : x); };
 const fIn = "w-full h-7 rounded-lg border border-line bg-c1 px-2 text-[12px] !min-h-0";
@@ -145,7 +145,7 @@ function SpoolEdit({ s, done }: { s: Spool; done: () => void }) {
   const L = (t: string) => <span class="block t-meta uppercase tracking-[0.06em] !text-[10px] mb-0.5">{t}</span>;
   return <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-2 pb-1 border-t border-line">
     <label>{L("Weigh spool (gross)")}<input class={fIn} inputMode="numeric" value={gross} onInput={(e) => setGross((e.target as HTMLInputElement).value)} /></label>
-    <label>{L("Spool material")}<select class={fIn} value={mat} onChange={(e) => setMat((e.target as HTMLSelectElement).value)}>{Object.keys(SPOOL_MATS()).map((m) => <option key={m}>{m}</option>)}</select></label>
+    <label>{L("Spool material")}<select class={fIn} value={mat} onChange={(e) => setMat((e.target as HTMLSelectElement).value)}>{sortAbc(Object.keys(SPOOL_MATS())).map((m) => <option key={m}>{m}</option>)}</select></label>
     <label>{L("Hex colour")}<input class={`${fIn} font-mono uppercase`} value={hex} onInput={(e) => setHx((e.target as HTMLInputElement).value)} /></label>
     <label>{L("Price (₹ / kg)")}<input class={fIn} inputMode="numeric" value={price} onInput={(e) => setPrice((e.target as HTMLInputElement).value)} /></label>
     <p class="col-span-2 t-meta">Net = {Number(gross) || 0} − {tare} g tare = <b class="text-c4">{net} g</b></p>
@@ -163,7 +163,7 @@ const hashC = (m: string) => { let h = 0; for (const c of m) h = (h * 31 + c.cha
 const matC = (m: string) => `color-mix(in srgb, ${masterMat(m)?.hex || (MAT_C.find(([r]) => r.test(m))?.[1] ?? hashC(m))} 68%, #000)`;
 /** Spool number shown as a plain number: "SP-007" → "7". */
 const spN = (no: string) => { const d = (no.match(/\d+/g) ?? []).pop(); return d ? String(Number(d)) : no; };
-const lightHex = (h: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(h); if (!m) return false; const n = parseInt(m[1], 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 160; };
+const lightHex = (h: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(h.replace(/^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i, "#$1$1$2$2$3$3")); if (!m) return false; const n = parseInt(m[1], 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 160; };
 const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 /** Waterfall: each card goes to the currently shortest column (height ≈ header + spool rows), so reading order stays left→right. */
 function Masonry({ cols, items }: { cols: number; items: Spool[][] }) {
@@ -173,29 +173,43 @@ function Masonry({ cols, items }: { cols: number; items: Spool[][] }) {
 }
 /** Long material sections render 12 cards first; the rest on demand. */
 function MatCards({ cols, groups }: { cols: number; groups: Spool[][] }) {
-  const [n, setN] = useState(12);
-  return <>{<Masonry cols={cols} items={groups.slice(0, n)} />}
-    {groups.length > n && <button onClick={() => setN(n + 24)} class="mt-2 w-full h-9 rounded-xl border border-line bg-c0 text-[13px] font-semibold text-c3 hover:bg-c1 cursor-pointer">Show {Math.min(24, groups.length - n)} more of {groups.length - n}</button>}</>;
+  return <Masonry cols={cols} items={groups} />;
+}
+const isOwner = () => me.value?.role === "owner";
+/** Owner-only: rename the colour and set its hex for every spool on this card. */
+function CardEdit({ list, hex, done }: { list: Spool[]; hex: string; done: () => void }) {
+  const [name, setName] = useState(list[0].colour); const [hx, setHx] = useState(/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#888888");
+  const ok = name.trim() && /^#[0-9a-f]{6}$/i.test(hx);
+  const save = () => { if (!ok || !isOwner()) return; const n = name.trim(), ids = new Set(list.map((x) => x.id)), M = filMasterSig.value;
+    const has = M.colours.some((c) => c.name.toLowerCase() === n.toLowerCase());
+    filMasterSig.value = { ...M, colours: has ? M.colours.map((c) => c.name.toLowerCase() === n.toLowerCase() ? { ...c, hex: hx } : c) : [...M.colours, { ...(M.colours[0] ?? {}), name: n, hex: hx }].sort((a, b) => abc(a.name, b.name)) };
+    spoolsSig.value = spoolsSig.value.map((x) => ids.has(x.id) ? { ...x, colour: n, hex: hx } : x);
+    log(`Edited colour ${list[0].colour} → ${n} ${hx}`, `${list[0].material} · ${list.length} spools`, "stock"); done(); };
+  return <div class="grid grid-cols-[auto_minmax(0,1fr)_84px] items-center gap-2 mt-2 pop-in">
+    <input type="color" class="w-7 h-7 !min-h-0 p-0 border-0 bg-transparent cursor-pointer" value={hx} onInput={(e) => setHx((e.target as HTMLInputElement).value)} aria-label="Pick colour" />
+    <input class="h-7 !min-h-0 rounded-md border border-line bg-c1 px-2 text-[12px]" value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} aria-label="Colour name" />
+    <input class="h-7 !min-h-0 rounded-md border border-line bg-c1 px-1.5 text-[11px] font-mono uppercase" value={hx} onInput={(e) => { const v = (e.target as HTMLInputElement).value.trim(); setHx(v.startsWith("#") ? v : `#${v}`); }} aria-label="Hex colour" />
+    <span class="col-span-3 flex items-center gap-2"><span class="t-meta flex-1">Applies to all {list.length > 1 ? `${list.length} spools` : "this spool"}</span>
+      <button class="h-7 !min-h-0 px-2.5 rounded-lg border border-line text-[11px] font-semibold" onClick={done}>Cancel</button>
+      <button class="h-7 !min-h-0 px-2.5 rounded-lg bg-c4 text-c0 text-[11px] font-semibold disabled:opacity-40" disabled={!ok} onClick={save}>Save</button></span>
+  </div>;
 }
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
   const mc = matC(h.material);
   const [showSealed, setShowSealed] = useState(false);
   const sealed = list.filter((x) => x.status === "sealed" && x.grams > 0);
-  const rows = sealed.length > 1 && !showSealed ? list.filter((x) => !sealed.includes(x)) : list;
+  const rows = list; void sealed; void showSealed; void setShowSealed;
   return <div class="rounded-[var(--radius-card)] bg-c0 border border-line px-3 py-2.5 flex flex-col" style={{ borderLeft: `3px solid ${mc}` }}>
     <div class="flex items-center gap-2.5 -mx-3 -mt-2.5 px-3 py-2.5 rounded-t-[var(--radius-card)]" style={{ background: hex, color: lightHex(hex) ? "#1a1a1a" : "#fff" }}>
-      <button class="w-9 h-5 !min-h-0 rounded-md border border-current/30 shrink-0" style={{ background: hex, outline: hexOpen ? "2px solid var(--acc)" : undefined, outlineOffset: "1px" }} onClick={() => setHexOpen(!hexOpen)} aria-label="Change colour" />
+      <span class="w-9 h-5 rounded-md border border-current/30 shrink-0" style={{ background: hex }} />
       <div class="min-w-0 flex-1"><div class="font-semibold text-[13px] leading-tight truncate">{h.colour || h.material}</div><div class="text-[11px] opacity-75 truncate">{h.brand || "—"}</div></div>
-      <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md bg-c0" style={{ color: mc }}>{h.material}</span>
+      {isOwner() ? <button class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 !min-h-0 rounded-md bg-c0 cursor-pointer" style={{ color: mc, outline: hexOpen ? "2px solid var(--acc)" : undefined }} onClick={() => setHexOpen(!hexOpen)} title="Edit colour for this card">{h.material}</button>
+        : <span class="text-[10px] font-bold tracking-[0.06em] px-1.5 py-0.5 rounded-md bg-c0" style={{ color: mc }}>{h.material}</span>}
     </div>
-    {hexOpen && <div class="flex items-center gap-2 mt-2 pop-in">
-      <input type="color" class="w-6 h-6 !min-h-0 p-0 border-0 bg-transparent cursor-pointer" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#888888"} onChange={(e) => setHex(list, (e.target as HTMLInputElement).value)} aria-label="Pick colour" />
-      <input class="w-[84px] h-6 !min-h-0 rounded-md border border-line bg-c1 px-1.5 text-[11px] font-mono uppercase" value={h.hex ?? ""} placeholder={hex} onChange={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (/^#?[0-9a-f]{6}$/i.test(v)) setHex(list, v.startsWith("#") ? v : `#${v}`); }} aria-label="Hex colour" />
-      <span class="t-meta">applies to all {list.length > 1 ? `${list.length} spools` : "this spool"}</span>
-    </div>}
+    {hexOpen && <CardEdit list={list} hex={hex} done={() => setHexOpen(false)} />}
     <div class="mt-2 flex flex-col">
-      {sealed.length > 1 && !showSealed && <button onClick={() => setShowSealed(true)} class="border-t border-line flex items-center gap-3 py-2 text-left cursor-pointer !min-h-0">
+      {false && <button onClick={() => setShowSealed(true)} class="border-t border-line flex items-center gap-3 py-2 text-left cursor-pointer !min-h-0">
         <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{sealed.length}×</span>
         <span class="flex-1 min-w-0"><span class="block h-1.5 rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined }} /><span class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Sealed · #{sealed.map((x) => x.slot ?? spN(x.spoolNo)).slice(0, 4).join(", ")}{sealed.length > 4 ? "…" : ""}</span><b class="num">{(sealed.reduce((a, x) => a + x.grams, 0) / 1000).toFixed(1)} kg</b></span></span>
         <span class="h-7 px-2.5 rounded-lg border border-line text-[11px] font-semibold grid place-items-center">Show</span>
@@ -214,9 +228,6 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
     </div>
   </div>;
 }
-const NAMED: [RegExp, string][] = [[/black/, "#1a1a1a"], [/white|natural|ivory/, "#f4f2ec"], [/ash|grey|gray|silver/, "#9a9a9a"], [/red/, "#d22f2f"], [/orange/, "#f07c1a"], [/yellow|gold/, "#f2c418"], [/green/, "#2e9a4b"], [/blue|navy/, "#2a5cc9"], [/purple|violet/, "#7a3fc0"], [/pink|magenta/, "#e05a9c"], [/brown|wood/, "#7a4e2a"], [/beige|skin|cream/, "#e3c9a0"], [/transparent|clear/, "#d9e6ea"]];
-/** Swatch colour: the saved hex, else a guess from the colour name. */
-const spHex = (s: { hex?: string; colour?: string }) => masterColour(s.colour)?.hex || (s.hex && s.hex !== "#000000" ? s.hex : NAMED.find(([r]) => r.test((s.colour ?? "").toLowerCase()))?.[1] ?? s.hex ?? "#888888");
 const Swatch = ({ hex }: { hex?: string }) => <span class="inline-block w-3.5 h-3.5 rounded-full border border-c3 shrink-0" style={{ background: hex || "transparent" }} aria-hidden="true" />;
 const MATS = () => filMasterSig.value.materials.map((m) => m.name).sort(abc);
 const lowG = () => filMasterSig.value.lowG || 250;
@@ -272,7 +283,7 @@ function WeighIn({ s, put }: { s: Spool; put: (p: Partial<Spool>, why?: string) 
 
 export function Filament() {
   const [vw, setVw] = useState(innerWidth); useLayoutEffect(() => { const f = () => setVw(innerWidth); addEventListener("resize", f); return () => removeEventListener("resize", f); }, []);
-  const cols = vw >= 1536 ? 4 : vw >= 900 ? 3 : vw >= 640 ? 2 : 1;
+  const cols = vw < 640 ? 1 : Math.max(2, Math.floor((vw - 120) / 300));
   const stripRef = useRef<HTMLDivElement>(null); const [cur, setCur] = useState<string | null>(null);
   useLayoutEffect(() => {
     const f = () => { const secs = document.querySelectorAll<HTMLElement>("section[data-mat]"); const sc = secs[0]?.closest(".overflow-y-auto");
@@ -298,7 +309,7 @@ export function Filament() {
     actions: (s, put) => <>
       <select class="h-9 md:h-10 pl-4 pr-3 rounded-full border border-c4 bg-c0 text-[13px] md:text-sm font-semibold cursor-pointer" value={s.status === "loaded" ? s.printer ?? "" : ""} aria-label="Load on printer"
         onChange={(e) => { const p = (e.target as HTMLSelectElement).value; put(p ? { status: "loaded", printer: p, opened: s.opened || today() } : { status: s.grams > 0 ? "open" : "empty", printer: "" }, p ? `Loaded on ${p}` : "Unloaded"); }}>
-        <option value="">Not loaded</option>{printersSig.value.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.name}>Load on {p.name}</option>)}
+        <option value="">Not loaded</option>{sortAbc(printersSig.value.filter((p) => p.active !== false), (p) => p.name).map((p) => <option key={p.id} value={p.name}>Load on {p.name}</option>)}
       </select>
       <Button variant="outline" onClick={() => put({ dried: today() }, "Dried")}>Mark dried</Button>
     </>,
@@ -421,7 +432,7 @@ function FilSettings({ close }: { close: () => void }) {
       <section><b class="text-sm">Filament diameters</b><div class="mt-2">{chips("diameters", "mm")}</div></section>
     </div> : tab === "defaults" ? <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <Field label="New spool size"><select class={inputCls} value={M.size} onChange={(e) => put({ size: Number((e.target as HTMLSelectElement).value) })}>{M.sizes.map((v) => <option key={v} value={v}>{v >= 1000 ? `${v / 1000} kg` : `${v} g`}</option>)}</select></Field>
-      <Field label="New spool type"><select class={inputCls} value={M.body} onChange={(e) => put({ body: (e.target as HTMLSelectElement).value })}>{M.bodies.map((b) => <option key={b.name}>{b.name}</option>)}</select></Field>
+      <Field label="New spool type"><select class={inputCls} value={M.body} onChange={(e) => put({ body: (e.target as HTMLSelectElement).value })}>{sortAbc(M.bodies, (b) => b.name).map((b) => <option key={b.name}>{b.name}</option>)}</select></Field>
       <Field label="New spool diameter"><select class={inputCls} value={M.diameter} onChange={(e) => put({ diameter: Number((e.target as HTMLSelectElement).value) })}>{M.diameters.map((v) => <option key={v} value={v}>{v} mm</option>)}</select></Field>
       <Field label="Fallback cost per kg (₹)"><input class={inputCls} inputMode="decimal" value={M.costKg} onInput={(e) => put({ costKg: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
       <Field label="Spool is low below (g)"><input class={inputCls} inputMode="numeric" value={M.lowG} onInput={(e) => put({ lowG: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>

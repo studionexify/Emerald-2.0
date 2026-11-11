@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 /** Records: every list row opens an inline pane — facts, edit form, retire/restore, duplicate, delete to Bin. */
 import type { Signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
@@ -43,7 +44,7 @@ export const PaneSection = ({ title, children }: { title: string; children: Comp
 export function Input<T>({ f, value, on, row }: { f: FDef<T>; value: unknown; on: (v: unknown) => void; row?: T }) {
   const t = f.type ?? "text";
   const v = value ?? "";
-  const opts = typeof f.options === "function" ? f.options(row as T) : f.options ?? [];
+  const opts = sortAbc(typeof f.options === "function" ? f.options(row as T) : f.options ?? []);
   if (t === "combo") { const id = `dl-${f.k}`; return <><input class={inputCls} list={id} value={String(v)} onInput={(e) => on((e.target as HTMLInputElement).value)} placeholder="Pick or type new" /><datalist id={id}>{opts.map((o) => <option key={o} value={o} />)}</datalist></>; }
   if (t === "select") {
     return <select class={inputCls} value={String(v)} onChange={(e) => { const x = (e.target as HTMLSelectElement).value; on(typeof value === "number" && x !== "" && !isNaN(Number(x)) ? Number(x) : x); }}>{!opts.includes(String(v)) && <option value={String(v)}>{String(v) || "—"}</option>}{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;

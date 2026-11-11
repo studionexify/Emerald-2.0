@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 import { vMoney, vOrders } from "../data";
 import { useEffect, useState } from "preact/hooks";
 import { Icon, Page } from "../ui";
@@ -60,7 +61,7 @@ const monthName = (m: string) => new Date(m + "-01T00:00:00").toLocaleDateString
 
 export function MaunyHome() {
   useEffect(() => () => { inspectSig.value = null; }, []);
-  const accs = modeAccounts();
+  const accs = sortAbc(modeAccounts(), (a) => a.name);
   const [type, setType] = useState<"out" | "in" | "transfer">("out");
   const [amt, setAmt] = useState("");
   const [cat, setCat] = useState(catsSig.value.find((c) => c.dir === "out")?.k ?? "");

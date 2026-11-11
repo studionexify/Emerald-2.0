@@ -1,3 +1,4 @@
+import { sortAbc } from "../../mock/types";
 import { useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
@@ -24,14 +25,14 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
       <div class="col-span-2">{L("What are we printing", <input class={f} value={d.name} placeholder="e.g. Fixture clip v2" onInput={(e) => setD({ ...d, name: (e.target as HTMLInputElement).value })} />)}</div>
       {L("Quantity", <input type="number" min={1} class={f} value={d.qty} onInput={(e) => setD({ ...d, qty: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} />)}
       {L("Purpose", <select class={f} value={d.purpose} onChange={(e) => setD({ ...d, purpose: (e.target as HTMLSelectElement).value })}>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select>)}
-      {L("Material", <select class={f} value={d.material} onChange={(e) => setD({ ...d, material: (e.target as HTMLSelectElement).value })}>{["PLA", "PETG", "ABS", "ASA", "TPU", "Resin", "Other"].map((x) => <option key={x}>{x}</option>)}</select>)}
+      {L("Material", <select class={f} value={d.material} onChange={(e) => setD({ ...d, material: (e.target as HTMLSelectElement).value })}>{sortAbc(["PLA", "PETG", "ABS", "ASA", "TPU", "Resin", "Other"]).map((x) => <option key={x}>{x}</option>)}</select>)}
       <div class="col-span-2"><div class="text-[12px] text-c2 mb-1">Colours in this part · tap to add or remove</div>
         <div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">{cols.map((x) => { const on = d.colours.includes(x), hex = filMasterSig.value.colours.find((c) => c.name === x)?.hex;
           return <button key={x} type="button" aria-pressed={on} onClick={() => setD({ ...d, colours: on ? d.colours.filter((c) => c !== x) : [...d.colours, x] })} class={`h-8 px-2.5 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] cursor-pointer border ${on ? "bg-c4 text-c0 border-c4 font-semibold" : "border-line bg-c0"}`}><span class="w-3.5 h-3.5 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.2)]" style={{ background: hex ?? "var(--c-1)" }} />{x}</button>; })}</div></div>
       <div class="col-span-2">{L("Photo (optional)", <input type="file" accept="image/*" class="text-[13px]" onChange={(e) => attach((e.target as HTMLInputElement).files?.[0])} />)}</div>
     </div></Sheet>;
 }
-const DEFECTS = ["Warping", "Layer shift", "Stringing", "Dimension off", "Surface defect", "Broken / weak"];
+const DEFECTS = sortAbc(["Warping", "Layer shift", "Stringing", "Dimension off", "Surface defect", "Broken / weak"]);
 /** In-house order: every line item with its own Start / Finish, all on this tab. QC & close once every line is printed. */
 export function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void }) {
   const [go, setGo] = useState<{ k: number; run?: Batch } | null>(null);
