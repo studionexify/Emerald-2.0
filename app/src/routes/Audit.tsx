@@ -130,35 +130,45 @@ function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; bra
   );
 }
 
+/** Filter box: type to narrow the list, or open it and pick. Optional colour squares. */
+function Combo({ label, value, opts, on, hex }: { label: string; value: string; opts: string[]; on: (v: string) => void; hex?: (v: string) => string | undefined }) {
+  const [open, setOpen] = useState(false);
+  const q = value.trim().toLowerCase(), exact = opts.some((o) => o.toLowerCase() === q);
+  const list = !q || exact ? opts : opts.filter((o) => o.toLowerCase().includes(q));
+  const sq = (v: string) => <span class="w-5 h-5 rounded border border-c2 shrink-0" style={{ background: v ? hex!(v) ?? "transparent" : "transparent" }} />;
+  return (
+    <div class="flex flex-col gap-0.5 min-w-0 relative"><span class="t-meta">{label}</span>
+      <div class={`${sel} flex items-center gap-2 !px-2.5 focus-within:border-c4`}>
+        {hex && exact && sq(opts.find((o) => o.toLowerCase() === q)!)}
+        <input class="flex-1 min-w-0 bg-transparent !outline-none !border-0 !shadow-none !ring-0 !min-h-0 !p-0 text-[13px]" style={{ outline: "none", boxShadow: "none" }} value={value} placeholder="Any — type or pick" aria-label={label} autoComplete="off"
+          onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} onInput={(e) => { on(val(e)); setOpen(true); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && list.length) { on(list[0]); setOpen(false); (e.target as HTMLInputElement).blur(); } if (e.key === "Escape") setOpen(false); }} />
+        {value ? <button type="button" class="text-c3 px-1" aria-label={`Clear ${label}`} onMouseDown={(e) => e.preventDefault()} onClick={() => on("")}>✕</button>
+          : <button type="button" class="text-c3 px-1" aria-label={`Open ${label}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen(!open)}>▾</button>}
+      </div>
+      {open && <div class="absolute z-20 top-full mt-1 left-0 min-w-full w-64 max-h-80 overflow-y-auto rounded-xl border border-line bg-c0 shadow-lg p-1.5 grid gap-0.5">
+        {list.length ? list.map((o) => <button type="button" key={o} onMouseDown={(e) => e.preventDefault()} onClick={() => { on(o); setOpen(false); }}
+          class={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-left hover:bg-c1 ${o.toLowerCase() === q ? "bg-c1 font-semibold" : ""}`}>{hex && sq(o)}{o}</button>)
+          : <span class="px-2 py-1.5 text-[13px] text-c3">No match</span>}
+      </div>}
+    </div>
+  );
+}
+
 function FilamentAudit({ a }: { a: Audit }) {
   const [f, setF] = useState({ mat: "", col: "", brand: "", body: "" });
   const [adding, setAdding] = useState(false);
   const all = spoolsSig.value.filter((s) => s.active !== false && (s.grams > 0 && s.status !== "empty" || a.lines.some((l) => l.ref === s.id)));
   const by = (s: Spool, k: keyof typeof f) => (k === "mat" ? s.material : k === "col" ? s.colour : k === "brand" ? s.brand : s.spoolMat);
-  const fit = (s: Spool, skip?: keyof typeof f) => (Object.keys(f) as (keyof typeof f)[]).every((k) => k === skip || !f[k] || by(s, k) === f[k]);
+  const known = (k: keyof typeof f) => all.some((s) => (by(s, k) ?? "").toLowerCase() === f[k].trim().toLowerCase());
+  const hit = (s: Spool, k: keyof typeof f) => { const v = (by(s, k) ?? "").toLowerCase(), q = f[k].trim().toLowerCase(); return !q || (known(k) ? v === q : v.includes(q)); };
+  const fit = (s: Spool, skip?: keyof typeof f) => (Object.keys(f) as (keyof typeof f)[]).every((k) => k === skip || hit(s, k));
   const opts = (k: keyof typeof f) => uniq(all.filter((s) => fit(s, k)).map((s) => by(s, k)));
   const rows = all.filter((s) => fit(s)).sort((x, y) => Number(a.lines.some((l) => l.ref === x.id)) - Number(a.lines.some((l) => l.ref === y.id)) || spoolGroup(x).localeCompare(spoolGroup(y)) || (x.slot ?? 0) - (y.slot ?? 0));
-  const picked = Object.values(f).some(Boolean);
+  const picked = Object.values(f).some((v) => v.trim());
   const M = filMasterSig.value;
   const hexOf = (c: string) => M.colours.find((x) => x.name.toLowerCase() === c.toLowerCase())?.hex ?? all.find((x) => x.colour === c)?.hex;
-  const [cOpen, setCOpen] = useState(false);
-  const Colour = (
-    <div class="flex flex-col gap-0.5 min-w-0 relative"><span class="t-meta">Colour</span>
-      <button type="button" class={`${sel} flex items-center gap-2 text-left`} onClick={() => setCOpen(!cOpen)} aria-expanded={cOpen}>
-        {f.col && <span class="w-4 h-4 rounded border border-c2 shrink-0" style={{ background: hexOf(f.col) }} />}<span class="flex-1 truncate">{f.col || "Any"}</span><span class="text-c3">▾</span>
-      </button>
-      {cOpen && <div class="absolute z-20 top-full mt-1 left-0 w-64 max-h-80 overflow-y-auto rounded-xl border border-line bg-c0 shadow-lg p-1.5 grid grid-cols-1 gap-0.5">
-        {["", ...opts("col")].map((c) => <button type="button" key={c || "any"} onClick={() => { setF({ ...f, col: c }); setCOpen(false); }}
-          class={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-left hover:bg-c1 ${f.col === c ? "bg-c1 font-semibold" : ""}`}>
-          <span class="w-5 h-5 rounded border border-c2 shrink-0" style={{ background: c ? hexOf(c) : "transparent" }} />{c || "Any colour"}</button>)}
-      </div>}
-    </div>
-  );
-  const S = (k: keyof typeof f, label: string) => (
-    <label class="flex flex-col gap-0.5 min-w-0"><span class="t-meta">{label}</span>
-      <select class={sel} value={f[k]} onChange={(e) => setF({ ...f, [k]: (e.target as HTMLSelectElement).value })}><option value="">Any</option>{opts(k).map((o) => <option key={o} value={o}>{o}</option>)}</select>
-    </label>
-  );
+  const S = (k: keyof typeof f, label: string, sw?: boolean) => <Combo label={label} value={f[k]} opts={opts(k)} hex={sw ? hexOf : undefined} on={(v) => setF({ ...f, [k]: v })} />;
   return (
     <Section title="Find a spool" note="pick type, colour and brand — matching spools show below" action={<Button variant="outline" icon="plus" onClick={() => setAdding(true)}>Not in list — add new spool</Button>}>
       <datalist id="au-mat">{M.materials.map((m) => <option key={m.name} value={m.name} />)}</datalist>
@@ -167,7 +177,7 @@ function FilamentAudit({ a }: { a: Audit }) {
       <Card>
         <div class="grid grid-cols-2 sm:grid-cols-[auto_repeat(4,minmax(0,1fr))] gap-2 items-end">
           <Button variant="outline" class="max-sm:col-span-2" disabled={!picked} onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>
-          {S("mat", "Type / material")}{Colour}{S("brand", "Brand")}{S("body", "Spool body")}
+          {S("mat", "Type / material")}{S("col", "Colour", true)}{S("brand", "Brand")}{S("body", "Spool body")}
         </div>
       </Card>
       {adding && <NewSpool a={a} f={f} done={() => setAdding(false)} />}
