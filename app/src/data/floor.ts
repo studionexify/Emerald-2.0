@@ -88,18 +88,23 @@ export function startPlates(o: Order, k: number, d: { machine?: string; plates: 
 }
 
 /** Complete plates: good + wasted pieces, grams per plate per spool all consumed from those exact spools. */
-export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number> }): Order {
+/** Runs of a line printed with spools still loaded, waiting for the final weigh. */
+export const pendingWeigh = (o: Order, i: LineItem) => batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && b.weighLater && !b.running);
+export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean }): Order {
   const i = o.items[k], p = lineProgress(o, i), b = batchesSig.value.find((x) => x.id === runId);
   const pcs = d.plates * d.perPlate, bad = Math.min(d.wasted, pcs), grams: Record<string, number> = {}, cons: string[] = [];
-  for (const [colour, id] of Object.entries(d.spools)) {
-    const qty = Math.round((d.gpp[colour] ?? 0) * d.plates); if (qty <= 0) continue;
+  // Weighing now also covers every earlier run printed from these loaded spools.
+  const prior = d.later ? [] : pendingWeigh(o, i), allPlates = d.plates + prior.reduce((a, x) => a + (x.plates ?? 1), 0);
+  if (!d.later) for (const [colour, id] of Object.entries(d.spools)) {
+    const qty = Math.round((d.gpp[colour] ?? 0) * allPlates); if (qty <= 0) continue;
     const sp = spoolsSig.value.find((s) => s.id === id);
     cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : colour, qty, orderNo: o.no, batch: i.name, printer: b?.printer ?? i.machine, spoolId: sp?.id }).id);
     grams[id] = (grams[id] ?? 0) + qty;
   }
-  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, units: pcs, done: pcs - bad, failed: bad, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams, cons, by: me.value?.name ?? x.by } : x));
-  log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${Object.values(grams).reduce((a, x) => a + x, 0)} g`);
-  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp: { ...i.gpp, ...d.gpp } });
+  const priorIds = new Set(prior.map((x) => x.id));
+  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
+  log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${d.later ? "weigh at the end" : `${Object.values(grams).reduce((a, x) => a + x, 0)} g over ${allPlates} plate${allPlates > 1 ? "s" : ""}`}`);
+  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } });
 }
 /** Cancel a run that never finished. */
 export const cancelRun = (id: string) => { batchesSig.value = batchesSig.value.filter((b) => b.id !== id); };
