@@ -165,9 +165,9 @@ function FilamentAudit({ a }: { a: Audit }) {
       <datalist id="au-col">{M.colours.map((m) => <option key={m.name} value={m.name} />)}</datalist>
       <datalist id="au-brand">{M.brands.map((m) => <option key={m} value={m} />)}</datalist>
       <Card>
-        <div class="grid grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2 items-end">
+        <div class="grid grid-cols-2 sm:grid-cols-[auto_repeat(4,minmax(0,1fr))] gap-2 items-end">
+          <Button variant="outline" class="max-sm:col-span-2" disabled={!picked} onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>
           {S("mat", "Type / material")}{Colour}{S("brand", "Brand")}{S("body", "Spool body")}
-          {picked && <Button variant="ghost" onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>}
         </div>
       </Card>
       {adding && <NewSpool a={a} f={f} done={() => setAdding(false)} />}
