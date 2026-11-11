@@ -243,19 +243,29 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
   </Sheet>;
 }
 
-/** Store colours first (in-stock spools, most grams first), then the rest of the library, so names always match the store. */
+/** Store colours (in-stock spools) then library colours with no stock, each A–Z, so names always match the store. */
 function storeColours() {
-  const m = new Map<string, string>();
-  for (const sp of spoolsSig.value) if (sp.active !== false && sp.status !== "empty" && sp.colour?.trim() && ![...m.keys()].some((x) => eq(x, sp.colour))) m.set(sp.colour.trim(), sp.colour.trim());
-  const stocked = sortAbc([...m.keys()]).sort((x, y) => colourStore(y) - colourStore(x));
-  const rest = sortAbc(filMasterSig.value.colours.map((c) => c.name).filter((n) => !stocked.some((x) => eq(x, n))));
-  return { stocked, rest };
+  const stocked: string[] = [];
+  for (const sp of spoolsSig.value) if (sp.active !== false && sp.status !== "empty" && sp.colour?.trim() && !stocked.some((x) => eq(x, sp.colour))) stocked.push(sp.colour.trim());
+  const rest = filMasterSig.value.colours.map((c) => c.name).filter((n) => !stocked.some((x) => eq(x, n)));
+  return { stocked: sortAbc(stocked), rest: sortAbc(rest) };
 }
 const kg = (g: number) => (g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${g} g`);
-function ColourOptions({ skip }: { skip: (n: string) => boolean }) {
+/** Swatch picker: a colour block beside every name, sorted A–Z, with a filter box. */
+function ColourPicker({ skip, onPick, label }: { skip: (n: string) => boolean; onPick: (n: string) => void; label: string }) {
+  const [q, setQ] = useState("");
   const { stocked, rest } = storeColours();
-  return <><optgroup label="In store">{stocked.filter((n) => !skip(n)).map((n) => <option key={n} value={n}>{n} · {kg(colourStore(n))}</option>)}</optgroup>
-    <optgroup label="Library · no stock">{rest.filter((n) => !skip(n)).map((n) => <option key={n} value={n}>{n}</option>)}</optgroup></>;
+  const f = (xs: string[]) => xs.filter((n) => !skip(n) && n.toLowerCase().includes(q.trim().toLowerCase()));
+  const item = (n: string, stock: boolean) => <button key={n} type="button" onClick={() => onPick(n)} class="flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] hover:bg-c1 !min-h-0 cursor-pointer min-w-0">
+    <Sq hex={colourHex(n)} size="w-5 h-5 shrink-0" /><span class="truncate">{n}</span>{stock && <span class="ml-auto text-[11px] text-c2 num shrink-0">{kg(colourStore(n))}</span>}</button>;
+  const grid = "grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-0.5";
+  return <div class="w-full">
+    <input autoFocus value={q} placeholder={`${label} — type to filter`} onInput={(e) => setQ((e.target as HTMLInputElement).value)} class="h-9 w-full max-w-xs px-2 mb-2 rounded-lg border border-line bg-c0 text-[13px]" />
+    <div class="max-h-[40vh] overflow-y-auto">
+      <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase px-2 mb-1">In store</div><div class={grid}>{f(stocked).map((n) => item(n, true))}</div>
+      {f(rest).length > 0 && <><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase px-2 mt-2 mb-1">Library · no stock</div><div class={grid}>{f(rest).map((n) => item(n, false))}</div></>}
+    </div>
+  </div>;
 }
 
 /** Master grid: tick the colours each design uses. Tap a column name to swap it for a store colour or remove it. Nothing changes until Save. */
@@ -263,7 +273,7 @@ function EditColours({ o, onClose }: { o: Order; onClose: () => void }) {
   const lib = filMasterSig.value.colours;
   const [sel, setSel] = useState(() => Object.fromEntries(o.items.map((i, k) => [k, lineColours(i)])) as Record<number, string[]>);
   const [extra, setExtra] = useState<string[]>(o.floorCols ?? []);
-  const [ren, setRen] = useState<Record<string, string>>({}), [edit, setEdit] = useState<string | null>(null);
+  const [ren, setRen] = useState<Record<string, string>>({}), [edit, setEdit] = useState<string | null>(null), [adding, setAdding] = useState(false);
   const cols = useMemo(() => { const u = new Set([...Object.values(sel).flat(), ...extra]); return [...lib.map((c) => c.name).filter((n) => [...u].some((x) => eq(x, n))), ...[...u].filter((x) => !lib.some((c) => eq(c.name, x)))]; }, [sel, extra]);
   const flip = (k: number, c: string) => setSel({ ...sel, [k]: sel[k].some((x) => eq(x, c)) ? sel[k].filter((x) => !eq(x, c)) : [...sel[k], c] });
   const uniq = (xs: string[]) => xs.filter((x, j) => xs.findIndex((y) => eq(x, y)) === j);
@@ -281,18 +291,22 @@ function EditColours({ o, onClose }: { o: Order; onClose: () => void }) {
   const save = () => { patchOrder(o, { floorCols: extra, items: o.items.map((i, k) => ({ ...i, colours: sel[k], gpp: gppOf(i.gpp) })) }); onClose(); };
   const pick = "h-9 px-2 rounded-lg text-[13px] font-semibold cursor-pointer";
   return <Sheet huge open onClose={onClose} title={`Edit colours · ${o.no}`}
-    footer={<><select value="" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) setExtra([...extra, v]); }} class={`${pick} mr-auto border border-dashed border-grn text-grn`}><option value="">＋ Add colour from store</option><ColourOptions skip={(n) => cols.some((x) => eq(x, n))} /></select>
+    footer={<><button type="button" onClick={() => { setAdding(!adding); setEdit(null); }} class={`${pick} mr-auto border border-dashed border-grn text-grn`}>＋ Add colour from store</button>
       <Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save colours</Button></>}>
     <p class="t-meta mb-3">Tap a box to tick the colours each design uses. Tap a colour's name to change it to a store colour or remove it. Striped columns have no stock in the store.</p>
     {edit && <div class="sticky top-0 z-10 shadow mb-3 p-2.5 rounded-lg bg-c1 flex flex-wrap items-center gap-2 text-[13px]">
       <Sq hex={colourHex(edit)} size="w-4 h-4" /><b>{edit}</b><span class="text-c2">{colourStore(edit) ? `· ${kg(colourStore(edit))} in store` : "· not in store"}</span>
-      <select autoFocus value="" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) swap(edit, v); }} class={`${pick} border border-line bg-c0`}><option value="">Change to…</option><ColourOptions skip={(n) => eq(n, edit)} /></select>
       <Button variant="outline" onClick={() => swap(edit, "")}>Remove column</Button>
       <Button variant="outline" class="ml-auto" onClick={() => setEdit(null)}>Done</Button>
+      <ColourPicker label="Change to" skip={(n) => eq(n, edit)} onPick={(n) => swap(edit, n)} />
+    </div>}
+    {adding && !edit && <div class="sticky top-0 z-10 shadow mb-3 p-2.5 rounded-lg bg-c1 flex flex-wrap items-center gap-2 text-[13px]">
+      <b>Add a colour column</b><Button variant="outline" class="ml-auto" onClick={() => setAdding(false)}>Done</Button>
+      <ColourPicker label="Add" skip={(n) => cols.some((x) => eq(x, n))} onPick={(n) => setExtra([...extra, n])} />
     </div>}
     <table class="w-full border-collapse text-[13px]">
       <thead><tr class="border-b border-line"><th class="px-1 py-2 text-[11px] text-c2">Image</th><th class="px-1 py-2 text-left text-[11px] text-c2">Design</th>
-        {cols.map((c) => <th key={c} class={`px-1 py-2 align-top w-12 ${colourStore(c) ? "" : "floor-empty text-red"}`}><button type="button" title={`Change or remove ${c}`} onClick={() => setEdit(edit === c ? null : c)} class={`flex flex-col items-center gap-1 mx-auto !min-h-0 cursor-pointer rounded-md px-0.5 hover:bg-c1 ${edit === c ? "ring-2 ring-grn" : ""}`}><Sq hex={colourHex(c)} size="w-4 h-4" /><span class="text-[11px] leading-none whitespace-nowrap [writing-mode:vertical-rl] rotate-180 h-[88px] text-left underline decoration-dotted underline-offset-2">{c}</span></button></th>)}</tr></thead>
+        {cols.map((c) => <th key={c} class={`px-1 py-2 align-top w-12 ${colourStore(c) ? "" : "floor-empty text-red"}`}><button type="button" title={`Change or remove ${c}`} onClick={() => { setEdit(edit === c ? null : c); setAdding(false); }} class={`flex flex-col items-center gap-1 mx-auto !min-h-0 cursor-pointer rounded-md px-0.5 hover:bg-c1 ${edit === c ? "ring-2 ring-grn" : ""}`}><Sq hex={colourHex(c)} size="w-4 h-4" /><span class="text-[11px] leading-none whitespace-nowrap [writing-mode:vertical-rl] rotate-180 h-[88px] text-left underline decoration-dotted underline-offset-2">{c}</span></button></th>)}</tr></thead>
       <tbody>{o.items.map((i, k) => i.offFloor ? null : <tr key={k} class="border-b border-line">
         <td class="px-1 py-1.5"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-14 h-14" /></td>
         <td class="px-1 py-1.5">{i.name}</td>
