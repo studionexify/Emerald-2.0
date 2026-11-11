@@ -6,7 +6,7 @@ import { navigate } from "../router";
 import { Sheet, Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, defaultBody, renameMaster, masterUse, type FilMaster,
+import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, defaultBody, clashIds, renameMaster, masterUse, type FilMaster,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -199,7 +199,7 @@ function CardEdit({ list, hex, done }: { list: Spool[]; hex: string; done: () =>
 }
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
-  const mc = matC(h.material);
+  const mc = matC(h.material); const clash = clashIds(list);
   const [showSealed, setShowSealed] = useState(false);
   const sealed = list.filter((x) => x.status === "sealed" && x.grams > 0);
   const rows = list; void sealed; void showSealed; void setShowSealed;
@@ -219,7 +219,7 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
       </button>}
       {rows.map((s) => <div key={s.id} class="border-t border-line">
         <div class="flex items-center gap-3 py-2">
-          <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{s.slot ?? spN(s.spoolNo)}</span>
+          <span class={`text-[20px] font-extrabold num leading-none min-w-7 shrink-0 ${clash.has(s.id) ? "text-warn underline decoration-wavy" : ""}`} title={clash.has(s.id) ? "Same number as another spool on this card — tap Edit to set the number written on the spool" : undefined}>{s.slot ?? spN(s.spoolNo)}</span>
           <div class="flex-1 min-w-0">
             <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined, width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
             <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net <b class="num text-c4">{s.grams.toLocaleString("en-IN")} g</b></span><span class="text-c2">Gross <b class="num text-c4">{spoolGross(s).toLocaleString("en-IN")} g</b></span></div>
@@ -305,7 +305,7 @@ export function Filament() {
   const [st, setSt] = useState("in stock");
   const [q, setQ] = useState(""); const [set, setSet] = useState(false);
   const r = useRecord<Spool>({
-    sig: spoolsSig, kind: "Spool", title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
+    sig: spoolsSig, kind: "Spool", noDuplicate: true, title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
     blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, copies: 1, spoolMat: defaultBody(""), tare: bodyTare(defaultBody("")) ?? t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
     onSave: (s0, isNew) => { let s = s0; if (isNew) { const n = Math.max(1, s0.copies ?? 1), sl = freeSlots(s0, n); const { copies: _c, ...base } = s0; s = { ...base, slot: sl[0] };
         const extra = sl.slice(1).map((k) => ({ ...base, id: uid(), slot: k, spoolNo: "" }) as Spool);

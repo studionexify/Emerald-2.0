@@ -149,7 +149,7 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
           {c.actions?.(cur, p)}
           <span class="flex-1" />
           <Menu label={`More for ${c.title(cur)}`} items={[
-            { label: "Duplicate", hidden: !!c.noDuplicate, on: () => { const n = { ...cur, id: uid() }; c.sig.value = [n, ...c.sig.value]; log(`Duplicated ${c.kind.toLowerCase()}`, c.title(n), c.logKind ?? "stock"); setId(n.id); } },
+            { label: "Duplicate", hidden: !!c.noDuplicate, on: () => { const n = { ...cur, id: uid(), slot: undefined }; c.sig.value = [n, ...c.sig.value]; log(`Duplicated ${c.kind.toLowerCase()}`, c.title(n), c.logKind ?? "stock"); setId(n.id); } },
             { label: retired ? "Restore" : "Retire", hidden: !("active" in cur), on: () => p({ active: retired } as Partial<T>, retired ? `Restored ${c.kind.toLowerCase()}` : `Retired ${c.kind.toLowerCase()}`) },
             { label: "Delete", danger: true, hidden: !!c.noDelete, on: () => { ask(`Delete ${c.title(cur)}? It goes to the Bin for 7 days.`, { ok: "Delete" }).then((ok) => { if (!ok) return; toBin(c.kind, cur, c.title(cur), me.value?.name ?? "You"); log(`Deleted ${c.kind.toLowerCase()}`, c.title(cur), c.logKind ?? "stock"); close(); }); } },
           ]} />

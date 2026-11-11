@@ -138,6 +138,7 @@ export const taskListsSig = persisted<string[]>("task-lists", ["Studio", "Purcha
 /** Spool number on the label: per material + colour + brand. A new spool takes the lowest number not held by a spool that still has filament
  *  (7 spools, #4 runs empty → the next one bought becomes #4). Numbers are fixed once given. */
 export const spoolGroup = (s: Spool) => `${s.material}|${s.colour}|${s.brand}`.toLowerCase();
+/** Gives a number only to spools that have none. Existing numbers (e.g. from an audit) are never changed. */
 export function assignSlots(list: Spool[]): Spool[] {
   if (!list.some((s) => s.slot == null)) return list;
   const held = new Map<string, Set<number>>();
@@ -153,6 +154,9 @@ export function assignSlots(list: Spool[]): Spool[] {
   }
   return list.map((s) => (give.has(s.id) ? { ...s, slot: give.get(s.id) } : s));
 }
+/** Spool ids whose number is shared with another in-stock spool of the same material + colour + brand. */
+export const clashIds = (list: Spool[]) => { const m = new Map<string, string[]>(); for (const s of list) if (s.slot != null && s.grams > 0 && s.active !== false) { const k = `${spoolGroup(s)}#${s.slot}`; m.set(k, [...(m.get(k) ?? []), s.id]); }
+  return new Set([...m.values()].filter((v) => v.length > 1).flat()); };
 effect(() => { const l = spoolsSig.value; const n = assignSlots(l); if (n !== l) queueMicrotask(() => { spoolsSig.value = assignSlots(spoolsSig.value); }); });
 
 /** Human label for a stock item string: "PLA Black · 42" → "PLA Black Polymaker #3". */
