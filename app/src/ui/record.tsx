@@ -8,9 +8,9 @@ import { Menu, Reveal } from "./disclose";
 import { MediaImg } from "./media";
 import { log, me, toBin, uid, type LogKind } from "../data";
 
-export type FType = "text" | "number" | "date" | "select" | "textarea" | "color" | "combo";
+export type FType = "text" | "number" | "date" | "select" | "textarea" | "color" | "combo" | "count";
 export type FDef<T> = { k: keyof T & string; label: string; type?: FType; /** colour dot shown before each option (custom dropdown) */ dot?: (o: string) => string | undefined; /** select / combo choices; may depend on the draft */ options?: string[] | ((r: T) => string[]);
-  /** Fields to fill in when this one changes (e.g. suggest a number from the picks so far). */ then?: (v: unknown, r: T) => Partial<T>; wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string;
+  /** Fields to fill in when this one changes (e.g. suggest a number from the picks so far). */ then?: (v: unknown, r: T) => Partial<T>; wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string; /** read-only display used in the form instead of an input */ view?: (r: T) => ComponentChildren;
   /** Form chunk. The first group is open; later groups sit behind a toggle. */ group?: string;
   /** Conditional input: rendered only when true for the current draft. */ when?: (r: T) => boolean };
 
@@ -61,6 +61,10 @@ export function Input<T>({ f, value, on, row }: { f: FDef<T>; value: unknown; on
     return <select class={inputCls} value={String(v)} onChange={(e) => { const x = (e.target as HTMLSelectElement).value; on(typeof value === "number" && x !== "" && !isNaN(Number(x)) ? Number(x) : x); }}>{!opts.includes(String(v)) && <option value={String(v)}>{String(v) || "—"}</option>}{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
   }
   if (t === "textarea") return <textarea class={`${inputCls} h-20 py-2`} value={String(v)} onInput={(e) => on((e.target as HTMLTextAreaElement).value)} />;
+  if (t === "count") { const n = Number(v) || 1; return <div class="flex items-center gap-3 min-h-10">
+    <button type="button" role="switch" aria-checked={n > 1} aria-label={f.label} onClick={() => on(n > 1 ? 1 : 2)} class={`relative shrink-0 !w-10 !min-w-10 !p-0 h-6 !min-h-0 rounded-full transition-colors ${n > 1 ? "bg-c4" : "bg-c2/40"}`}><span class={`absolute top-0.5 w-5 h-5 rounded-full bg-c0 shadow transition-all ${n > 1 ? "left-[18px]" : "left-0.5"}`} /></button>
+    {n > 1 ? <span class="flex items-center gap-1.5"><button type="button" class="w-8 h-8 !min-h-0 rounded-lg border border-line" onClick={() => on(Math.max(2, n - 1))}>−</button><input class={`${inputCls} !w-16 text-center`} inputMode="numeric" value={n} onInput={(e) => on(Math.min(50, Math.max(2, Number((e.target as HTMLInputElement).value) || 2)))} /><button type="button" class="w-8 h-8 !min-h-0 rounded-lg border border-line" onClick={() => on(Math.min(50, n + 1))}>+</button><span class="t-meta">spools</span></span> : <span class="t-meta">One spool</span>}
+  </div>; }
   if (t === "color") return <div class="flex items-center gap-2"><input type="color" class="h-10 w-12 rounded-lg border border-c3 bg-c0 shrink-0 cursor-pointer" value={String(v) || "#000000"} onInput={(e) => on((e.target as HTMLInputElement).value)} aria-label={f.label} /><input class={inputCls} value={String(v)} onInput={(e) => on((e.target as HTMLInputElement).value)} /></div>;
   const im = t === "number" ? { inputMode: (/qty|count|units|pcs|no$/i.test(f.k) ? "numeric" : "decimal") as "decimal", step: "any" }
     : /email/i.test(f.k) ? { type: "email" as const, inputMode: "email" as const, autoComplete: "email" }
@@ -80,7 +84,7 @@ export function FormGrid<T>({ fields, draft, set }: { fields: FDef<T>[]; draft: 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {fs.map((f) => (
         <div key={f.k} class={f.wide || f.type === "textarea" ? "sm:col-span-2" : ""}>
-          <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}><Input f={f} row={draft} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v, ...(f.then?.(v, { ...draft, [f.k]: v } as T) ?? {}) } as Partial<T>)} /></Field>
+          <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}>{f.view ? f.view(draft) : <Input f={f} row={draft} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v, ...(f.then?.(v, { ...draft, [f.k]: v } as T) ?? {}) } as Partial<T>)} />}</Field>
         </div>
       ))}
     </div>

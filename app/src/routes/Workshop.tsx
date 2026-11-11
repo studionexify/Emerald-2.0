@@ -6,7 +6,7 @@ import { navigate } from "../router";
 import { Sheet, Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, renameMaster, masterUse, type FilMaster,
+import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, defaultBody, renameMaster, masterUse, type FilMaster,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -245,22 +245,29 @@ const seen = (k: "vendor" | "location" | "lot" | "finish" | "brand" | "colour", 
 const coloursFor = (r: Spool) => { const used = seen("colour", (s) => lc(s.material) === lc(r.material)); const all = filMasterSig.value.colours.map((c) => c.name).sort(abc); return [...used, ...all.filter((c) => !used.some((u) => lc(u) === lc(c)))]; };
 const brandsFor = (r: Spool) => { const used = seen("brand", (s) => lc(s.material) === lc(r.material) && lc(s.colour) === lc(r.colour)); const all = [...new Set([...filMasterSig.value.brands, ...seen("brand")])].sort(abc); return ["", ...used, ...all.filter((b) => !used.includes(b))]; };
 /** Next free spool no. within the same material + colour + brand. */
-const nextSlot = (r: Spool) => { const g = spoolsSig.value.filter((s) => s.id !== r.id && lc(s.material) === lc(r.material) && lc(s.colour) === lc(r.colour) && lc(s.brand) === lc(r.brand)); const used = new Set(g.map((s) => s.slot ?? Number(spN(s.spoolNo)))); let n = 1; while (used.has(n)) n++; return n; };
-const reslot = (_v: unknown, r: Spool): Partial<Spool> => ({ slot: nextSlot(r) });
+/** Spool numbers in use by live spools (in stock, not retired) of the same material + colour + brand. */
+const slotsUsed = (r: Spool) => new Set(spoolsSig.value.filter((s) => s.id !== r.id && s.active !== false && s.grams > 0 && lc(s.material) === lc(r.material) && lc(s.colour) === lc(r.colour) && lc(s.brand) === lc(r.brand)).map((s) => s.slot ?? Number(spN(s.spoolNo))));
+/** The n lowest free spool numbers, filling gaps first: used 1,2,4,5 → 3, then 6, 7… */
+const freeSlots = (r: Spool, n = 1) => { const used = slotsUsed(r), out: number[] = []; for (let k = 1; out.length < n; k++) if (!used.has(k)) out.push(k); return out; };
+const nextSlot = (r: Spool) => freeSlots(r)[0];
 const sFields: FDef<Spool>[] = [
   { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS, then: (v, r) => ({ ...(coloursFor(r).some((c) => lc(c) === lc(r.colour)) ? {} : { colour: "" }), slot: nextSlot(r), ...(masterMat(String(v))?.costKg ? { costKg: masterMat(String(v))!.costKg } : {}) }) },
   { k: "colour", group: "Essentials", label: "Colour", type: "select", options: coloursFor, dot: (c) => spHex({ colour: c }), then: (v, r) => ({ slot: nextSlot(r), ...(masterColour(String(v))?.hex ? { hex: masterColour(String(v))!.hex } : {}) }) },
-  { k: "brand", group: "Essentials", label: "Brand", type: "select", options: brandsFor, then: reslot },
-  { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" },
-  { k: "diameter", group: "Spec", label: "Diameter (mm)", type: "select", options: () => filMasterSig.value.diameters.map(String) }, { k: "spoolMat", group: "Weight", label: "Spool type", type: "select", options: () => filMasterSig.value.bodies.map((b) => b.name).sort(abc) },
-  { k: "slot", group: "Essentials", label: "Spool no. (suggested)", type: "number" }, { k: "lot", group: "Purchase", label: "Batch / lot", type: "combo", options: () => seen("lot") },
-  { k: "size", group: "Weight", label: "Spool size (g net)", type: "select", options: () => filMasterSig.value.sizes.map(String) }, { k: "tare", group: "Weight", label: "Empty spool (tare)", type: "number", suffix: "g" },
-  { k: "gross", group: "Weight", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", group: "Essentials", label: "Net remaining", type: "number", suffix: "g" },
+  { k: "brand", group: "Essentials", label: "Brand", type: "select", options: brandsFor, then: (v, r) => { const b = defaultBody(String(v)), t = bodyTare(b); return { slot: nextSlot(r), spoolMat: b, ...(t != null ? { tare: t } : {}) }; } },
+  { k: "spoolMat", group: "Essentials", label: "Spool material", type: "select", options: () => filMasterSig.value.bodies.map((b) => b.name).sort(abc), then: (v) => (bodyTare(String(v)) != null ? { tare: bodyTare(String(v))! } : {}) },
+  { k: "slot", group: "Essentials", label: "Spool number", type: "number", when: (r) => r.copies == null },
+  { k: "slot", group: "Essentials", label: "Spool number (auto)", when: (r) => r.copies != null, view: (r) => <span class="text-[22px] font-extrabold num">#{(r.copies ?? 1) > 1 ? freeSlots(r, r.copies).join(", #") : r.slot ?? nextSlot(r)}</span> },
+  { k: "copies", group: "Essentials", label: "Add multiple spools", type: "count", when: (r) => r.copies != null },
+  { k: "hex", when: (r) => r.copies == null, group: "Essentials", label: "Colour swatch", type: "color" },
+  { k: "diameter", when: (r) => r.copies == null, group: "Spec", label: "Diameter (mm)", type: "select", options: () => filMasterSig.value.diameters.map(String) }, 
+  { k: "lot", group: "Purchase", label: "Batch / lot", type: "combo", options: () => seen("lot") },
+  { k: "size", group: "Essentials", label: "Spool size (g net)", type: "select", options: () => filMasterSig.value.sizes.map(String), then: (v, r) => (r.copies != null ? { grams: Number(v), gross: Number(v) + (r.tare ?? 0) } : {}) }, { k: "tare", when: (r) => r.copies == null, group: "Weight", label: "Empty spool (tare)", type: "number", suffix: "g" },
+  { k: "gross", when: (r) => r.copies == null, group: "Weight", label: "Gross (last weigh-in)", type: "number", suffix: "g" }, { k: "grams", when: (r) => r.copies == null, group: "Essentials", label: "Net remaining", type: "number", suffix: "g" },
   { k: "costKg", group: "Purchase", label: "Cost per kg", type: "number", suffix: "₹" }, { k: "vendor", group: "Purchase", label: "Vendor", type: "combo", options: () => seen("vendor") },
-  { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "opened", group: "Care", label: "Opened on", type: "date" },
-  { k: "dried", group: "Care", label: "Last dried", type: "date" }, { k: "location", group: "Essentials", label: "Storage / dry box", type: "combo", options: () => seen("location") },
-  { k: "nozzle", group: "Print settings", label: "Nozzle temp" }, { k: "bed", group: "Print settings", label: "Bed temp" },
-  { k: "status", group: "Essentials", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", group: "Essentials", when: (r) => r.status === "loaded", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
+  { k: "bought", group: "Purchase", label: "Bought on", type: "date" }, { k: "opened", when: (r) => r.copies == null, group: "Care", label: "Opened on", type: "date" },
+  { k: "dried", when: (r) => r.copies == null, group: "Care", label: "Last dried", type: "date" }, { k: "location", group: "Essentials", label: "Storage / dry box", type: "combo", options: () => seen("location") },
+  { k: "nozzle", when: (r) => r.copies == null, group: "Print settings", label: "Nozzle temp" }, { k: "bed", when: (r) => r.copies == null, group: "Print settings", label: "Bed temp" },
+  { k: "status", when: (r) => r.copies == null, group: "Essentials", label: "Status", type: "select", options: SP_STATUS }, { k: "printer", group: "Essentials", when: (r) => r.status === "loaded", label: "Loaded on", type: "select", options: () => ["", ...printersSig.value.filter((p) => p.active !== false).map((p) => p.name)] },
   { k: "notes", group: "Notes", label: "Notes", type: "textarea" },
 ];
 const spTone = (s: Spool) => (s.grams <= 0 ? <Status tone="blocked">Out</Status> : s.grams < lowG() ? <Status tone="waiting">Low</Status> : s.status === "loaded" ? <Status tone="active">Loaded</Status> : <Status tone="idle">{s.status ?? "open"}</Status>);
@@ -299,8 +306,11 @@ export function Filament() {
   const [q, setQ] = useState(""); const [set, setSet] = useState(false);
   const r = useRecord<Spool>({
     sig: spoolsSig, kind: "Spool", title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
-    blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, spoolMat: M.body, tare: t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
-    onSave: (s, isNew) => { if (isNew && !s.slot) spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? { ...x, slot: nextSlot(s) } : x));
+    blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, copies: 1, spoolMat: defaultBody(""), tare: bodyTare(defaultBody("")) ?? t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
+    onSave: (s0, isNew) => { let s = s0; if (isNew) { const n = Math.max(1, s0.copies ?? 1), sl = freeSlots(s0, n); const { copies: _c, ...base } = s0; s = { ...base, slot: sl[0] };
+        const extra = sl.slice(1).map((k) => ({ ...base, id: uid(), slot: k, spoolNo: "" }) as Spool);
+        spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? s : x)); for (const e of extra) { e.spoolNo = nextSpoolNo(); spoolsSig.value = [e, ...spoolsSig.value]; }
+        for (const e of extra) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${e.material} ${e.colour} · ${e.spoolNo}`, dir: "in", qty: e.grams, unit: "g", unitCost: (e.costKg ?? 0) / 1000, vendor: e.vendor ?? "", colour: e.colour, brand: e.brand, notes: "New spool", by: who() }, ...movesSig.value]; }
       if (isNew) { const t = bodyTare(s.spoolMat), c = masterMat(s.material)?.costKg; if (t != null || c) spoolsSig.value = spoolsSig.value.map((x) => x.id === s.id ? { ...x, ...(t != null ? { tare: t } : {}), ...(c && x.costKg === filMasterSig.value.costKg ? { costKg: c } : {}) } : x); }
       if (isNew) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "in", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: s.vendor ?? "", colour: s.colour, brand: s.brand, notes: "New spool", by: who() }, ...movesSig.value]; },
     facts: (s) => [
