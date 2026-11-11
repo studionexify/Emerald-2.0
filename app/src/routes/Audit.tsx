@@ -1,7 +1,7 @@
 /** Store · Stock Audit: count every spool / item on the shelf and reconcile Emerald against it. */
 import { useState } from "preact/hooks";
 import { WORKSHOP_TABS } from "../nav";
-import { Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat, Status, Table } from "../ui";
+import { ask, Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat, Status, Table } from "../ui";
 import {
   applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, toBin, today, uid,
   type PackItem, type Spool,
@@ -10,8 +10,11 @@ import {
 type Cat = "filament" | "packing" | "accessory" | "part";
 const CATS: Cat[] = ["filament", "packing", "accessory", "part"];
 const CAT_LABEL: Record<Cat, string> = { filament: "Filament", packing: "Packaging", accessory: "Accessories", part: "Spares" };
-type Line = { ref: string; label: string; before: number; after: number; unit: string; by: string; at: string; isNew?: boolean };
-type WriteOff = { label: string; grams: number; value: number; next: string };
+type Line = { ref: string; label: string; before: number; after: number; unit: string; by: string; at: string; isNew?: boolean; /** confirmed as-is with Next, no weighing */ ok?: boolean };
+type WriteOff = { label: string; grams: number; value: number; next: string; how?: Fate };
+/** What happens to a spool nobody logged: finished → emptied + archived; lost → written off + Bin; ok → stays. */
+type Fate = "finished" | "lost" | "ok";
+const FATE: Record<Fate, string> = { finished: "Finished", lost: "Lost", ok: "Correct" };
 export type Audit = { id: string; no: string; cat: Cat; status: "open" | "done"; started: string; by: string; finished?: string; finishedBy?: string; lines: Line[]; writeOffs?: WriteOff[] };
 
 export const auditsSig = persisted<Audit[]>("audits", []);
@@ -53,12 +56,12 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
   const [gross, setGross] = useState(0);
   const tare = s.tare ?? bodyTare(s.spoolMat) ?? filMasterSig.value.tare;
   const net = Math.max(0, gross - tare);
-  const cols = "grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_96px_200px] items-center gap-x-3 gap-y-2 py-2.5 border-t border-line first:border-0";
+  const cols = "grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_96px_270px] items-center gap-x-3 gap-y-2 py-2.5 border-t border-line first:border-0";
   if (line) return (
     <div class={cols}>
       <SpoolHead s={s} />
-      <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span><s class="text-c3">{g(line.before)}</s> <b>{g(line.after)}</b></span>
-      <span class="flex items-center gap-2 justify-end max-sm:col-span-2"><Status tone="done">{line.isNew ? "Added" : "Updated"}</Status>
+      <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span>{line.before !== line.after && <><s class="text-c3">{g(line.before)}</s> </>}<b>{g(line.after)}</b></span>
+      <span class="flex items-center gap-2 justify-end max-sm:col-span-2"><Status tone="done">{line.isNew ? "Added" : line.ok ? "Confirmed" : "Updated"}</Status>
         {!line.isNew && <Button variant="outline" onClick={() => { setSpoolGrams({ ...s, grams: line.after }, line.before, line.before + tare, a, "Audit undo"); put({ ...a, lines: a.lines.filter((l) => l.ref !== s.id) }); log(`Audit ${a.no}: undo ${spoolName(s)}`, spoolName(s), "stock"); }}>Undo</Button>}</span>
     </div>
   );
@@ -74,6 +77,11 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
           addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: net, unit: "g", by: who(), at: stamp() });
           log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)} (gross ${g(gross)})`, spoolName(s), "stock");
         }}>Update</Button>
+        <Button variant="outline" disabled={!!gross} title="Weight in Emerald is correct — confirm and move on" onClick={async () => {
+          if (!(await ask(`Are you sure? Confirm that ${spoolName(s)} has ${g(s.grams)} of filament left, as in Emerald.`, { ok: "Yes, confirm" }))) return;
+          addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: s.grams, unit: "g", by: who(), at: stamp(), ok: true });
+          log(`Audit ${a.no}: ${spoolName(s)} confirmed at ${g(s.grams)}`, spoolName(s), "stock");
+        }}>Next</Button>
       </span>
     </div>
   );
@@ -122,44 +130,54 @@ function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; bra
   );
 }
 
+/** Filter box: type to narrow the list, or open it and pick. Optional colour squares. */
+function Combo({ label, value, opts, on, hex }: { label: string; value: string; opts: string[]; on: (v: string) => void; hex?: (v: string) => string | undefined }) {
+  const [open, setOpen] = useState(false);
+  const q = value.trim().toLowerCase(), exact = opts.some((o) => o.toLowerCase() === q);
+  const list = !q || exact ? opts : opts.filter((o) => o.toLowerCase().includes(q));
+  const sq = (v: string) => <span class="w-5 h-5 rounded border border-c2 shrink-0" style={{ background: v ? hex!(v) ?? "transparent" : "transparent" }} />;
+  return (
+    <div class="flex flex-col gap-0.5 min-w-0 relative"><span class="t-meta">{label}</span>
+      <div class={`${sel} flex items-center gap-2 !px-2.5 focus-within:border-c4`}>
+        {hex && exact && sq(opts.find((o) => o.toLowerCase() === q)!)}
+        <input class="flex-1 min-w-0 bg-transparent !outline-none !border-0 !shadow-none !ring-0 !min-h-0 !p-0 text-[13px]" style={{ outline: "none", boxShadow: "none" }} value={value} placeholder="Any — type or pick" aria-label={label} autoComplete="off"
+          onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} onInput={(e) => { on(val(e)); setOpen(true); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && list.length) { on(list[0]); setOpen(false); (e.target as HTMLInputElement).blur(); } if (e.key === "Escape") setOpen(false); }} />
+        {value ? <button type="button" class="text-c3 px-1" aria-label={`Clear ${label}`} onMouseDown={(e) => e.preventDefault()} onClick={() => on("")}>✕</button>
+          : <button type="button" class="text-c3 px-1" aria-label={`Open ${label}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen(!open)}>▾</button>}
+      </div>
+      {open && <div class="absolute z-20 top-full mt-1 left-0 min-w-full w-64 max-h-80 overflow-y-auto rounded-xl border border-line bg-c0 shadow-lg p-1.5 grid gap-0.5">
+        {list.length ? list.map((o) => <button type="button" key={o} onMouseDown={(e) => e.preventDefault()} onClick={() => { on(o); setOpen(false); }}
+          class={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-left hover:bg-c1 ${o.toLowerCase() === q ? "bg-c1 font-semibold" : ""}`}>{hex && sq(o)}{o}</button>)
+          : <span class="px-2 py-1.5 text-[13px] text-c3">No match</span>}
+      </div>}
+    </div>
+  );
+}
+
 function FilamentAudit({ a }: { a: Audit }) {
   const [f, setF] = useState({ mat: "", col: "", brand: "", body: "" });
   const [adding, setAdding] = useState(false);
   const all = spoolsSig.value.filter((s) => s.active !== false && (s.grams > 0 && s.status !== "empty" || a.lines.some((l) => l.ref === s.id)));
   const by = (s: Spool, k: keyof typeof f) => (k === "mat" ? s.material : k === "col" ? s.colour : k === "brand" ? s.brand : s.spoolMat);
-  const fit = (s: Spool, skip?: keyof typeof f) => (Object.keys(f) as (keyof typeof f)[]).every((k) => k === skip || !f[k] || by(s, k) === f[k]);
+  const known = (k: keyof typeof f) => all.some((s) => (by(s, k) ?? "").toLowerCase() === f[k].trim().toLowerCase());
+  const hit = (s: Spool, k: keyof typeof f) => { const v = (by(s, k) ?? "").toLowerCase(), q = f[k].trim().toLowerCase(); return !q || (known(k) ? v === q : v.includes(q)); };
+  const fit = (s: Spool, skip?: keyof typeof f) => (Object.keys(f) as (keyof typeof f)[]).every((k) => k === skip || hit(s, k));
   const opts = (k: keyof typeof f) => uniq(all.filter((s) => fit(s, k)).map((s) => by(s, k)));
   const rows = all.filter((s) => fit(s)).sort((x, y) => Number(a.lines.some((l) => l.ref === x.id)) - Number(a.lines.some((l) => l.ref === y.id)) || spoolGroup(x).localeCompare(spoolGroup(y)) || (x.slot ?? 0) - (y.slot ?? 0));
-  const picked = Object.values(f).some(Boolean);
+  const picked = Object.values(f).some((v) => v.trim());
   const M = filMasterSig.value;
   const hexOf = (c: string) => M.colours.find((x) => x.name.toLowerCase() === c.toLowerCase())?.hex ?? all.find((x) => x.colour === c)?.hex;
-  const [cOpen, setCOpen] = useState(false);
-  const Colour = (
-    <div class="flex flex-col gap-0.5 min-w-0 relative"><span class="t-meta">Colour</span>
-      <button type="button" class={`${sel} flex items-center gap-2 text-left`} onClick={() => setCOpen(!cOpen)} aria-expanded={cOpen}>
-        {f.col && <span class="w-4 h-4 rounded border border-c2 shrink-0" style={{ background: hexOf(f.col) }} />}<span class="flex-1 truncate">{f.col || "Any"}</span><span class="text-c3">▾</span>
-      </button>
-      {cOpen && <div class="absolute z-20 top-full mt-1 left-0 w-64 max-h-80 overflow-y-auto rounded-xl border border-line bg-c0 shadow-lg p-1.5 grid grid-cols-1 gap-0.5">
-        {["", ...opts("col")].map((c) => <button type="button" key={c || "any"} onClick={() => { setF({ ...f, col: c }); setCOpen(false); }}
-          class={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-left hover:bg-c1 ${f.col === c ? "bg-c1 font-semibold" : ""}`}>
-          <span class="w-5 h-5 rounded border border-c2 shrink-0" style={{ background: c ? hexOf(c) : "transparent" }} />{c || "Any colour"}</button>)}
-      </div>}
-    </div>
-  );
-  const S = (k: keyof typeof f, label: string) => (
-    <label class="flex flex-col gap-0.5 min-w-0"><span class="t-meta">{label}</span>
-      <select class={sel} value={f[k]} onChange={(e) => setF({ ...f, [k]: (e.target as HTMLSelectElement).value })}><option value="">Any</option>{opts(k).map((o) => <option key={o} value={o}>{o}</option>)}</select>
-    </label>
-  );
+  const S = (k: keyof typeof f, label: string, sw?: boolean) => <Combo label={label} value={f[k]} opts={opts(k)} hex={sw ? hexOf : undefined} on={(v) => setF({ ...f, [k]: v })} />;
   return (
     <Section title="Find a spool" note="pick type, colour and brand — matching spools show below" action={<Button variant="outline" icon="plus" onClick={() => setAdding(true)}>Not in list — add new spool</Button>}>
       <datalist id="au-mat">{M.materials.map((m) => <option key={m.name} value={m.name} />)}</datalist>
       <datalist id="au-col">{M.colours.map((m) => <option key={m.name} value={m.name} />)}</datalist>
       <datalist id="au-brand">{M.brands.map((m) => <option key={m} value={m} />)}</datalist>
       <Card>
-        <div class="grid grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2 items-end">
-          {S("mat", "Type / material")}{Colour}{S("brand", "Brand")}{S("body", "Spool body")}
-          {picked && <Button variant="ghost" onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>}
+        <div class="grid grid-cols-2 sm:grid-cols-[auto_repeat(4,minmax(0,1fr))] gap-2 items-end">
+          <Button variant="outline" class="max-sm:col-span-2" disabled={!picked} onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>
+          {S("mat", "Type / material")}{S("col", "Colour", true)}{S("brand", "Brand")}{S("body", "Spool body")}
         </div>
       </Card>
       {adding && <NewSpool a={a} f={f} done={() => setAdding(false)} />}
@@ -181,22 +199,22 @@ function nextFor(s: Spool, gone: Set<string>) {
 /** Any other live spool of the same type, colour and brand (no reorder needed). */
 const hasStock = (s: Spool, gone: Set<string>) => spoolsSig.value.some((x) => x.id !== s.id && !gone.has(x.id) && x.active !== false && x.grams > 0 && x.status !== "empty" && spoolGroup(x) === spoolGroup(s));
 
-function finishFilament(a: Audit, ok: Set<string>) {
+function finishFilament(a: Audit, fate: (id: string) => Fate) {
   const lines: Line[] = [];
-  for (const s of pending(a).filter((x) => ok.has(x.id))) {
-    lines.push({ ref: s.id, label: spoolName(s), before: s.grams, after: s.grams, unit: "g", by: who(), at: stamp() });
-    log(`Audit ${a.no}: ${spoolName(s)} confirmed OK as is (${g(s.grams)})`, spoolName(s), "stock");
+  for (const s of pending(a).filter((x) => fate(x.id) === "ok")) {
+    lines.push({ ref: s.id, label: spoolName(s), before: s.grams, after: s.grams, unit: "g", by: who(), at: stamp(), ok: true });
+    log(`Audit ${a.no}: ${spoolName(s)} marked correct as is (${g(s.grams)})`, spoolName(s), "stock");
   }
-  const miss = pending(a).filter((x) => !ok.has(x.id)), gone = new Set(miss.map((s) => s.id)), offs: WriteOff[] = [];
+  const miss = pending(a).filter((x) => fate(x.id) !== "ok"), gone = new Set(miss.map((s) => s.id)), offs: WriteOff[] = [];
   for (const s0 of miss) {
     const s = spoolsSig.value.find((x) => x.id === s0.id); if (!s) continue;
-    const nx = nextFor(s, gone);
-    offs.push({ label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? `#${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
-    movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit write-off (not found) · ${a.no}`, by: who() }, ...movesSig.value];
-    const emptied: Spool = { ...s, grams: 0, gross: s.tare ?? 0, status: "empty", printer: "", notes: `${s.notes ? s.notes + " · " : ""}Not found in audit ${a.no}` };
-    spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? emptied : nx && x.id === nx.id && s.slot != null ? { ...x, slot: s.slot } : x));
-    toBin("Spool", emptied, `${spoolName(s)} · not found in audit ${a.no}`, who());
-    log(`Audit ${a.no}: ${spoolName(s)} not found — emptied (${g(s.grams)}) and moved to Bin${nx ? `; #${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "" : "; reorder"}`, spoolName(s), "stock");
+    const how = fate(s.id), nx = nextFor(s, gone), lost = how === "lost";
+    offs.push({ how, label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? `#${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
+    movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit ${lost ? "write-off (lost)" : "finished (empty)"} · ${a.no}`, by: who() }, ...movesSig.value];
+    const done: Spool = { ...s, grams: 0, gross: s.tare ?? 0, status: "empty", printer: "", ...(lost ? {} : { active: false }), notes: `${s.notes ? s.notes + " · " : ""}${lost ? "Lost" : "Finished"} in audit ${a.no}` };
+    spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? done : nx && x.id === nx.id && s.slot != null ? { ...x, slot: s.slot } : x));
+    if (lost) toBin("Spool", done, `${spoolName(s)} · lost in audit ${a.no}`, who());
+    log(`Audit ${a.no}: ${spoolName(s)} ${lost ? "lost — written off and deleted (Bin)" : "finished — emptied and archived"} (${g(s.grams)})${nx ? `; #${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "" : "; reorder"}`, spoolName(s), "stock");
   }
   return { offs, lines };
 }
@@ -237,10 +255,10 @@ function Report({ a }: { a: Audit }) {
         <b>{a.no} · {CAT_LABEL[a.cat]}</b>
         <span class="t-meta">Started {a.started} by {a.by} · finished {a.finished} by {a.finishedBy} · counted by {uniq(a.lines.map((l) => l.by)).join(", ") || "—"}</span>
       </div>
-      <p class="text-sm mt-1">{a.lines.length} checked · {ch.length} changed{a.writeOffs?.length ? ` · ${a.writeOffs.length} not found, written off ${g(a.writeOffs.reduce((s, w) => s + w.grams, 0))} · ${inr(a.writeOffs.reduce((s, w) => s + w.value, 0))}` : ""}</p>
+      <p class="text-sm mt-1">{a.lines.length} checked · {ch.length} changed{a.writeOffs?.length ? ` · ${a.writeOffs.length} finished or lost, written off ${g(a.writeOffs.reduce((s, w) => s + w.grams, 0))} · ${inr(a.writeOffs.reduce((s, w) => s + w.value, 0))}` : ""}</p>
       {(ch.length > 0 || !!a.writeOffs?.length) && <div class="mt-2 text-sm">
         {ch.map((l) => <div key={l.ref} class="flex justify-between gap-2 py-1 border-t border-line"><span class="min-w-0 truncate">{l.label}<span class="t-meta block">{l.by} · {l.at}</span></span><b class="num whitespace-nowrap">{l.isNew ? `new · ${l.after} ${l.unit}` : `${l.before} → ${l.after} ${l.unit}`}</b></div>)}
-        {a.writeOffs?.map((w) => <div key={w.label} class="flex justify-between gap-2 py-1 border-t border-line"><span class="min-w-0 truncate">{w.label}<span class="t-meta block">Not found · emptied → Bin · next: {w.next}</span></span><b class="num whitespace-nowrap">−{g(w.grams)}</b></div>)}
+        {a.writeOffs?.map((w) => <div key={w.label} class="flex justify-between gap-2 py-1 border-t border-line"><span class="min-w-0 truncate">{w.label}<span class="t-meta block">{w.how === "finished" ? "Finished · emptied → archive" : "Lost · deleted → Bin"} · next: {w.next}</span></span><b class="num whitespace-nowrap">−{g(w.grams)}</b></div>)}
       </div>}
     </Card>
   );
@@ -250,25 +268,26 @@ export function StockAudit() {
   const [cat, setCat] = useState<Cat>("filament");
   const [hist, setHist] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  /** Unlogged spools the user confirmed are fine as they are; the rest are "not found". */
-  const [ok, setOk] = useState<Set<string>>(new Set());
-  const flip = (id: string, v: boolean) => { const n = new Set(ok); v ? n.add(id) : n.delete(id); setOk(n); };
+  /** What to do with spools nobody logged: one choice for all, or "decide" per spool. */
+  const [mode, setMode] = useState<Fate | "decide" | null>(null);
+  const [pick, setPick] = useState<Record<string, Fate>>({});
+  const fateOf = (id: string): Fate | undefined => (mode === "decide" ? pick[id] : mode ?? undefined);
   const a = auditsSig.value.find((x) => x.cat === cat && x.status === "open");
   const done = auditsSig.value.filter((x) => x.status === "done");
   const total = a ? (cat === "filament" ? shelf().length + a.lines.filter((l) => !shelf().some((s) => s.id === l.ref)).length : itemsOf(cat).length) : 0;
   const miss = a && cat === "filament" ? pending(a) : [];
   const finish = () => {
     if (!a) return;
-    const { offs, lines } = cat === "filament" ? finishFilament(a, ok) : { offs: [], lines: [] };
+    const { offs, lines } = cat === "filament" ? finishFilament(a, (id) => fateOf(id) ?? "ok") : { offs: [], lines: [] };
     put({ ...a, lines: [...a.lines, ...lines], status: "done", finished: stamp(), finishedBy: who(), writeOffs: offs });
     log(`Finished stock audit ${a.no} (${CAT_LABEL[cat]}): ${a.lines.length} checked${offs.length ? `, ${offs.length} written off` : ""}`, a.no, "stock");
-    setConfirm(false); setOk(new Set()); setHist(true);
+    setConfirm(false); setMode(null); setPick({}); setHist(true);
   };
   return (
     <Page title="Store" sub="Stock audit — count everything on the shelf and cross-check against Emerald. Every change is logged with who counted it." tabs={WORKSHOP_TABS}
       actions={<>
         <Button variant="outline" icon="list" onClick={() => setHist(!hist)}>{hist ? "Back to audit" : `Past audits (${done.length})`}</Button>
-        {a && !hist && <Button icon="check" onClick={() => { setOk(new Set()); setConfirm(true); }}>Finish &amp; reconcile</Button>}
+        {a && !hist && <Button icon="check" onClick={() => { setMode(null); setPick({}); setConfirm(true); }}>Finish &amp; reconcile</Button>}
       </>}
       toolbar={!hist && <Pick value={cat} on={(c) => { setCat(c); setConfirm(false); }} items={CATS} label={(c) => CAT_LABEL[c]} title="Audit" />}>
       <div class="w-full max-w-[860px] mx-auto flex flex-col gap-4">
@@ -300,19 +319,31 @@ export function StockAudit() {
           <Card dark>
             <b>Finish {a.no}?</b>
             {cat === "filament" ? <>
-              <p class="text-sm mt-1">{miss.length ? `${miss.length} spool${miss.length > 1 ? "s were" : " was"} not logged in this audit. Confirm each one: “Not found” spools are set to 0 g, marked empty and moved to the Bin, and the next spool of the same type, colour and brand takes their place. “OK” spools stay exactly as they are.` : "Every spool was checked — nothing will be written off."}</p>
+              <p class="text-sm mt-1">{miss.length ? `${miss.length} spool${miss.length > 1 ? "s were" : " was"} not logged in this audit. What should happen to ${miss.length > 1 ? "them" : "it"}?` : "Every spool was checked — nothing will change."}</p>
               {miss.length > 0 && <>
-                <div class="flex flex-wrap gap-2 mt-2"><Button variant="outline" onClick={() => setOk(new Set())}>All rest not found</Button><Button variant="outline" onClick={() => setOk(new Set(miss.map((m) => m.id)))}>All rest are OK</Button></div>
-                <div class="mt-2 text-sm max-h-80 overflow-y-auto">{miss.map((s) => { const isOk = ok.has(s.id), nx = nextFor(s, new Set(miss.filter((m) => !ok.has(m.id)).map((m) => m.id)));
-                  return <div key={s.id} class="flex flex-wrap items-center justify-between gap-2 py-1.5 border-t border-line">
-                    <span class="min-w-0">{spoolName(s)} · {s.brand || "—"} · {g(s.grams)} · {inr(spoolValue(s))}
-                      <span class="t-meta block">{isOk ? "Stays as it is" : nx ? `Emptied → Bin · #${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, new Set(miss.filter((m) => !ok.has(m.id)).map((m) => m.id))) ? "Emptied → Bin · others of this kind still in stock" : "Emptied → Bin · none in stock, reorder"}</span></span>
-                    <Pick value={isOk ? "ok" : "missing"} on={(v) => flip(s.id, v === "ok")} items={["missing", "ok"]} label={(v) => (v === "ok" ? "OK" : "Not found")} />
-                  </div>; })}</div>
-                <p class="t-meta mt-2">{miss.filter((x) => !ok.has(x.id)).length} not found · written off {g(miss.filter((x) => !ok.has(x.id)).reduce((s, x) => s + x.grams, 0))} · {inr(miss.filter((x) => !ok.has(x.id)).reduce((s, x) => s + spoolValue(x), 0))} · {ok.size} OK</p>
+                <div class="grid sm:grid-cols-2 gap-2 mt-3">
+                  {([["finished", "Mark the rest as finished", "Set to 0 g, marked empty and moved to the archive"], ["lost", "Mark the rest as lost", "Written off and deleted (moved to the Bin)"],
+                    ["ok", "Mark the rest as correct", "They stay exactly as they are in Emerald"], ["decide", "Decide for each spool", "Choose finished, lost or correct one by one"]] as const).map(([k, t, d]) => (
+                    <button type="button" key={k} onClick={() => setMode(k)} class={`text-left rounded-xl border px-3 py-2.5 ${mode === k ? "border-c4 bg-c1 ring-2 ring-c4" : "border-line hover:bg-c1"}`}>
+                      <b class="text-sm block">{t}</b><span class="t-meta">{d}</span></button>))}
+                </div>
+                {mode === "decide" && <div class="flex flex-wrap items-center gap-2 mt-3"><span class="t-meta">Set every spool to</span>
+                  {(["finished", "lost", "ok"] as Fate[]).map((k) => <Button key={k} variant={miss.every((x) => pick[x.id] === k) ? "primary" : "outline"}
+                    onClick={() => setPick(Object.fromEntries(miss.map((x) => [x.id, k])))}>{FATE[k]}</Button>)}
+                  <span class="t-meta">then change any single spool below</span></div>}
+                {mode && <div class="mt-3 text-sm max-h-80 overflow-y-auto">{miss.map((s) => { const f = fateOf(s.id), gone = new Set(miss.filter((m) => { const x = fateOf(m.id); return x && x !== "ok"; }).map((m) => m.id)), nx = nextFor(s, gone);
+                  return <div key={s.id} class="flex flex-wrap items-center justify-between gap-2 py-2.5 border-t border-line">
+                    <span class="min-w-0 flex flex-col gap-1"><span class="flex flex-wrap items-center gap-x-3 gap-y-1"><SpoolHead s={s} /><span class="text-c3">›</span><span class="num"><span class="t-meta">In Emerald </span><b>{g(s.grams)}</b></span></span>
+                      <span class="t-meta block">{!f ? "Choose what happened" : f === "ok" ? "Stays as it is" : `${f === "lost" ? "Deleted → Bin" : "Emptied → archive"} · ${nx ? `#${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "others of this kind still in stock" : "none in stock, reorder"}`}</span></span>
+                    {mode === "decide" ? <span class="inline-flex gap-1">{(["finished", "lost", "ok"] as Fate[]).map((k) => <button type="button" key={k} onClick={() => setPick({ ...pick, [s.id]: k })}
+                      class={`h-8 px-3 rounded-full border text-[13px] font-semibold ${f === k ? "bg-c4 text-c0 border-c4" : "border-line"}`}>{FATE[k]}</button>)}</span>
+                      : <Status tone={f === "ok" ? "done" : f === "lost" ? "blocked" : "idle"}>{FATE[f!]}</Status>}
+                  </div>; })}</div>}
+                {mode && (() => { const by = (k: Fate) => miss.filter((x) => fateOf(x.id) === k), left = miss.filter((x) => !fateOf(x.id)).length;
+                  return <p class="t-meta mt-2">{by("finished").length} finished · {by("lost").length} lost ({g(by("lost").reduce((t, x) => t + x.grams, 0))} · {inr(by("lost").reduce((t, x) => t + spoolValue(x), 0))}) · {by("ok").length} correct{left ? ` · ${left} still to decide` : ""}</p>; })()}
               </>}
             </> : <p class="text-sm mt-1">{a.lines.length} item{a.lines.length === 1 ? "" : "s"} counted. Items not counted stay as they are.</p>}
-            <div class="flex gap-2 justify-end mt-3"><Button variant="outline" onClick={() => setConfirm(false)}>Keep counting</Button><Button onClick={finish}>Finish audit</Button></div>
+            <div class="flex gap-2 justify-end mt-3"><Button variant="outline" onClick={() => setConfirm(false)}>Keep counting</Button><Button disabled={cat === "filament" && miss.length > 0 && (!mode || miss.some((x) => !fateOf(x.id)))} onClick={finish}>Finish audit</Button></div>
           </Card>
         )}
         {cat === "filament" ? <FilamentAudit a={a} /> : <ItemAudit a={a} />}
