@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 import { vOrders } from "../data";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { navigate } from "../router";
@@ -121,7 +122,7 @@ function Detail({ t, onClose }: { t: Task; onClose: () => void }) {
         <label class={opt}><Icon name="calendar" size={16} /><span class="flex-1">{t.due ? <span style={{ color: dueTone(t.due) }}>Due {dueText(t.due)}</span> : "Add due date"}</span><input type="date" class={sel} value={t.due} onInput={(e) => put(t.id, { due: (e.target as HTMLInputElement).value })} /></label>
         <label class={opt}><Icon name="repeat" size={16} /><span class="flex-1">{t.repeat ? `Repeats ${t.repeat.toLowerCase()}` : "Repeat"}</span><select class={sel} value={t.repeat ?? ""} onChange={(e) => put(t.id, { repeat: (e.target as HTMLSelectElement).value })}>{["", "Daily", "Weekly", "Monthly"].map((r) => <option key={r} value={r}>{r || "Never"}</option>)}</select></label>
         <label class={opt}><Icon name="user" size={16} /><span class="flex-1">Assigned to</span><select class={sel} value={t.who} onChange={(e) => put(t.id, { who: (e.target as HTMLSelectElement).value })}>{[...new Set(["You", myName(), ...teamNames(), t.who])].map((n) => <option key={n}>{n}</option>)}</select></label>
-        <label class={opt}><Icon name="list" size={16} /><span class="flex-1">List</span><select class={sel} value={t.list ?? ""} onChange={(e) => put(t.id, { list: (e.target as HTMLSelectElement).value || undefined })}><option value="">Tasks</option>{taskListsSig.value.map((n) => <option key={n}>{n}</option>)}</select></label>
+        <label class={opt}><Icon name="list" size={16} /><span class="flex-1">List</span><select class={sel} value={t.list ?? ""} onChange={(e) => put(t.id, { list: (e.target as HTMLSelectElement).value || undefined })}><option value="">Tasks</option>{sortAbc(taskListsSig.value).map((n) => <option key={n}>{n}</option>)}</select></label>
       </div>
 
       <div class={box}>
@@ -140,7 +141,7 @@ function Detail({ t, onClose }: { t: Task; onClose: () => void }) {
             <div class="flex gap-1">{LINK_KINDS.map((k) => <button key={k} onClick={() => setLk(k)} class={`h-7 px-2.5 !min-h-0 rounded-full text-[12px] font-medium cursor-pointer ${lk === k ? "bg-[#9A86B8] text-white" : "bg-c1 text-c3"}`}>{k}</button>)}</div>
             <select class={`${sel} w-full h-9`} value="" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) { put(t.id, { link: { kind: lk, ref: v } }); log("Linked task", `${t.title} → ${lk} ${v}`); } }}>
               <option value="">Choose {lk.toLowerCase()}…</option>
-              {linkOptions(lk).map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
+              {sortAbc(linkOptions(lk), (o) => o.label).map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
             </select>
           </div>
         )}
@@ -191,7 +192,7 @@ export function Todo() {
         <div class="px-3 pt-2 pb-3"><div class="text-[16px] font-bold">To-do</div><div class="text-[12px] text-c3">{tasks.filter((t) => !t.done).length} open · {tasks.filter((t) => t.link && !t.done).length} linked to work</div></div>
         {SMART.map((s) => side(s.k, s.label, s.icon, s.hue))}
         <div class="my-2 border-t border-line" />
-        {taskListsSig.value.map((n) => side(`list:${n}`, n, "list", "#8A93A3"))}
+        {sortAbc(taskListsSig.value).map((n) => side(`list:${n}`, n, "list", "#8A93A3"))}
         {newList === null
           ? <button onClick={() => setNewList("")} class="flex items-center gap-3 w-full h-10 px-3 rounded-lg text-[14px] text-[#6B8DB5] hover:bg-c1/60 cursor-pointer !min-h-0"><Icon name="plus" size={17} />New list</button>
           : <form class="px-1" onSubmit={(e) => { e.preventDefault(); const n = newList.trim(); if (n && !taskListsSig.value.includes(n)) { taskListsSig.value = [...taskListsSig.value, n]; setK(`list:${n}`); } setNewList(null); }}>
@@ -201,7 +202,7 @@ export function Todo() {
 
       <section class="flex-1 min-w-0 flex flex-col rounded-[var(--radius-card)] overflow-hidden" style={{ background: `color-mix(in srgb, ${meta.hue} 7%, var(--c-1))` }}>
         <header class="px-5 pt-5 pb-3">
-          <div class="md:hidden mb-2"><select class="h-9 px-2 rounded-lg border border-line bg-c0 text-[14px]" value={k} onChange={(e) => setK((e.target as HTMLSelectElement).value as ListKey)}>{SMART.map((s) => <option key={s.k} value={s.k}>{s.label}</option>)}{taskListsSig.value.map((n) => <option key={n} value={`list:${n}`}>{n}</option>)}</select></div>
+          <div class="md:hidden mb-2"><select class="h-9 px-2 rounded-lg border border-line bg-c0 text-[14px]" value={k} onChange={(e) => setK((e.target as HTMLSelectElement).value as ListKey)}>{SMART.map((s) => <option key={s.k} value={s.k}>{s.label}</option>)}{sortAbc(taskListsSig.value).map((n) => <option key={n} value={`list:${n}`}>{n}</option>)}</select></div>
           <h1 class="flex items-center gap-2.5 text-[24px] font-bold tracking-tight" style={{ color: meta.hue }}><Icon name={meta.icon} size={22} />{meta.label}</h1>
           {k === "myday" && <div class="text-[13px] text-c3 mt-0.5">{day}</div>}
         </header>

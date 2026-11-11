@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 import { useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
 import { Button, Card, CardTitle, Field, Flow, Icon, inputCls, isPhone, KV, Page, Sheet } from "../ui";
@@ -115,7 +116,7 @@ export function SpoolPick({ onPick }: { onPick: (costKg: number, material?: stri
     <Field label="Material from stock">
       <select class={inputCls} onChange={(e) => { const s = spools.find((x) => x.id === (e.target as HTMLSelectElement).value); if (s) onPick(s.costKg ?? rate("pla"), s.material, s.colour); }}>
         <option value="">Custom price</option>
-        {spools.map((s) => <option key={s.id} value={s.id}>{s.material} {s.colour} · {s.spoolNo} · {spoolGross(s)} g gross</option>)}
+        {sortAbc(spools, (s) => `${s.material} ${s.colour} ${s.spoolNo}`).map((s) => <option key={s.id} value={s.id}>{s.material} {s.colour} · {s.spoolNo} · {spoolGross(s)} g gross</option>)}
       </select>
     </Field>
   );

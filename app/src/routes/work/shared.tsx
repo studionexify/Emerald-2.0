@@ -1,3 +1,4 @@
+import { sortAbc } from "../../mock/types";
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { itemLabel, ordersSig, log, clientsSig, invoicesSig, quotesSig, shipmentsSig, openOrderSig, returnSig } from "../../data";
 import { navigate, path } from "../../router";
@@ -323,8 +324,8 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
   </div>;
 }
 
-const FAIL_REASONS = ["Warping / lifted", "Stringing", "Layer shift", "Spaghetti / detached", "Under-extrusion", "Clog", "Filament ran out", "Support failure", "Power cut", "Other"];
-const KINDS: ConKind[] = ["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"];
+const FAIL_REASONS = sortAbc(["Warping / lifted", "Stringing", "Layer shift", "Spaghetti / detached", "Under-extrusion", "Clog", "Filament ran out", "Support failure", "Power cut", "Other"]);
+const KINDS: ConKind[] = sortAbc(["filament", "machine", "power", "labour", "packing", "accessory", "part", "freight", "scrap"]);
 export function ConsumeForm({ orderNo, batches = [] }: { orderNo?: string; batches?: string[] }) {
   const [k, setK] = useState<ConKind>("filament");
   const [item, setItem] = useState("");

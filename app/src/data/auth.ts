@@ -1,3 +1,4 @@
+import { byAbc } from "../mock/types";
 /** Identity & roles. Fixed studio accounts, no self sign-up. Phase 2 moves hashes and sessions to the server. */
 import { computed } from "@preact/signals";
 import { persisted } from "./store";
@@ -23,7 +24,7 @@ export const usersSig = persisted<User[]>("users", [
 ]);
 if (usersSig.value.some((u) => u.login === undefined)) usersSig.value = usersSig.value.map((u) => ({ ...u, login: u.login ?? true, job: u.job ?? "" }));
 /** The floor roster: everyone active except external roles — fills every "who did this?" picker. */
-export const teamNames = () => usersSig.value.filter((u) => u.active && u.role !== "ca").map((u) => u.name);
+export const teamNames = () => usersSig.value.filter((u) => u.active && u.role !== "ca").map((u) => u.name).sort(byAbc);
 export const sessionSig = persisted<{ userId: string; at: number } | null>("session", null);
 const attempts = persisted<{ n: number; until: number }>("loginAttempts", { n: 0, until: 0 });
 export const me = computed(() => usersSig.value.find((u) => u.id === sessionSig.value?.userId && u.active) ?? null);

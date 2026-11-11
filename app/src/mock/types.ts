@@ -3,7 +3,11 @@ export type Stage = "quotation" | "po" | "production" | "qc" | "packing" | "invo
 
 export type OrderSize = "small" | "bulk" | "b2b";
 export const SIZE_LABEL: Record<OrderSize, string> = { small: "Small", bulk: "Bulk", b2b: "B2B" };
-export const B2B_TYPES = ["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"];
+const LAST = new Set(["other", "others", "misc"]);
+/** A–Z (case-insensitive, numbers in natural order); blank/"—" stay first, "Other" stays last. */
+export const byAbc = (a = "", b = "") => { const r = (x: string) => !x || x === "—" ? 0 : LAST.has(x.toLowerCase()) ? 2 : 1; return r(a) - r(b) || a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }); };
+export const sortAbc = <T,>(xs: readonly T[], k: (x: T) => string = (x) => String(x)) => [...xs].sort((a, b) => byAbc(k(a), k(b)));
+export const B2B_TYPES = sortAbc(["Stationery", "Gift shop", "Corporate gifting", "Architect", "Retail store", "Event / agency", "Education", "Manufacturer", "Other"]);
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string;
   /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number;
   /** Floor sheet (internal): colour names from the filament library */ colours?: string[]; /** sliced grams per plate, by colour */ gpp?: Record<string, number>;
@@ -25,7 +29,7 @@ export type Printer = { id: string; name: string; model: string; status: "printi
 export type SpoolStatus = "sealed" | "open" | "loaded" | "empty";
 export type Spool = { id: string; material: string; colour: string; brand: string; grams: number; size: number; spoolNo: string;
   hex?: string; finish?: string; diameter?: number; tare?: number; spoolMat?: string; gross?: number; costKg?: number; vendor?: string; bought?: string; lot?: string;
-  location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string; slot?: number };
+  location?: string; opened?: string; dried?: string; nozzle?: string; bed?: string; status?: SpoolStatus; printer?: string; notes?: string; active?: boolean; weighed?: string; slot?: number; /** add-form only: how many identical spools to create */ copies?: number };
 export type PackItem = { id: string; name: string; unit: string; qty: number; reorderAt: number; cost: number; vendor?: string; size?: string; location?: string; notes?: string; active?: boolean; cat?: string; machine?: string };
 export type Batch = { id: string; orderNo: string; customer: string; name: string; units: number; done: number; /** units scrapped as bad prints */ failed?: number; /** machine(s) it ran on */ printer?: string; /** spool(s) used, as labels */ spool?: string; /** spool ids, same order */ spoolIds?: string[]; /** a print run still on the plate */ running?: boolean; /** Floor: plates and copies per plate */ plates?: number; perPlate?: number; /** Floor: colour each spool id stands for, same order as spoolIds */ colours?: string[]; at?: string; /** grams used per spool no. */ grams?: Record<string, number>; /** why pieces failed */ reason?: string; /** who logged it */ by?: string; /** consumption rows it created */ cons?: string[]; stage: BatchStage; invoiceNo?: string; tracking?: string };
 export type BatchStage = "production" | "qc" | "packing" | "invoice" | "shipping" | "done";

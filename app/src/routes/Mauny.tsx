@@ -1,3 +1,4 @@
+import { sortAbc } from "../mock/types";
 import { modeAccounts } from "../data/mode";
 import { vBills, vExpenses, vMoney, vOrders, vQuotes } from "../data";
 import type { ComponentChildren } from "preact";
@@ -42,7 +43,7 @@ function Fig({ label, value, note, dark, rule, inputs }: { label: string; value:
 const KINDS: [MoneyKind, string, 1 | -1][] = [["receipt", "Customer receipt", 1], ["advance", "Customer advance", 1], ["other_income", "Other income", 1], ["capital_in", "Capital introduced", 1], ["loan_taken", "Loan taken", 1],
   ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1], ["tax_payment", "GST / tax paid", -1]];
 export function DayBook() {
-  const accs = modeAccounts();
+  const accs = sortAbc(modeAccounts(), (a) => a.name);
   const [acc, setAcc] = useState(accs[0]?.id ?? "");
   const [day, setDay] = useState(today());
   const [form, setForm] = useState<null | "in" | "out" | "transfer">(null);
@@ -140,7 +141,7 @@ export function Purchases() {
             <Field label="Bill no."><input {...txt("no")} /></Field><Field label="Date"><input {...txt("date")} type="date" /></Field>
             <Field label="Subtotal"><input {...num("subtotal")} /></Field><Field label="Tax"><input {...num("tax")} /></Field>
             <Field label="Total"><input {...num("total")} /></Field>
-            <Field label="Category"><select class={inputCls} value={open.cat} onChange={(e) => upd({ cat: (e.target as HTMLSelectElement).value })}>{["Filament", "Resin", "Packing", "Accessories", "Spares", "Courier", "Electricity", "Utilities", "Rent", "Software", "Marketing", "Tools", "Other"].map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Category"><select class={inputCls} value={open.cat} onChange={(e) => upd({ cat: (e.target as HTMLSelectElement).value })}>{sortAbc(["Filament", "Resin", "Packing", "Accessories", "Spares", "Courier", "Electricity", "Utilities", "Rent", "Software", "Marketing", "Tools", "Other"]).map((c) => <option key={c}>{c}</option>)}</select></Field>
           </div>
           <div class="mt-2">
             <div class="text-xs font-semibold mb-1">Lines {/filament|packing/i.test(open.cat) && <span class="font-normal text-c3">· lines with a quantity come into stock on confirm{open.stockApplied ? ` (applied ${open.stockApplied})` : ""}</span>}</div>
@@ -207,7 +208,7 @@ export function Finance() {
       actions={can("mauny", "full") && <Button icon="plus" onClick={() => setAdd(!add)}>Add expense</Button>}>
       {add && (
         <Card class="grid gap-2 grid-cols-2 md:grid-cols-6 items-end">
-          <Field label="Head"><select class={inputCls} value={e.head} onChange={(x) => setE({ ...e, head: (x.target as HTMLSelectElement).value })}>{["Filament", "Packing", "Courier", "Electricity", "Utilities", "Rent", "Software", "Marketing", "Tools", "Other"].map((h) => <option key={h}>{h}</option>)}</select></Field>
+          <Field label="Head"><select class={inputCls} value={e.head} onChange={(x) => setE({ ...e, head: (x.target as HTMLSelectElement).value })}>{sortAbc(["Filament", "Packing", "Courier", "Electricity", "Utilities", "Rent", "Software", "Marketing", "Tools", "Other"]).map((h) => <option key={h}>{h}</option>)}</select></Field>
           <Field label="Vendor"><input class={inputCls} value={e.vendor} onInput={(x) => setE({ ...e, vendor: (x.target as HTMLInputElement).value })} /></Field>
           <Field label="Amount ₹"><input class={inputCls} type="number" value={e.amount || ""} onInput={(x) => setE({ ...e, amount: Number((x.target as HTMLInputElement).value) || 0 })} /></Field>
           <Field label="GST in it ₹"><input class={inputCls} type="number" value={e.tax || ""} onInput={(x) => setE({ ...e, tax: Number((x.target as HTMLInputElement).value) || 0 })} /></Field>

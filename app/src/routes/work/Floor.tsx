@@ -1,3 +1,4 @@
+import { sortAbc } from "../../mock/types";
 /** Floor: the internal bulk work sheet. Opens at 95% of the screen from an order's FLOOR button. */
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
@@ -14,7 +15,7 @@ function Toggle({ paid, onChange }: { paid: boolean; onChange: (v: boolean) => v
   return <span class="inline-flex rounded-full bg-c1 p-0.5">{b(!paid, "Free", "bg-grn text-c0")}{b(paid, "Paid", "bg-red text-c0")}</span>;
 }
 function MachineSelect({ value, onChange, cls = "" }: { value?: string; onChange: (v: string) => void; cls?: string }) {
-  const names = printersSig.value.filter((p) => p.active !== false).map((p) => p.name);
+  const names = sortAbc(printersSig.value.filter((p) => p.active !== false).map((p) => p.name));
   return <select value={value ?? ""} onChange={(e) => onChange((e.target as HTMLSelectElement).value)} onClick={(e) => e.stopPropagation()} class={`h-7 px-1.5 rounded-md bg-c1 text-[12px] cursor-pointer max-w-[120px] ${cls}`}>
     <option value="">— Any</option>{names.map((m) => <option key={m}>{m}</option>)}{value && !names.includes(value) && <option>{value}</option>}
   </select>;

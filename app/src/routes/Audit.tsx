@@ -1,9 +1,10 @@
+import { sortAbc } from "../mock/types";
 /** Store · Stock Audit: count every spool / item on the shelf and reconcile Emerald against it. */
 import { useState } from "preact/hooks";
 import { WORKSHOP_TABS } from "../nav";
 import { ask, Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat, Status, Table } from "../ui";
 import {
-  applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, toBin, today, uid,
+  applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, spHex, toBin, today, uid,
   type PackItem, type Spool,
 } from "../data";
 
@@ -88,7 +89,7 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
 }
 const SpoolHead = ({ s }: { s: Spool }) => (
   <span class="flex items-center gap-x-2.5 gap-y-0.5 min-w-0 flex-wrap">
-    <span class="w-4 h-4 rounded border border-c2 shrink-0" style={{ background: s.hex || "transparent" }} />
+    <span class="w-4 h-4 rounded border border-c2 shrink-0" style={{ background: spHex(s) }} />
     <span class="text-sm">{s.material}</span><span class="text-c3">›</span>
     <b class="text-sm">{s.colour}</b><span class="text-c3">›</span>
     <b class="text-[22px] leading-none num" title="Spool number">#{s.slot ?? "?"}</b><span class="text-c3">›</span>
@@ -109,7 +110,7 @@ function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; bra
         <Field label="Type"><input class={inputCls} list="au-mat" value={d.material} onInput={(e) => setD({ ...d, material: val(e) })} /></Field>
         <Field label="Colour"><input class={inputCls} list="au-col" value={d.colour} onInput={(e) => setD({ ...d, colour: val(e) })} /></Field>
         <Field label="Brand"><input class={inputCls} list="au-brand" value={d.brand} onInput={(e) => { const b = val(e); setD({ ...d, brand: b, spoolMat: defaultBody(b) }); }} /></Field>
-        <Field label="Spool body"><select class={inputCls} value={d.spoolMat} onChange={(e) => setD({ ...d, spoolMat: (e.target as HTMLSelectElement).value })}>{M.bodies.map((b) => <option key={b.name} value={b.name}>{b.name} ({b.tare} g)</option>)}</select></Field>
+        <Field label="Spool body"><select class={inputCls} value={d.spoolMat} onChange={(e) => setD({ ...d, spoolMat: (e.target as HTMLSelectElement).value })}>{sortAbc(M.bodies, (b) => b.name).map((b) => <option key={b.name} value={b.name}>{b.name} ({b.tare} g)</option>)}</select></Field>
         <Field label="Size (g)"><input class={inputCls} type="number" value={d.size} onInput={(e) => setD({ ...d, size: num(e) })} /></Field>
         <Field label={`Gross → net ${g(net)}`}><input class={inputCls} type="number" value={d.gross || ""} onInput={(e) => setD({ ...d, gross: num(e) })} /></Field>
       </div>
@@ -142,7 +143,7 @@ function Combo({ label, value, opts, on, hex }: { label: string; value: string; 
         {hex && exact && sq(opts.find((o) => o.toLowerCase() === q)!)}
         <input class="flex-1 min-w-0 bg-transparent !outline-none !border-0 !shadow-none !ring-0 !min-h-0 !p-0 text-[13px]" style={{ outline: "none", boxShadow: "none" }} value={value} placeholder="Any — type or pick" aria-label={label} autoComplete="off"
           onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} onInput={(e) => { on(val(e)); setOpen(true); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && list.length) { on(list[0]); setOpen(false); (e.target as HTMLInputElement).blur(); } if (e.key === "Escape") setOpen(false); }} />
+          onKeyDown={(e) => { if (e.key === "Enter" && list.length) { on(list.find((o) => o.toLowerCase() === q) ?? list[0]); setOpen(false); (e.target as HTMLInputElement).blur(); } if (e.key === "Escape") setOpen(false); }} />
         {value ? <button type="button" class="text-c3 px-1" aria-label={`Clear ${label}`} onMouseDown={(e) => e.preventDefault()} onClick={() => on("")}>✕</button>
           : <button type="button" class="text-c3 px-1" aria-label={`Open ${label}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen(!open)}>▾</button>}
       </div>
@@ -167,13 +168,13 @@ function FilamentAudit({ a }: { a: Audit }) {
   const rows = all.filter((s) => fit(s)).sort((x, y) => Number(a.lines.some((l) => l.ref === x.id)) - Number(a.lines.some((l) => l.ref === y.id)) || spoolGroup(x).localeCompare(spoolGroup(y)) || (x.slot ?? 0) - (y.slot ?? 0));
   const picked = Object.values(f).some((v) => v.trim());
   const M = filMasterSig.value;
-  const hexOf = (c: string) => M.colours.find((x) => x.name.toLowerCase() === c.toLowerCase())?.hex ?? all.find((x) => x.colour === c)?.hex;
+  const hexOf = (c: string) => M.colours.find((x) => x.name.toLowerCase() === c.toLowerCase())?.hex ?? spHex({ colour: c, hex: all.find((x) => x.colour === c)?.hex });
   const S = (k: keyof typeof f, label: string, sw?: boolean) => <Combo label={label} value={f[k]} opts={opts(k)} hex={sw ? hexOf : undefined} on={(v) => setF({ ...f, [k]: v })} />;
   return (
     <Section title="Find a spool" note="pick type, colour and brand — matching spools show below" action={<Button variant="outline" icon="plus" onClick={() => setAdding(true)}>Not in list — add new spool</Button>}>
-      <datalist id="au-mat">{M.materials.map((m) => <option key={m.name} value={m.name} />)}</datalist>
-      <datalist id="au-col">{M.colours.map((m) => <option key={m.name} value={m.name} />)}</datalist>
-      <datalist id="au-brand">{M.brands.map((m) => <option key={m} value={m} />)}</datalist>
+      <datalist id="au-mat">{sortAbc(M.materials, (m) => m.name).map((m) => <option key={m.name} value={m.name} />)}</datalist>
+      <datalist id="au-col">{sortAbc(M.colours, (m) => m.name).map((m) => <option key={m.name} value={m.name} />)}</datalist>
+      <datalist id="au-brand">{sortAbc(M.brands).map((m) => <option key={m} value={m} />)}</datalist>
       <Card>
         <div class="grid grid-cols-2 sm:grid-cols-[auto_repeat(4,minmax(0,1fr))] gap-2 items-end">
           <Button variant="outline" class="max-sm:col-span-2" disabled={!picked} onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>

@@ -1,3 +1,4 @@
+import { sortAbc } from "../../mock/types";
 import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
 import { signal } from "@preact/signals";
@@ -53,7 +54,7 @@ function JobAct({ j, open }: { j: Job; open: (j: Job) => void }) {
     { label: "Delete", danger: true, on: async () => { if (await ask(`Move job ${j.orderNo} · ${j.item} to the Bin?`, { ok: "Delete", danger: true })) { toBin("Job", j, `${j.orderNo} · ${j.item}`, me.value?.name ?? "You"); log("Deleted job", `${j.orderNo} · ${j.item}`); } }, hidden: j.status === "printing" },
   ]} /></>;
 }
-const spoolOpts = () => spoolsSig.value.filter((s) => s.active !== false && s.grams > 0).map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`);
+const spoolOpts = () => sortAbc(spoolsSig.value.filter((s) => s.active !== false && s.grams > 0).map((s) => `${s.material} ${s.colour} · ${s.spoolNo}`));
 function JobRun({ j, put }: { j: Job; put: (p: Partial<Job>, why?: string) => void }) {
   const js = jobSpool(j);
   const sp = js ? spoolLabel(js) : "";
@@ -135,8 +136,8 @@ export function Production() {
   );
 }
 
-const DEFECTS = ["—", "Stringing", "Layer shift", "Warping", "Under-extrusion", "Over-extrusion", "Dimensions", "Surface finish", "Colour mismatch", "Broken in removal"];
-const CAUSES = ["—", "Material", "Slicer profile", "Machine", "Post-processing", "Design", "Handling"];
+const DEFECTS = sortAbc(["—", "Stringing", "Layer shift", "Warping", "Under-extrusion", "Over-extrusion", "Dimensions", "Surface finish", "Colour mismatch", "Broken in removal"]);
+const CAUSES = sortAbc(["—", "Material", "Slicer profile", "Machine", "Post-processing", "Design", "Handling"]);
 const qFields: FDef<QcEntry>[] = [
   { k: "orderNo", label: "Order" }, { k: "item", label: "Item" }, { k: "result", label: "Result", type: "select", options: ["pass", "rework", "scrap"] },
   { k: "grams", label: "Wasted", type: "number", suffix: "g" }, { k: "defect", label: "Defect", type: "select", options: DEFECTS },
