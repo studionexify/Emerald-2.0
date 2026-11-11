@@ -138,21 +138,25 @@ export const taskListsSig = persisted<string[]>("task-lists", ["Studio", "Purcha
 /** Spool number on the label: per material + colour + brand. A new spool takes the lowest number not held by a spool that still has filament
  *  (7 spools, #4 runs empty → the next one bought becomes #4). Numbers are fixed once given. */
 export const spoolGroup = (s: Spool) => `${s.material}|${s.colour}|${s.brand}`.toLowerCase();
-/** Every in-stock spool gets a unique number within its material + colour + brand.
- *  Missing numbers are filled and clashes (e.g. from Duplicate or a hand edit) are fixed:
- *  the oldest spool keeps its number, the newer one moves to the lowest free number. */
+/** Gives a number only to spools that have none. Existing numbers (e.g. from an audit) are never changed. */
 export function assignSlots(list: Spool[]): Spool[] {
+  if (!list.some((s) => s.slot == null)) return list;
+  const held = new Map<string, Set<number>>();
   const live = (s: Spool) => s.grams > 0 && s.active !== false;
-  const idx = new Map(list.map((s, i) => [s.id, i]));
-  // oldest first: earlier bought date, then further down the list (new spools are prepended)
-  const order = [...list].sort((a, b) => Number(live(b)) - Number(live(a)) || (a.bought ?? "").localeCompare(b.bought ?? "") || idx.get(b.id)! - idx.get(a.id)!);
-  const held = new Map<string, Set<number>>(), give = new Map<string, number>();
-  const H = (s: Spool) => { const g = spoolGroup(s); if (!held.has(g)) held.set(g, new Set()); return held.get(g)!; };
-  for (const s of order) if (live(s) && s.slot != null && !H(s).has(s.slot)) H(s).add(s.slot); else if (live(s) || s.slot == null) give.set(s.id, 0);
-  for (const s of order) { if (!give.has(s.id)) continue; const h = H(s); let n = 1; while (h.has(n)) n++; give.set(s.id, n); if (live(s)) h.add(n); }
-  const out = list.map((s) => (give.has(s.id) && s.slot !== give.get(s.id) ? { ...s, slot: give.get(s.id) } : s));
-  return out.some((s, i) => s !== list[i]) ? out : list;
+  for (const s of list) if (s.slot != null && live(s)) { const g = spoolGroup(s); if (!held.has(g)) held.set(g, new Set()); held.get(g)!.add(s.slot); }
+  const order = [...list].sort((a, b) => Number(live(b)) - Number(live(a)) || (a.bought ?? "").localeCompare(b.bought ?? ""));
+  const give = new Map<string, number>();
+  for (const s of order) {
+    if (s.slot != null) continue;
+    const g = spoolGroup(s); if (!held.has(g)) held.set(g, new Set()); const h = held.get(g)!;
+    let n = 1; while (h.has(n)) n++;
+    give.set(s.id, n); if (live(s)) h.add(n);
+  }
+  return list.map((s) => (give.has(s.id) ? { ...s, slot: give.get(s.id) } : s));
 }
+/** Spool ids whose number is shared with another in-stock spool of the same material + colour + brand. */
+export const clashIds = (list: Spool[]) => { const m = new Map<string, string[]>(); for (const s of list) if (s.slot != null && s.grams > 0 && s.active !== false) { const k = `${spoolGroup(s)}#${s.slot}`; m.set(k, [...(m.get(k) ?? []), s.id]); }
+  return new Set([...m.values()].filter((v) => v.length > 1).flat()); };
 effect(() => { const l = spoolsSig.value; const n = assignSlots(l); if (n !== l) queueMicrotask(() => { spoolsSig.value = assignSlots(spoolsSig.value); }); });
 
 /** Human label for a stock item string: "PLA Black · 42" → "PLA Black Polymaker #3". */

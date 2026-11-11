@@ -6,7 +6,7 @@ import { navigate } from "../router";
 import { Sheet, Pick, Button, Card, Icon, isPhone, Field, inputCls, Page, Progress, Section, Stat, Status, Table, type Col } from "../ui";
 import { Menu, MetaRow, Stepper } from "../ui/disclose";
 import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../ui/record";
-import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, defaultBody, renameMaster, masterUse, type FilMaster,
+import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, defaultBody, clashIds, renameMaster, masterUse, type FilMaster,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
 } from "../data";
@@ -199,7 +199,7 @@ function CardEdit({ list, hex, done }: { list: Spool[]; hex: string; done: () =>
 }
 function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
   const h = list[0]; const hex = spHex(h); const [hexOpen, setHexOpen] = useState(false); const [ed, setEd] = useState<string | null>(null);
-  const mc = matC(h.material);
+  const mc = matC(h.material); const clash = clashIds(list);
   const [showSealed, setShowSealed] = useState(false);
   const sealed = list.filter((x) => x.status === "sealed" && x.grams > 0);
   const rows = list; void sealed; void showSealed; void setShowSealed;
@@ -219,7 +219,7 @@ function SpoolCard({ list }: { list: Spool[]; open: (s: Spool) => void }) {
       </button>}
       {rows.map((s) => <div key={s.id} class="border-t border-line">
         <div class="flex items-center gap-3 py-2">
-          <span class="text-[20px] font-extrabold num leading-none min-w-7 shrink-0">{s.slot ?? spN(s.spoolNo)}</span>
+          <span class={`text-[20px] font-extrabold num leading-none min-w-7 shrink-0 ${clash.has(s.id) ? "text-warn underline decoration-wavy" : ""}`} title={clash.has(s.id) ? "Same number as another spool on this card — tap Edit to set the number written on the spool" : undefined}>{s.slot ?? spN(s.spoolNo)}</span>
           <div class="flex-1 min-w-0">
             <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full rounded-full" style={{ background: hex, boxShadow: lightHex(hex) ? "inset 0 0 0 1px rgba(0,0,0,.25)" : undefined, width: `${Math.max(spoolPct(s), s.grams > 0 ? 2 : 0)}%` }} /></div>
             <div class="flex justify-between mt-1 text-[11px]"><span class="text-c2">Net <b class="num text-c4">{s.grams.toLocaleString("en-IN")} g</b></span><span class="text-c2">Gross <b class="num text-c4">{spoolGross(s).toLocaleString("en-IN")} g</b></span></div>
