@@ -7,7 +7,9 @@ const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? 
 /** Grams in store for a colour: every active spool of that colour, summed. */
 export const colourStore = (colour: string) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && eq(s.colour, colour)).reduce((a, s) => a + Math.max(0, s.grams), 0);
 /** Library hex for a colour, if the library has one. */
-export const colourHex = (colour: string) => filMasterSig.value.colours.find((c) => eq(c.name, colour))?.hex ?? spoolsSig.value.find((s) => eq(s.colour, colour) && s.hex)?.hex;
+/** Last resort when the library and spools carry no hex: a swatch from the colour's name. */
+const NAME_HEX: [RegExp, string][] = [[/black/i, "#111111"], [/white|ivory|natural|clear/i, "#f2f2f2"], [/skin|apricot|beige/i, "#f5b5a6"], [/red|ruby/i, "#d41f2b"], [/orange|terracotta/i, "#ff7a1a"], [/yellow|gold|lemon/i, "#f2c500"], [/green|olive|khaki|khakhi|mint/i, "#3f9a4a"], [/blue|navy/i, "#2557c4"], [/purple|violet|lavend|lilac|mauve/i, "#8a4fb8"], [/pink|sakura/i, "#ee8fb2"], [/brown|chocolate|bronze/i, "#7a4b2a"], [/gr[ae]y|ash|moon|silver/i, "#8d8d8d"]];
+export const colourHex = (colour: string) => filMasterSig.value.colours.find((c) => eq(c.name, colour) && c.hex)?.hex || spoolsSig.value.find((s) => eq(s.colour, colour) && s.hex)?.hex || NAME_HEX.find(([r]) => r.test(colour))?.[1];
 /** The spool a colour is taken from: the fullest active spool of that colour. */
 export const colourSpool = (colour: string) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && eq(s.colour, colour)).sort((a, b) => b.grams - a.grams)[0];
 
