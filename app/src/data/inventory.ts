@@ -185,6 +185,22 @@ effect(() => {
   }
   if (ch) filMasterSig.value = { ...m, materials: mats, colours: cols, brands, finishes: fin };
 });
+/** Spool body by brand: Flexx3d ships on cardboard, everything else on plastic. */
+export const defaultBody = (brand?: string) => (/flex+\s*-?\s*3d/i.test(brand ?? "") ? "Cardboard" : "Plastic");
+/** Fill a missing / unknown spool body (and its tare) from the brand; Flexx3d is always cardboard. */
+function fixBodies(list: Spool[]): Spool[] {
+  const names = new Set(filMasterSig.value.bodies.map((b) => b.name.toLowerCase()));
+  let changed = false;
+  const out = list.map((s) => {
+    const want = defaultBody(s.brand), known = !!s.spoolMat && names.has(s.spoolMat.toLowerCase());
+    const body = want === "Cardboard" ? "Cardboard" : known ? s.spoolMat! : "Plastic";
+    if (body === s.spoolMat) return s;
+    changed = true; const t = bodyTare(body);
+    return { ...s, spoolMat: body, ...(t != null ? { tare: t, gross: Math.max(0, s.grams) + t } : {}) };
+  });
+  return changed ? out : list;
+}
+effect(() => { const l = spoolsSig.value; if (fixBodies(l) !== l) queueMicrotask(() => { spoolsSig.value = fixBodies(spoolsSig.value); }); });
 export const masterMat = (name: string) => filMasterSig.value.materials.find((x) => eqi(x.name, name));
 export const masterColour = (name?: string) => filMasterSig.value.colours.find((x) => eqi(x.name, name));
 /** Rename a master entry and every spool that uses it. */
