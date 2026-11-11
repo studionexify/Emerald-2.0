@@ -317,6 +317,10 @@ export function StockAudit() {
                     <button type="button" key={k} onClick={() => setMode(k)} class={`text-left rounded-xl border px-3 py-2.5 ${mode === k ? "border-c4 bg-c1 ring-2 ring-c4" : "border-line hover:bg-c1"}`}>
                       <b class="text-sm block">{t}</b><span class="t-meta">{d}</span></button>))}
                 </div>
+                {mode === "decide" && <div class="flex flex-wrap items-center gap-2 mt-3"><span class="t-meta">Set every spool to</span>
+                  {(["finished", "lost", "ok"] as Fate[]).map((k) => <Button key={k} variant={miss.every((x) => pick[x.id] === k) ? "primary" : "outline"}
+                    onClick={() => setPick(Object.fromEntries(miss.map((x) => [x.id, k])))}>{FATE[k]}</Button>)}
+                  <span class="t-meta">then change any single spool below</span></div>}
                 {mode && <div class="mt-3 text-sm max-h-80 overflow-y-auto">{miss.map((s) => { const f = fateOf(s.id), gone = new Set(miss.filter((m) => { const x = fateOf(m.id); return x && x !== "ok"; }).map((m) => m.id)), nx = nextFor(s, gone);
                   return <div key={s.id} class="flex flex-wrap items-center justify-between gap-2 py-2.5 border-t border-line">
                     <span class="min-w-0 flex flex-col gap-1"><span class="flex flex-wrap items-center gap-x-3 gap-y-1"><SpoolHead s={s} /><span class="text-c3">›</span><span class="num"><span class="t-meta">In Emerald </span><b>{g(s.grams)}</b></span></span>
