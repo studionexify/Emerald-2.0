@@ -154,26 +154,9 @@ export function assignSlots(list: Spool[]): Spool[] {
   }
   return list.map((s) => (give.has(s.id) ? { ...s, slot: give.get(s.id) } : s));
 }
-/** Make every number unique per card (material + colour + brand) among in-stock spools.
- *  The spool that has held the number longest keeps it; the other moves to the lowest free number.
- *  Every move is written to Logs so the label on the physical spool can be updated. */
-export function fixClashes(list: Spool[], log = false): Spool[] {
-  const live = (s: Spool) => s.grams > 0 && s.active !== false && s.slot != null;
-  const idx = new Map(list.map((s, i) => [s.id, i]));
-  const order = list.filter(live).sort((a, b) => (a.bought ?? "").localeCompare(b.bought ?? "") || idx.get(b.id)! - idx.get(a.id)!);
-  const held = new Map<string, Set<number>>(), clash: Spool[] = [];
-  for (const s of order) { const g = spoolGroup(s); if (!held.has(g)) held.set(g, new Set()); const h = held.get(g)!; if (h.has(s.slot!)) clash.push(s); else h.add(s.slot!); }
-  if (!clash.length) return list;
-  const give = new Map<string, number>();
-  for (const s of clash) { const h = held.get(spoolGroup(s))!; let n = 1; while (h.has(n)) n++; h.add(n); give.set(s.id, n); }
-  if (log) for (const s of clash) logFix(`Spool number fixed: ${s.material} ${s.colour} ${s.brand} #${s.slot} (${s.grams.toLocaleString("en-IN")} g) → #${give.get(s.id)} — relabel this spool`, `${s.material} ${s.colour} ${s.brand}`);
-  return list.map((s) => (give.has(s.id) ? { ...s, slot: give.get(s.id) } : s));
-}
-let logFix: (a: string, t: string) => void = () => {};
-export const setFixLogger = (f: typeof logFix) => { logFix = f; };
-// Disabled during spool-number recovery: never auto-rewrite slots.
-// effect(() => { const l = spoolsSig.value; if (fixClashes(l) !== l) queueMicrotask(() => { const c = spoolsSig.value, n = fixClashes(c, true); if (n !== c) spoolsSig.value = n; }); });
-/** Spool ids whose number is shared with another in-stock spool of the same material + colour + brand. */
+/** Spool ids whose number is shared with another in-stock spool of the same material + colour + brand.
+ *  Warning only (highlighted on the Store card): numbers are never changed automatically —
+ *  the number written on the physical spool is the truth; fix it by hand via Edit. */
 export const clashIds = (list: Spool[]) => { const m = new Map<string, string[]>(); for (const s of list) if (s.slot != null && s.grams > 0 && s.active !== false) { const k = `${spoolGroup(s)}#${s.slot}`; m.set(k, [...(m.get(k) ?? []), s.id]); }
   return new Set([...m.values()].filter((v) => v.length > 1).flat()); };
 effect(() => { const l = spoolsSig.value; const n = assignSlots(l); if (n !== l) queueMicrotask(() => { spoolsSig.value = assignSlots(spoolsSig.value); }); });

@@ -56,8 +56,7 @@ export function log(action: string, target: string, kind: LogKind = "order") {
   logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
 setLogger(log);
-import { applyMove, registerBin, setFixLogger } from "./inventory";
-setFixLogger((a, t) => log(a, t, "stock"));
+import { applyMove, registerBin } from "./inventory";
 import { setStockSink } from "./ledger";
 /** Filament on a bill arrives as sealed 1 kg spools (material and colour read from the line); other stock tops up its item. */
 setStockSink((m) => {

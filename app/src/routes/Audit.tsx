@@ -193,10 +193,6 @@ function FilamentAudit({ a }: { a: Audit }) {
 
 /** Spools not checked in this audit: on Finish they are emptied/binned and their number becomes free. Other spools keep their numbers. */
 const pending = (a: Audit) => shelf().filter((s) => !a.lines.some((l) => l.ref === s.id));
-function nextFor(s: Spool, gone: Set<string>) {
-  const sib = spoolsSig.value.filter((x) => x.id !== s.id && !gone.has(x.id) && x.active !== false && x.grams > 0 && x.status !== "empty" && spoolGroup(x) === spoolGroup(s));
-  return sib.sort((x, y) => (x.slot ?? 999) - (y.slot ?? 999)).find((x) => (x.slot ?? 999) > (s.slot ?? 0));
-}
 /** Any other live spool of the same type, colour and brand (no reorder needed). */
 const hasStock = (s: Spool, gone: Set<string>) => spoolsSig.value.some((x) => x.id !== s.id && !gone.has(x.id) && x.active !== false && x.grams > 0 && x.status !== "empty" && spoolGroup(x) === spoolGroup(s));
 
@@ -209,13 +205,13 @@ function finishFilament(a: Audit, fate: (id: string) => Fate) {
   const miss = pending(a).filter((x) => fate(x.id) !== "ok"), gone = new Set(miss.map((s) => s.id)), offs: WriteOff[] = [];
   for (const s0 of miss) {
     const s = spoolsSig.value.find((x) => x.id === s0.id); if (!s) continue;
-    const how = fate(s.id), nx = undefined as Spool | undefined, lost = how === "lost"; void nextFor;
-    offs.push({ how, label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? "" : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
+    const how = fate(s.id), lost = how === "lost";
+    offs.push({ how, label: spoolName(s), grams: s.grams, value: spoolValue(s), next: hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
     movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit ${lost ? "write-off (lost)" : "finished (empty)"} · ${a.no}`, by: who() }, ...movesSig.value];
     const done: Spool = { ...s, grams: 0, gross: s.tare ?? 0, status: "empty", printer: "", ...(lost ? {} : { active: false }), notes: `${s.notes ? s.notes + " · " : ""}${lost ? "Lost" : "Finished"} in audit ${a.no}` };
-    spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? done : nx && x.id === nx.id && s.slot != null ? { ...x, slot: s.slot } : x));
+    spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? done : x));
     if (lost) toBin("Spool", done, `${spoolName(s)} · lost in audit ${a.no}`, who());
-    log(`Audit ${a.no}: ${spoolName(s)} ${lost ? "lost — written off and deleted (Bin)" : "finished — emptied and archived"} (${g(s.grams)})${nx ? `; #${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "" : "; reorder"}`, spoolName(s), "stock");
+    log(`Audit ${a.no}: ${spoolName(s)} ${lost ? "lost — written off and deleted (Bin)" : "finished — emptied and archived"} (${g(s.grams)})${hasStock(s, gone) ? "" : "; reorder"}`, spoolName(s), "stock");
   }
   return { offs, lines };
 }
