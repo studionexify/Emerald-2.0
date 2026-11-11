@@ -26,7 +26,10 @@ const sel = "h-9 px-3 rounded-xl border border-line bg-c0 text-[13px] min-w-0";
 /** Spools that count as "on the shelf": active and not already empty. */
 const shelf = () => spoolsSig.value.filter((s) => s.active !== false && s.grams > 0 && s.status !== "empty");
 const itemsOf = (c: Cat): PackItem[] => (c === "packing" ? packSig.value : itemsSig.value.filter((p) => (c === "part" ? p.cat === "Part" : p.cat !== "Part"))).filter((p) => p.active !== false);
-const spoolName = (s: Spool) => `${s.material} ${s.colour} · ${s.spoolNo}`;
+/** Ledger key (matches the spool internally). */
+const spoolKey = (s: Spool) => `${s.material} ${s.colour} · ${s.spoolNo}`;
+/** What people read: the number on the spool label. */
+const spoolName = (s: Spool) => `${s.material} ${s.colour}${s.brand ? ` ${s.brand}` : ""}${s.slot != null ? ` #${s.slot}` : ""}`;
 
 function put(a: Audit) { auditsSig.value = auditsSig.value.map((x) => (x.id === a.id ? a : x)); }
 function addLine(a: Audit, l: Line) { put({ ...a, lines: [...a.lines.filter((x) => x.ref !== l.ref), l] }); }
@@ -42,7 +45,7 @@ function start(cat: Cat) {
 function setSpoolGrams(s: Spool, net: number, gross: number, a: Audit, note: string) {
   spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? { ...x, grams: net, gross, weighed: today(), status: net <= 0 ? "empty" : x.status === "loaded" ? "open" : x.status, printer: x.status === "loaded" ? "" : x.printer } : x));
   const d = net - s.grams;
-  if (d) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolName(s), dir: d > 0 ? "in" : "out", qty: Math.abs(d), unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `${note} · ${a.no}`, by: who() }, ...movesSig.value];
+  if (d) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: d > 0 ? "in" : "out", qty: Math.abs(d), unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `${note} · ${a.no}`, by: who() }, ...movesSig.value];
 }
 
 function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
@@ -51,7 +54,7 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
   const tare = s.tare ?? bodyTare(s.spoolMat) ?? filMasterSig.value.tare;
   const net = Math.max(0, gross - tare), d = net - s.grams;
   if (line) return (
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 border-t border-line first:border-0">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 border-t border-line first:border-0">
       <SpoolHead s={s} />
       <span class="text-sm">{line.isNew ? "Added" : <>{g(line.before)} → <b>{g(line.after)}</b> <span class={line.after - line.before < 0 ? "text-[var(--color-bad,#a3271a)]" : "text-c3"}>{line.after - line.before > 0 ? "+" : ""}{line.after - line.before}</span></>}</span>
       <Status tone="done">{line.isNew ? "Added" : "Updated"}</Status>
@@ -60,23 +63,23 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
     </div>
   );
   return (
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5 border-t border-line first:border-0">
+    <div class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_72px_104px_80px_auto] items-center gap-x-3 gap-y-1.5 py-2 border-t border-line first:border-0">
       <SpoolHead s={s} />
-      <span class="text-sm w-36"><span class="t-meta block">In Emerald</span>{g(s.grams)}</span>
-      <label class="flex items-center gap-1.5 text-sm"><input class={`${inputCls} !w-28 !h-9`} type="number" inputMode="numeric" placeholder="Gross with spool" aria-label={`Gross weight of ${spoolName(s)}`} value={gross || ""} onInput={(e) => setGross(num(e))} /> g</label>
-      <span class="text-sm w-32">{gross ? <><b>{g(net)}</b> <span class="text-c3">{d > 0 ? "+" : ""}{d}</span></> : <span class="text-c3">tare {tare} g</span>}</span>
+      <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span>{g(s.grams)}</span>
+      <label class="flex items-center gap-1 text-sm"><input class={`${inputCls} !w-[88px] !h-9 text-right`} type="number" inputMode="numeric" placeholder="Gross g" aria-label={`Gross weight of ${spoolName(s)}`} value={gross || ""} onInput={(e) => setGross(num(e))} /> g</label>
+      <span class="text-sm num">{gross ? <><b>{g(net)}</b> <span class="text-c3">{d > 0 ? "+" : ""}{d}</span></> : <span class="text-c3">tare {tare} g</span>}</span>
       <Button disabled={!gross} onClick={() => {
         setSpoolGrams(s, net, gross, a, "Audit count");
         addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: net, unit: "g", by: who(), at: stamp() });
-        log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)}`, s.spoolNo, "stock");
+        log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)}`, spoolName(s), "stock");
       }}>Update</Button>
     </div>
   );
 }
 const SpoolHead = ({ s }: { s: Spool }) => (
-  <span class="flex items-center gap-2.5 min-w-0 flex-1 basis-56">
+  <span class="flex items-center gap-2.5 min-w-0 flex-1">
     <span class="w-3.5 h-3.5 rounded-full border border-c2 shrink-0" style={{ background: s.hex || "transparent" }} />
-    <span class="min-w-0"><b class="text-sm">{s.material} {s.colour}</b><span class="t-meta block truncate">#{s.spoolNo}{s.slot ? ` · slot ${s.slot}` : ""} · {s.brand || "—"} · {s.spoolMat || "spool"}{s.location ? ` · ${s.location}` : ""}</span></span>
+    <span class="min-w-0"><b class="text-sm">{s.material} {s.colour}</b><span class="t-meta block truncate">{s.slot != null ? `#${s.slot} · ` : ""}{s.brand || "—"} · {s.spoolMat || "spool"}{s.location ? ` · ${s.location}` : ""}</span></span>
   </span>
 );
 
@@ -103,9 +106,9 @@ function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; bra
           const s: Spool = { id: uid(), material: d.material, colour: d.colour, brand: d.brand, hex, grams: net, size: d.size || M.size, spoolNo: nextSpoolNo(), spoolMat: d.spoolMat, tare, gross: d.gross, diameter: M.diameter,
             costKg: mm?.costKg || M.costKg, nozzle: mm?.nozzle, bed: mm?.bed, status: "open", active: true, weighed: today(), bought: today(), notes: `Found in audit ${a.no}` };
           spoolsSig.value = [...spoolsSig.value, s];
-          movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolName(s), dir: "in", qty: net, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Found in audit · ${a.no}`, by: who() }, ...movesSig.value];
+          movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "in", qty: net, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Found in audit · ${a.no}`, by: who() }, ...movesSig.value];
           addLine(a, { ref: s.id, label: spoolName(s), before: 0, after: net, unit: "g", by: who(), at: stamp(), isNew: true });
-          log(`Audit ${a.no}: added ${spoolName(s)} (${g(net)})`, s.spoolNo, "stock");
+          log(`Audit ${a.no}: added ${spoolName(s)} (${g(net)})`, spoolName(s), "stock");
           done();
         }}>Add spool</Button>
       </div>
@@ -134,7 +137,7 @@ function FilamentAudit({ a }: { a: Audit }) {
       <datalist id="au-col">{M.colours.map((m) => <option key={m.name} value={m.name} />)}</datalist>
       <datalist id="au-brand">{M.brands.map((m) => <option key={m} value={m} />)}</datalist>
       <Card>
-        <div class="grid grid-cols-2 md:grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2 items-end">
+        <div class="grid grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2 items-end">
           {S("mat", "Type / material")}{S("col", "Colour")}{S("brand", "Brand")}{S("body", "Spool body")}
           {picked && <Button variant="ghost" onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>}
         </div>
@@ -162,18 +165,18 @@ function finishFilament(a: Audit, ok: Set<string>) {
   const lines: Line[] = [];
   for (const s of pending(a).filter((x) => ok.has(x.id))) {
     lines.push({ ref: s.id, label: spoolName(s), before: s.grams, after: s.grams, unit: "g", by: who(), at: stamp() });
-    log(`Audit ${a.no}: ${spoolName(s)} confirmed OK as is (${g(s.grams)})`, s.spoolNo, "stock");
+    log(`Audit ${a.no}: ${spoolName(s)} confirmed OK as is (${g(s.grams)})`, spoolName(s), "stock");
   }
   const miss = pending(a).filter((x) => !ok.has(x.id)), gone = new Set(miss.map((s) => s.id)), offs: WriteOff[] = [];
   for (const s0 of miss) {
     const s = spoolsSig.value.find((x) => x.id === s0.id); if (!s) continue;
     const nx = nextFor(s, gone);
-    offs.push({ label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? `#${nx.spoolNo}${s.slot ? ` → slot ${s.slot}` : ""}` : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
-    movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolName(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit write-off (not found) · ${a.no}`, by: who() }, ...movesSig.value];
+    offs.push({ label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? `#${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
+    movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit write-off (not found) · ${a.no}`, by: who() }, ...movesSig.value];
     const emptied: Spool = { ...s, grams: 0, gross: s.tare ?? 0, status: "empty", printer: "", notes: `${s.notes ? s.notes + " · " : ""}Not found in audit ${a.no}` };
     spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? emptied : nx && x.id === nx.id && s.slot != null ? { ...x, slot: s.slot } : x));
     toBin("Spool", emptied, `${spoolName(s)} · not found in audit ${a.no}`, who());
-    log(`Audit ${a.no}: ${spoolName(s)} not found — emptied (${g(s.grams)}) and moved to Bin${nx ? `; #${nx.spoolNo} takes its place` : hasStock(s, gone) ? "" : "; reorder"}`, s.spoolNo, "stock");
+    log(`Audit ${a.no}: ${spoolName(s)} not found — emptied (${g(s.grams)}) and moved to Bin${nx ? `; #${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "" : "; reorder"}`, spoolName(s), "stock");
   }
   return { offs, lines };
 }
@@ -248,6 +251,7 @@ export function StockAudit() {
         {a && !hist && <Button icon="check" onClick={() => { setOk(new Set()); setConfirm(true); }}>Finish &amp; reconcile</Button>}
       </>}
       toolbar={!hist && <Pick value={cat} on={(c) => { setCat(c); setConfirm(false); }} items={CATS} label={(c) => CAT_LABEL[c]} title="Audit" />}>
+      <div class="w-full max-w-[860px] mx-auto flex flex-col gap-4">
       {hist ? <>{done.length ? done.map((x) => <Report key={x.id} a={x} />) : <Card><p class="text-sm text-c3">No finished audits yet.</p></Card>}</>
       : !a ? (
         <Card>
@@ -282,7 +286,7 @@ export function StockAudit() {
                 <div class="mt-2 text-sm max-h-80 overflow-y-auto">{miss.map((s) => { const isOk = ok.has(s.id), nx = nextFor(s, new Set(miss.filter((m) => !ok.has(m.id)).map((m) => m.id)));
                   return <div key={s.id} class="flex flex-wrap items-center justify-between gap-2 py-1.5 border-t border-line">
                     <span class="min-w-0">{spoolName(s)} · {s.brand || "—"} · {g(s.grams)} · {inr(spoolValue(s))}
-                      <span class="t-meta block">{isOk ? "Stays as it is" : nx ? `Emptied → Bin · #${nx.spoolNo} takes its place` : hasStock(s, new Set(miss.filter((m) => !ok.has(m.id)).map((m) => m.id))) ? "Emptied → Bin · others of this kind still in stock" : "Emptied → Bin · none in stock, reorder"}</span></span>
+                      <span class="t-meta block">{isOk ? "Stays as it is" : nx ? `Emptied → Bin · #${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, new Set(miss.filter((m) => !ok.has(m.id)).map((m) => m.id))) ? "Emptied → Bin · others of this kind still in stock" : "Emptied → Bin · none in stock, reorder"}</span></span>
                     <Pick value={isOk ? "ok" : "missing"} on={(v) => flip(s.id, v === "ok")} items={["missing", "ok"]} label={(v) => (v === "ok" ? "OK" : "Not found")} />
                   </div>; })}</div>
                 <p class="t-meta mt-2">{miss.filter((x) => !ok.has(x.id)).length} not found · written off {g(miss.filter((x) => !ok.has(x.id)).reduce((s, x) => s + x.grams, 0))} · {inr(miss.filter((x) => !ok.has(x.id)).reduce((s, x) => s + spoolValue(x), 0))} · {ok.size} OK</p>
@@ -293,6 +297,7 @@ export function StockAudit() {
         )}
         {cat === "filament" ? <FilamentAudit a={a} /> : <ItemAudit a={a} />}
       </>}
+      </div>
     </Page>
   );
 }
