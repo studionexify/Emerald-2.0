@@ -191,7 +191,7 @@ function FilamentAudit({ a }: { a: Audit }) {
   );
 }
 
-/** Spools not checked in this audit: on Finish they are emptied, binned, and the next spool of the group takes their slot. */
+/** Spools not checked in this audit: on Finish they are emptied/binned and their number becomes free. Other spools keep their numbers. */
 const pending = (a: Audit) => shelf().filter((s) => !a.lines.some((l) => l.ref === s.id));
 function nextFor(s: Spool, gone: Set<string>) {
   const sib = spoolsSig.value.filter((x) => x.id !== s.id && !gone.has(x.id) && x.active !== false && x.grams > 0 && x.status !== "empty" && spoolGroup(x) === spoolGroup(s));
@@ -209,8 +209,8 @@ function finishFilament(a: Audit, fate: (id: string) => Fate) {
   const miss = pending(a).filter((x) => fate(x.id) !== "ok"), gone = new Set(miss.map((s) => s.id)), offs: WriteOff[] = [];
   for (const s0 of miss) {
     const s = spoolsSig.value.find((x) => x.id === s0.id); if (!s) continue;
-    const how = fate(s.id), nx = nextFor(s, gone), lost = how === "lost";
-    offs.push({ how, label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? `#${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
+    const how = fate(s.id), nx = undefined as Spool | undefined, lost = how === "lost"; void nextFor;
+    offs.push({ how, label: spoolName(s), grams: s.grams, value: spoolValue(s), next: nx ? "" : hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
     movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit ${lost ? "write-off (lost)" : "finished (empty)"} · ${a.no}`, by: who() }, ...movesSig.value];
     const done: Spool = { ...s, grams: 0, gross: s.tare ?? 0, status: "empty", printer: "", ...(lost ? {} : { active: false }), notes: `${s.notes ? s.notes + " · " : ""}${lost ? "Lost" : "Finished"} in audit ${a.no}` };
     spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? done : nx && x.id === nx.id && s.slot != null ? { ...x, slot: s.slot } : x));
@@ -332,10 +332,10 @@ export function StockAudit() {
                   {(["finished", "lost", "ok"] as Fate[]).map((k) => <Button key={k} variant={miss.every((x) => pick[x.id] === k) ? "primary" : "outline"}
                     onClick={() => setPick(Object.fromEntries(miss.map((x) => [x.id, k])))}>{FATE[k]}</Button>)}
                   <span class="t-meta">then change any single spool below</span></div>}
-                {mode && <div class="mt-3 text-sm max-h-80 overflow-y-auto">{miss.map((s) => { const f = fateOf(s.id), gone = new Set(miss.filter((m) => { const x = fateOf(m.id); return x && x !== "ok"; }).map((m) => m.id)), nx = nextFor(s, gone);
+                {mode && <div class="mt-3 text-sm max-h-80 overflow-y-auto">{miss.map((s) => { const f = fateOf(s.id), gone = new Set(miss.filter((m) => { const x = fateOf(m.id); return x && x !== "ok"; }).map((m) => m.id));
                   return <div key={s.id} class="flex flex-wrap items-center justify-between gap-2 py-2.5 border-t border-line">
                     <span class="min-w-0 flex flex-col gap-1"><span class="flex flex-wrap items-center gap-x-3 gap-y-1"><SpoolHead s={s} /><span class="text-c3">›</span><span class="num"><span class="t-meta">In Emerald </span><b>{g(s.grams)}</b></span></span>
-                      <span class="t-meta block">{!f ? "Choose what happened" : f === "ok" ? "Stays as it is" : `${f === "lost" ? "Deleted → Bin" : "Emptied → archive"} · ${nx ? `#${nx.slot ?? "?"} becomes #${s.slot}` : hasStock(s, gone) ? "others of this kind still in stock" : "none in stock, reorder"}`}</span></span>
+                      <span class="t-meta block">{!f ? "Choose what happened" : f === "ok" ? "Stays as it is" : `${f === "lost" ? "Deleted → Bin" : "Emptied → archive"} · #${s.slot} becomes free · ${hasStock(s, gone) ? "others of this kind still in stock" : "none in stock, reorder"}`}</span></span>
                     {mode === "decide" ? <span class="inline-flex gap-1">{(["finished", "lost", "ok"] as Fate[]).map((k) => <button type="button" key={k} onClick={() => setPick({ ...pick, [s.id]: k })}
                       class={`h-8 px-3 rounded-full border text-[13px] font-semibold ${f === k ? "bg-c4 text-c0 border-c4" : "border-line"}`}>{FATE[k]}</button>)}</span>
                       : <Status tone={f === "ok" ? "done" : f === "lost" ? "blocked" : "idle"}>{FATE[f!]}</Status>}
