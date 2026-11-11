@@ -25,7 +25,7 @@ export function Lightbox({ v, alt, onClose }: { v: string; alt: string; onClose:
 /** Small thumbnail; opens the reduced image full screen. */
 export function Thumb({ thumb, full, alt, class: cls = "w-11 h-11", onAdd }: { thumb?: string; full?: string; alt: string; class?: string; /** placeholder: pick a file */ onAdd?: (f: File) => void }) {
   const [open, setOpen] = useState(false);
-  if (!thumb && !full) return <label onClick={(e) => e.stopPropagation()} title={onAdd ? "Add product photo" : "No photo yet"} class={`${cls} shrink-0 rounded-lg border border-dashed border-c3/60 bg-c1/60 grid place-items-center text-c3 ${onAdd ? "cursor-pointer hover:border-c4 hover:text-c4" : ""}`}>
+  if (!thumb && !full) return <label onClick={(e) => e.stopPropagation()} title={onAdd ? "Add photo — click, or hover and press Ctrl+V to paste" : "No photo yet"} class={`${cls} shrink-0 rounded-lg border border-dashed border-c3/60 bg-c1/60 grid place-items-center text-c3 ${onAdd ? "cursor-pointer hover:border-c4 hover:text-c4" : ""}`}>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" /><circle cx="9" cy="10" r="1.6" /><path d="m21 16-5-5-9 9" /></svg>
     {onAdd && <input type="file" accept="image/*" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) onAdd(f); }} />}
   </label>;

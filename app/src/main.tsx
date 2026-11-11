@@ -1,6 +1,7 @@
 import { render } from "preact";
 import { App } from "./app";
 import "./styles.css";
+import "./ui/paste";
 
 if (import.meta.env.MODE === "artifact") await import("./data/demo");
 
