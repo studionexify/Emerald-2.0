@@ -53,17 +53,19 @@ export function InHouseCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => voi
       {wasted > 0 && <span class="text-[11px] font-semibold text-red">{wasted} wasted</span>}
       <StagePill o={cur} />
     </div>
-    <ul class="grid gap-1.5">{rows.map(({ i, k, p, run }) => <li key={k} class={`flex items-center gap-3 rounded-xl border border-line px-3 py-2 ${p.pending === 0 && !run ? "bg-c1 text-c2 [&_img]:grayscale" : "bg-c0"}`}>
+    <ul class="grid gap-1.5">{rows.map(({ i, k, p, run }) => <li key={k} class={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line px-3 py-2 ${p.pending === 0 && !run ? "bg-c1 text-c2 [&_img]:grayscale" : "bg-c0"}`}>
       <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 !rounded-lg shrink-0" />
-      <div class="min-w-0 flex-1"><div class="text-[14px] font-semibold truncate">{i.name}</div>
+      <div class="min-w-0 flex-1 basis-[9rem]"><div class="text-[14px] font-semibold truncate">{i.name}</div>
         <div class="t-meta truncate">{[i.material, ...(i.colours ?? (i.colour ? [i.colour] : []))].filter(Boolean).join(" · ")} · Qty {i.qty}</div></div>
+      <div class="flex items-center gap-3 max-[560px]:w-full max-[560px]:justify-between">
       <select value={i.purpose ?? ""} aria-label="Purpose" onChange={(e) => patchOrder(cur, { items: cur.items.map((x, j) => (j === k ? { ...x, purpose: (e.target as HTMLSelectElement).value } : x)) })} class="h-8 px-2 rounded-lg border border-line bg-c1 text-[12px] cursor-pointer max-w-[120px]"><option value="">Purpose…</option>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select>
       <div class="num text-[12px] text-right whitespace-nowrap"><b class="text-grn">{Math.min(p.printed, i.qty)}</b><span class="text-c3">/{i.qty}</span>{p.failed > 0 && <span class="text-red"> · {p.failed} wasted</span>}</div>
       {run ? <button type="button" onClick={() => setGo({ k, run })} class="h-9 px-4 !min-h-0 rounded-lg bg-amb text-c0 text-[13px] font-bold cursor-pointer whitespace-nowrap">■ Finish{run.printer ? ` · ${run.printer}` : ""}</button>
         : p.pending > 0 ? <button type="button" onClick={() => setGo({ k })} class="h-9 px-4 !min-h-0 rounded-lg bg-grn text-c0 text-[13px] font-bold cursor-pointer">▶ Start</button>
         : <span class="text-[12px] font-semibold px-2">Done ✓</span>}
+      </div>
     </li>)}</ul>
-    {allDone && cur.stage !== "archived" && <div class="mt-2 flex items-center justify-end gap-2"><span class="t-meta">QC</span>
+    {allDone && cur.stage !== "archived" && <div class="mt-2 flex flex-wrap items-center justify-end gap-2"><span class="t-meta">QC</span>
       <select value={qc} onChange={(e) => setQc((e.target as HTMLSelectElement).value)} aria-label="QC result" class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer">
         <option>Pass</option>{["Rework", "Scrap"].map((r) => DEFECTS.map((d) => <option key={r + d}>{`${r} · ${d}`}</option>))}</select>
       <Button onClick={close}>Complete</Button></div>}
