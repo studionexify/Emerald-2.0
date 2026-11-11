@@ -243,21 +243,56 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
   </Sheet>;
 }
 
-/** Master grid: tick the colours each design uses. Nothing changes until Save. */
+/** Store colours first (in-stock spools, most grams first), then the rest of the library, so names always match the store. */
+function storeColours() {
+  const m = new Map<string, string>();
+  for (const sp of spoolsSig.value) if (sp.active !== false && sp.status !== "empty" && sp.colour?.trim() && ![...m.keys()].some((x) => eq(x, sp.colour))) m.set(sp.colour.trim(), sp.colour.trim());
+  const stocked = sortAbc([...m.keys()]).sort((x, y) => colourStore(y) - colourStore(x));
+  const rest = sortAbc(filMasterSig.value.colours.map((c) => c.name).filter((n) => !stocked.some((x) => eq(x, n))));
+  return { stocked, rest };
+}
+const kg = (g: number) => (g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${g} g`);
+function ColourOptions({ skip }: { skip: (n: string) => boolean }) {
+  const { stocked, rest } = storeColours();
+  return <><optgroup label="In store">{stocked.filter((n) => !skip(n)).map((n) => <option key={n} value={n}>{n} · {kg(colourStore(n))}</option>)}</optgroup>
+    <optgroup label="Library · no stock">{rest.filter((n) => !skip(n)).map((n) => <option key={n} value={n}>{n}</option>)}</optgroup></>;
+}
+
+/** Master grid: tick the colours each design uses. Tap a column name to swap it for a store colour or remove it. Nothing changes until Save. */
 function EditColours({ o, onClose }: { o: Order; onClose: () => void }) {
   const lib = filMasterSig.value.colours;
   const [sel, setSel] = useState(() => Object.fromEntries(o.items.map((i, k) => [k, lineColours(i)])) as Record<number, string[]>);
-  const [extra, setExtra] = useState<string[]>(o.floorCols ?? []), [add, setAdd] = useState("");
+  const [extra, setExtra] = useState<string[]>(o.floorCols ?? []);
+  const [ren, setRen] = useState<Record<string, string>>({}), [edit, setEdit] = useState<string | null>(null);
   const cols = useMemo(() => { const u = new Set([...Object.values(sel).flat(), ...extra]); return [...lib.map((c) => c.name).filter((n) => [...u].some((x) => eq(x, n))), ...[...u].filter((x) => !lib.some((c) => eq(c.name, x)))]; }, [sel, extra]);
   const flip = (k: number, c: string) => setSel({ ...sel, [k]: sel[k].some((x) => eq(x, c)) ? sel[k].filter((x) => !eq(x, c)) : [...sel[k], c] });
-  const save = () => { patchOrder(o, { floorCols: extra, items: o.items.map((i, k) => ({ ...i, colours: sel[k] })) }); onClose(); };
+  const uniq = (xs: string[]) => xs.filter((x, j) => xs.findIndex((y) => eq(x, y)) === j);
+  /** Replace colour `c` with `to` everywhere (to = "" removes the column). */
+  const swap = (c: string, to: string) => {
+    const f = (xs: string[]) => uniq(xs.flatMap((x) => (eq(x, c) ? (to ? [to] : []) : [x])));
+    setSel(Object.fromEntries(Object.entries(sel).map(([k, v]) => [k, f(v)])));
+    setExtra(f(extra));
+    const next: Record<string, string> = {}; for (const [from, t] of Object.entries(ren)) next[from] = eq(t, c) ? to : t;
+    if (!Object.keys(ren).some((k) => eq(k, c)) && !Object.values(ren).some((t) => eq(t, c))) next[c] = to;
+    setRen(next); setEdit(null);
+  };
+  const gppOf = (gpp?: Record<string, number>) => { if (!gpp) return gpp; const out: Record<string, number> = {};
+    for (const [c, g] of Object.entries(gpp)) { const hit = Object.keys(ren).find((k) => eq(k, c)); const to = hit === undefined ? c : ren[hit]; if (to) out[to] = (out[to] ?? 0) + g; } return out; };
+  const save = () => { patchOrder(o, { floorCols: extra, items: o.items.map((i, k) => ({ ...i, colours: sel[k], gpp: gppOf(i.gpp) })) }); onClose(); };
+  const pick = "h-9 px-2 rounded-lg text-[13px] font-semibold cursor-pointer";
   return <Sheet huge open onClose={onClose} title={`Edit colours · ${o.no}`}
-    footer={<><select value={add} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) setExtra([...extra, v]); setAdd(""); }} class="h-9 px-2 mr-auto rounded-lg border border-dashed border-grn text-grn text-[13px] font-semibold cursor-pointer"><option value="">＋ Add colour from library</option>{lib.filter((c) => !cols.some((x) => eq(x, c.name))).map((c) => <option key={c.name}>{c.name}</option>)}</select>
+    footer={<><select value="" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) setExtra([...extra, v]); }} class={`${pick} mr-auto border border-dashed border-grn text-grn`}><option value="">＋ Add colour from store</option><ColourOptions skip={(n) => cols.some((x) => eq(x, n))} /></select>
       <Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save colours</Button></>}>
-    <p class="t-meta mb-3">Tap to tick the colours each design uses.</p>
+    <p class="t-meta mb-3">Tap a box to tick the colours each design uses. Tap a colour's name to change it to a store colour or remove it. Striped columns have no stock in the store.</p>
+    {edit && <div class="sticky top-0 z-10 shadow mb-3 p-2.5 rounded-lg bg-c1 flex flex-wrap items-center gap-2 text-[13px]">
+      <Sq hex={colourHex(edit)} size="w-4 h-4" /><b>{edit}</b><span class="text-c2">{colourStore(edit) ? `· ${kg(colourStore(edit))} in store` : "· not in store"}</span>
+      <select autoFocus value="" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) swap(edit, v); }} class={`${pick} border border-line bg-c0`}><option value="">Change to…</option><ColourOptions skip={(n) => eq(n, edit)} /></select>
+      <Button variant="outline" onClick={() => swap(edit, "")}>Remove column</Button>
+      <Button variant="outline" class="ml-auto" onClick={() => setEdit(null)}>Done</Button>
+    </div>}
     <table class="w-full border-collapse text-[13px]">
       <thead><tr class="border-b border-line"><th class="px-1 py-2 text-[11px] text-c2">Image</th><th class="px-1 py-2 text-left text-[11px] text-c2">Design</th>
-        {cols.map((c) => <th key={c} class={`px-1 py-2 align-top w-12 ${colourStore(c) ? "" : "floor-empty text-red"}`}><div class="flex flex-col items-center gap-1"><Sq hex={colourHex(c)} size="w-4 h-4" /><span class="text-[11px] leading-none whitespace-nowrap [writing-mode:vertical-rl] rotate-180 h-[88px] text-left">{c}</span></div></th>)}</tr></thead>
+        {cols.map((c) => <th key={c} class={`px-1 py-2 align-top w-12 ${colourStore(c) ? "" : "floor-empty text-red"}`}><button type="button" title={`Change or remove ${c}`} onClick={() => setEdit(edit === c ? null : c)} class={`flex flex-col items-center gap-1 mx-auto !min-h-0 cursor-pointer rounded-md px-0.5 hover:bg-c1 ${edit === c ? "ring-2 ring-grn" : ""}`}><Sq hex={colourHex(c)} size="w-4 h-4" /><span class="text-[11px] leading-none whitespace-nowrap [writing-mode:vertical-rl] rotate-180 h-[88px] text-left underline decoration-dotted underline-offset-2">{c}</span></button></th>)}</tr></thead>
       <tbody>{o.items.map((i, k) => i.offFloor ? null : <tr key={k} class="border-b border-line">
         <td class="px-1 py-1.5"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-14 h-14" /></td>
         <td class="px-1 py-1.5">{i.name}</td>
