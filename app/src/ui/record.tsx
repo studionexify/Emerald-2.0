@@ -9,7 +9,7 @@ import { MediaImg } from "./media";
 import { log, me, toBin, uid, type LogKind } from "../data";
 
 export type FType = "text" | "number" | "date" | "select" | "textarea" | "color" | "combo";
-export type FDef<T> = { k: keyof T & string; label: string; type?: FType; /** select / combo choices; may depend on the draft */ options?: string[] | ((r: T) => string[]);
+export type FDef<T> = { k: keyof T & string; label: string; type?: FType; /** colour dot shown before each option (custom dropdown) */ dot?: (o: string) => string | undefined; /** select / combo choices; may depend on the draft */ options?: string[] | ((r: T) => string[]);
   /** Fields to fill in when this one changes (e.g. suggest a number from the picks so far). */ then?: (v: unknown, r: T) => Partial<T>; wide?: boolean; show?: (r: T) => ComponentChildren; hide?: boolean; suffix?: string;
   /** Form chunk. The first group is open; later groups sit behind a toggle. */ group?: string;
   /** Conditional input: rendered only when true for the current draft. */ when?: (r: T) => boolean };
@@ -41,11 +41,22 @@ export const PaneSection = ({ title, children }: { title: string; children: Comp
   </section>
 );
 
+function DotSelect({ value, opts, dot, on }: { value: string; opts: string[]; dot: (o: string) => string | undefined; on: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const D = (o: string) => <span class="w-3.5 h-3.5 rounded-full border border-c3 shrink-0" style={{ background: o ? dot(o) ?? "transparent" : "transparent" }} />;
+  return <div class="relative" onBlur={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setOpen(false); }}>
+    <button type="button" class={`${inputCls} flex items-center gap-2 text-left`} onClick={() => setOpen(!open)}>{value && D(value)}<span class="flex-1 truncate">{value || "—"}</span><span aria-hidden="true">▾</span></button>
+    {open && <div class="absolute z-30 left-0 right-0 mt-1 max-h-72 overflow-y-auto rounded-xl border border-line bg-c0 shadow-lg p-1 flex flex-col">
+      {opts.map((o) => <button type="button" key={o} class={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-left hover:bg-c1 ${o === value ? "bg-c1 font-semibold" : ""}`} onClick={() => { on(o); setOpen(false); }}>{D(o)}{o || "—"}</button>)}
+    </div>}
+  </div>;
+}
 export function Input<T>({ f, value, on, row }: { f: FDef<T>; value: unknown; on: (v: unknown) => void; row?: T }) {
   const t = f.type ?? "text";
   const v = value ?? "";
   const opts = sortAbc(typeof f.options === "function" ? f.options(row as T) : f.options ?? []);
   if (t === "combo") { const id = `dl-${f.k}`; return <><input class={inputCls} list={id} value={String(v)} onInput={(e) => on((e.target as HTMLInputElement).value)} placeholder="Pick or type new" /><datalist id={id}>{opts.map((o) => <option key={o} value={o} />)}</datalist></>; }
+  if (t === "select" && f.dot) return <DotSelect value={String(v)} opts={opts} dot={f.dot} on={on} />;
   if (t === "select") {
     return <select class={inputCls} value={String(v)} onChange={(e) => { const x = (e.target as HTMLSelectElement).value; on(typeof value === "number" && x !== "" && !isNaN(Number(x)) ? Number(x) : x); }}>{!opts.includes(String(v)) && <option value={String(v)}>{String(v) || "—"}</option>}{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
   }

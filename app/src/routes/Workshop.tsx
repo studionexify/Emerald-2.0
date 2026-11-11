@@ -166,10 +166,13 @@ const spN = (no: string) => { const d = (no.match(/\d+/g) ?? []).pop(); return d
 const lightHex = (h: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(h.replace(/^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i, "#$1$1$2$2$3$3")); if (!m) return false; const n = parseInt(m[1], 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 160; };
 const matId = (m: string) => `mat-${m.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 /** Waterfall: each card goes to the currently shortest column (height ≈ header + spool rows), so reading order stays left→right. */
-function Masonry({ cols, items }: { cols: number; items: Spool[][] }) {
+function Masonry({ items }: { cols: number; items: Spool[][] }) {
+  const ref = useRef<HTMLDivElement>(null); const [w, setW] = useState(0);
+  useLayoutEffect(() => { const el = ref.current; if (!el) return; const ro = new ResizeObserver(() => setW(el.clientWidth)); ro.observe(el); setW(el.clientWidth); return () => ro.disconnect(); }, []);
+  const cols = Math.max(1, Math.floor((w + 8) / 268));
   const c: Spool[][][] = Array.from({ length: cols }, () => []); const h = Array(cols).fill(0);
   for (const g of items) { const i = h.indexOf(Math.min(...h)); c[i].push(g); h[i] += 1.4 + g.length; }
-  return <div class="flex gap-2 mt-2 items-start">{c.map((col, i) => <div key={i} class="flex-1 min-w-0 flex flex-col gap-2">{col.map((gs) => <SpoolCard key={gs[0].id} list={gs} open={() => {}} />)}</div>)}</div>;
+  return <div ref={ref} class="flex gap-2 mt-2 items-start">{c.map((col, i) => <div key={i} class="flex-1 min-w-0 flex flex-col gap-2">{col.map((gs) => <SpoolCard key={gs[0].id} list={gs} open={() => {}} />)}</div>)}</div>;
 }
 /** Long material sections render 12 cards first; the rest on demand. */
 function MatCards({ cols, groups }: { cols: number; groups: Spool[][] }) {
@@ -246,7 +249,7 @@ const nextSlot = (r: Spool) => { const g = spoolsSig.value.filter((s) => s.id !=
 const reslot = (_v: unknown, r: Spool): Partial<Spool> => ({ slot: nextSlot(r) });
 const sFields: FDef<Spool>[] = [
   { k: "material", group: "Essentials", label: "Material", type: "select", options: MATS, then: (v, r) => ({ ...(coloursFor(r).some((c) => lc(c) === lc(r.colour)) ? {} : { colour: "" }), slot: nextSlot(r), ...(masterMat(String(v))?.costKg ? { costKg: masterMat(String(v))!.costKg } : {}) }) },
-  { k: "colour", group: "Essentials", label: "Colour", type: "select", options: coloursFor, then: (v, r) => ({ slot: nextSlot(r), ...(masterColour(String(v))?.hex ? { hex: masterColour(String(v))!.hex } : {}) }) },
+  { k: "colour", group: "Essentials", label: "Colour", type: "select", options: coloursFor, dot: (c) => spHex({ colour: c }), then: (v, r) => ({ slot: nextSlot(r), ...(masterColour(String(v))?.hex ? { hex: masterColour(String(v))!.hex } : {}) }) },
   { k: "brand", group: "Essentials", label: "Brand", type: "select", options: brandsFor, then: reslot },
   { k: "hex", group: "Essentials", label: "Colour swatch", type: "color" },
   { k: "diameter", group: "Spec", label: "Diameter (mm)", type: "select", options: () => filMasterSig.value.diameters.map(String) }, { k: "spoolMat", group: "Weight", label: "Spool type", type: "select", options: () => filMasterSig.value.bodies.map((b) => b.name).sort(abc) },
