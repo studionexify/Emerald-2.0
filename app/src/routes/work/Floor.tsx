@@ -34,6 +34,10 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const rows = o.items.map((i, k) => ({ i, k, f: floorLine(o, i) })).filter((r) => !r.i.offFloor);
   const val = (r: (typeof rows)[number], k: SortKey): number | string => k === "sr" ? r.k : k === "name" ? r.i.name.toLowerCase() : k === "qty" ? r.i.qty : k === "printed" ? r.f.printed : k === "wasted" ? r.f.wasted : k === "remaining" ? r.f.remaining : k === "extra" ? r.f.extra : k === "model" ? Number(!!r.i.paid) : k === "machine" ? (r.i.machine ?? "") : Number(lineColours(r.i).some((c) => eq(c, k.slice(2))));
   const sorted = [...rows].sort((a, b) => { const x = val(a, sort.k), y = val(b, sort.k); return (x < y ? -1 : x > y ? 1 : a.k - b.k) * (sort.up ? 1 : -1); });
+  /* Completed lines are hidden by default, like hidden rows in Excel: Sr numbers and totals don't change. Choice is remembered on this device. */
+  const [showDone, setShowDone] = useState(() => { try { return localStorage.getItem("emerald:floor:showDone") === "1"; } catch { return false; } });
+  const toggleDone = () => { const v = !showDone; setShowDone(v); try { localStorage.setItem("emerald:floor:showDone", v ? "1" : "0"); } catch {} };
+  const shown = showDone ? sorted : sorted.filter((r) => r.f.remaining);
   const need = Object.fromEntries(columns.map((c) => [c, Math.round(rows.reduce((a, r) => a + (lineColours(r.i).some((x) => eq(x, c)) ? r.f.remaining * gramsPerPc(r.i, lineColours(r.i).find((x) => eq(x, c))!) : 0), 0))]));
   const tot = rows.reduce((a, r) => ({ q: a.q + r.i.qty, p: a.p + r.f.printed, w: a.w + r.f.wasted, r: a.r + r.f.remaining, e: a.e + r.f.extra }), { q: 0, p: 0, w: 0, r: 0, e: 0 });
   const done = rows.filter((r) => !r.f.remaining).length, kg = Object.values(need).reduce((a, x) => a + x, 0) / 1000;
@@ -54,6 +58,8 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <div class="flex flex-wrap items-start gap-3 pr-16">
           <div class="mr-auto min-w-0"><h2 class="text-[20px] font-semibold leading-tight">{o.no} · {o.customer}</h2>
             <div class="t-meta mt-1">Due {shortDate(o.due)} · {rows.length} designs · {tot.q} pcs</div></div>
+          {done > 0 && <label class="h-9 inline-flex items-center gap-2 px-3 rounded-full border border-line text-[13px] font-semibold cursor-pointer select-none">
+            <input type="checkbox" checked={showDone} onChange={toggleDone} class="accent-grn w-4 h-4 !min-h-0 cursor-pointer" />Show completed ({done})</label>}
           <Button variant="outline" onClick={() => setLines(true)}>✎ Edit line items</Button>
           <Button variant="outline" onClick={() => setCols(true)}>✎ Edit colours</Button>
         </div>
@@ -68,7 +74,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
                 <span class="text-[11px] font-semibold leading-none normal-case tracking-normal whitespace-nowrap [writing-mode:vertical-rl] rotate-180 bg-c4 rounded py-1 px-0.5" title={c}>{c}</span><Sq hex={colourHex(c)} size="w-4 h-4 ring-1 ring-white/70" /></div></th>; })}
           </tr></thead>
           <tbody>
-            {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
+            {shown.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
               <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2 [&>td]:grayscale [&>td]:opacity-60" : ""}`}>
                 <td class={td}>{k + 1}</td>
                 <td class={td}>{(() => { const run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return run
@@ -94,7 +100,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
           </tfoot>
         </table></div>
         <div class="min-[1100px]:hidden grid gap-2">
-          {sorted.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i), run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return (
+          {shown.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i), run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return (
             <div key={k} class={`rounded-xl border border-line p-3 ${fin ? "bg-c1 text-c2 grayscale opacity-70" : "bg-c0"}`}>
               <div class="flex items-center gap-3">
                 <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 shrink-0" onAdd={(fl) => attach(k, fl)} />
