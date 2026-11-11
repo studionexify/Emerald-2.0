@@ -3,7 +3,7 @@ import { useState } from "preact/hooks";
 import { WORKSHOP_TABS } from "../nav";
 import { Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat, Status, Table } from "../ui";
 import {
-  applyMove, bodyTare, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, toBin, today, uid,
+  applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, toBin, today, uid,
   type PackItem, type Spool,
 } from "../data";
 
@@ -52,40 +52,46 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
   const line = a.lines.find((l) => l.ref === s.id);
   const [gross, setGross] = useState(0);
   const tare = s.tare ?? bodyTare(s.spoolMat) ?? filMasterSig.value.tare;
-  const net = Math.max(0, gross - tare), d = net - s.grams;
+  const net = Math.max(0, gross - tare);
+  const cols = "grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_96px_200px] items-center gap-x-3 gap-y-2 py-2.5 border-t border-line first:border-0";
   if (line) return (
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 border-t border-line first:border-0">
+    <div class={cols}>
       <SpoolHead s={s} />
-      <span class="text-sm">{line.isNew ? "Added" : <>{g(line.before)} → <b>{g(line.after)}</b> <span class={line.after - line.before < 0 ? "text-[var(--color-bad,#a3271a)]" : "text-c3"}>{line.after - line.before > 0 ? "+" : ""}{line.after - line.before}</span></>}</span>
-      <Status tone="done">{line.isNew ? "Added" : "Updated"}</Status>
-      <span class="t-meta">{line.by}</span>
-      {!line.isNew && <Button variant="outline" onClick={() => { setSpoolGrams({ ...s, grams: line.after }, line.before, line.before + tare, a, "Audit undo"); put({ ...a, lines: a.lines.filter((l) => l.ref !== s.id) }); }}>Undo</Button>}
+      <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span><s class="text-c3">{g(line.before)}</s> <b>{g(line.after)}</b></span>
+      <span class="flex items-center gap-2 justify-end max-sm:col-span-2"><Status tone="done">{line.isNew ? "Added" : "Updated"}</Status>
+        {!line.isNew && <Button variant="outline" onClick={() => { setSpoolGrams({ ...s, grams: line.after }, line.before, line.before + tare, a, "Audit undo"); put({ ...a, lines: a.lines.filter((l) => l.ref !== s.id) }); log(`Audit ${a.no}: undo ${spoolName(s)}`, spoolName(s), "stock"); }}>Undo</Button>}</span>
     </div>
   );
   return (
-    <div class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_72px_104px_80px_auto] items-center gap-x-3 gap-y-1.5 py-2 border-t border-line first:border-0">
+    <div class={cols}>
       <SpoolHead s={s} />
       <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span>{g(s.grams)}</span>
-      <label class="flex items-center gap-1 text-sm"><input class={`${inputCls} !w-[88px] !h-9 text-right`} type="number" inputMode="numeric" placeholder="Gross g" aria-label={`Gross weight of ${spoolName(s)}`} value={gross || ""} onInput={(e) => setGross(num(e))} /> g</label>
-      <span class="text-sm num">{gross ? <><b>{g(net)}</b> <span class="text-c3">{d > 0 ? "+" : ""}{d}</span></> : <span class="text-c3">tare {tare} g</span>}</span>
-      <Button disabled={!gross} onClick={() => {
-        setSpoolGrams(s, net, gross, a, "Audit count");
-        addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: net, unit: "g", by: who(), at: stamp() });
-        log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)}`, spoolName(s), "stock");
-      }}>Update</Button>
+      <span class="flex items-center gap-2 justify-end max-sm:col-span-2">
+        <input class={`${inputCls} !w-[96px] !h-9 text-right num`} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" placeholder="Gross g" aria-label={`Gross weight of ${spoolName(s)}`}
+          value={gross || ""} onInput={(e) => { const v = val(e).replace(/\D/g, ""); (e.target as HTMLInputElement).value = v; setGross(Number(v) || 0); }} />
+        <Button disabled={!gross} onClick={() => {
+          setSpoolGrams(s, net, gross, a, "Audit count");
+          addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: net, unit: "g", by: who(), at: stamp() });
+          log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)} (gross ${g(gross)})`, spoolName(s), "stock");
+        }}>Update</Button>
+      </span>
     </div>
   );
 }
 const SpoolHead = ({ s }: { s: Spool }) => (
-  <span class="flex items-center gap-2.5 min-w-0 flex-1">
-    <span class="w-3.5 h-3.5 rounded-full border border-c2 shrink-0" style={{ background: s.hex || "transparent" }} />
-    <span class="min-w-0"><b class="text-sm">{s.material} {s.colour}</b><span class="t-meta block truncate">{s.slot != null ? `#${s.slot} · ` : ""}{s.brand || "—"} · {s.spoolMat || "spool"}{s.location ? ` · ${s.location}` : ""}</span></span>
+  <span class="flex items-center gap-x-2.5 gap-y-0.5 min-w-0 flex-wrap">
+    <span class="w-4 h-4 rounded border border-c2 shrink-0" style={{ background: s.hex || "transparent" }} />
+    <span class="text-sm">{s.material}</span><span class="text-c3">›</span>
+    <b class="text-sm">{s.colour}</b><span class="text-c3">›</span>
+    <b class="text-[22px] leading-none num" title="Spool number">#{s.slot ?? "?"}</b><span class="text-c3">›</span>
+    <span class="text-sm">{s.brand || "—"}</span><span class="text-c3">›</span>
+    <span class="text-sm text-c3">{s.spoolMat || "Plastic"}</span>
   </span>
 );
 
 function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; brand: string; body: string }; done: () => void }) {
   const M = filMasterSig.value;
-  const [d, setD] = useState({ material: f.mat || M.materials[0]?.name || "PLA", colour: f.col, brand: f.brand, spoolMat: f.body || M.body, size: M.size, gross: 0 });
+  const [d, setD] = useState({ material: f.mat || M.materials[0]?.name || "PLA", colour: f.col, brand: f.brand, spoolMat: f.body || defaultBody(f.brand), size: M.size, gross: 0 });
   const tare = bodyTare(d.spoolMat) ?? M.tare, net = Math.max(0, d.gross - tare);
   const ok = d.material && d.colour && d.gross > 0;
   return (
@@ -94,7 +100,7 @@ function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; bra
       <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2">
         <Field label="Type"><input class={inputCls} list="au-mat" value={d.material} onInput={(e) => setD({ ...d, material: val(e) })} /></Field>
         <Field label="Colour"><input class={inputCls} list="au-col" value={d.colour} onInput={(e) => setD({ ...d, colour: val(e) })} /></Field>
-        <Field label="Brand"><input class={inputCls} list="au-brand" value={d.brand} onInput={(e) => setD({ ...d, brand: val(e) })} /></Field>
+        <Field label="Brand"><input class={inputCls} list="au-brand" value={d.brand} onInput={(e) => { const b = val(e); setD({ ...d, brand: b, spoolMat: defaultBody(b) }); }} /></Field>
         <Field label="Spool body"><select class={inputCls} value={d.spoolMat} onChange={(e) => setD({ ...d, spoolMat: (e.target as HTMLSelectElement).value })}>{M.bodies.map((b) => <option key={b.name} value={b.name}>{b.name} ({b.tare} g)</option>)}</select></Field>
         <Field label="Size (g)"><input class={inputCls} type="number" value={d.size} onInput={(e) => setD({ ...d, size: num(e) })} /></Field>
         <Field label={`Gross → net ${g(net)}`}><input class={inputCls} type="number" value={d.gross || ""} onInput={(e) => setD({ ...d, gross: num(e) })} /></Field>
@@ -126,6 +132,20 @@ function FilamentAudit({ a }: { a: Audit }) {
   const rows = all.filter((s) => fit(s)).sort((x, y) => Number(a.lines.some((l) => l.ref === x.id)) - Number(a.lines.some((l) => l.ref === y.id)) || spoolGroup(x).localeCompare(spoolGroup(y)) || (x.slot ?? 0) - (y.slot ?? 0));
   const picked = Object.values(f).some(Boolean);
   const M = filMasterSig.value;
+  const hexOf = (c: string) => M.colours.find((x) => x.name.toLowerCase() === c.toLowerCase())?.hex ?? all.find((x) => x.colour === c)?.hex;
+  const [cOpen, setCOpen] = useState(false);
+  const Colour = (
+    <div class="flex flex-col gap-0.5 min-w-0 relative"><span class="t-meta">Colour</span>
+      <button type="button" class={`${sel} flex items-center gap-2 text-left`} onClick={() => setCOpen(!cOpen)} aria-expanded={cOpen}>
+        {f.col && <span class="w-4 h-4 rounded border border-c2 shrink-0" style={{ background: hexOf(f.col) }} />}<span class="flex-1 truncate">{f.col || "Any"}</span><span class="text-c3">▾</span>
+      </button>
+      {cOpen && <div class="absolute z-20 top-full mt-1 left-0 w-64 max-h-80 overflow-y-auto rounded-xl border border-line bg-c0 shadow-lg p-1.5 grid grid-cols-1 gap-0.5">
+        {["", ...opts("col")].map((c) => <button type="button" key={c || "any"} onClick={() => { setF({ ...f, col: c }); setCOpen(false); }}
+          class={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[13px] text-left hover:bg-c1 ${f.col === c ? "bg-c1 font-semibold" : ""}`}>
+          <span class="w-5 h-5 rounded border border-c2 shrink-0" style={{ background: c ? hexOf(c) : "transparent" }} />{c || "Any colour"}</button>)}
+      </div>}
+    </div>
+  );
   const S = (k: keyof typeof f, label: string) => (
     <label class="flex flex-col gap-0.5 min-w-0"><span class="t-meta">{label}</span>
       <select class={sel} value={f[k]} onChange={(e) => setF({ ...f, [k]: (e.target as HTMLSelectElement).value })}><option value="">Any</option>{opts(k).map((o) => <option key={o} value={o}>{o}</option>)}</select>
@@ -138,7 +158,7 @@ function FilamentAudit({ a }: { a: Audit }) {
       <datalist id="au-brand">{M.brands.map((m) => <option key={m} value={m} />)}</datalist>
       <Card>
         <div class="grid grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2 items-end">
-          {S("mat", "Type / material")}{S("col", "Colour")}{S("brand", "Brand")}{S("body", "Spool body")}
+          {S("mat", "Type / material")}{Colour}{S("brand", "Brand")}{S("body", "Spool body")}
           {picked && <Button variant="ghost" onClick={() => setF({ mat: "", col: "", brand: "", body: "" })}>Clear</Button>}
         </div>
       </Card>
