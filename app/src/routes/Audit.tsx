@@ -1,7 +1,7 @@
 /** Store · Stock Audit: count every spool / item on the shelf and reconcile Emerald against it. */
 import { useState } from "preact/hooks";
 import { WORKSHOP_TABS } from "../nav";
-import { Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat, Status, Table } from "../ui";
+import { ask, Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat, Status, Table } from "../ui";
 import {
   applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, toBin, today, uid,
   type PackItem, type Spool,
@@ -74,7 +74,8 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
           addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: net, unit: "g", by: who(), at: stamp() });
           log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)} (gross ${g(gross)})`, spoolName(s), "stock");
         }}>Update</Button>
-        <Button variant="outline" title="Weight in Emerald is correct — confirm and move on" onClick={() => {
+        <Button variant="outline" disabled={!!gross} title="Weight in Emerald is correct — confirm and move on" onClick={async () => {
+          if (!(await ask(`Are you sure? Confirm that ${spoolName(s)} has ${g(s.grams)} of filament left, as in Emerald.`, { ok: "Yes, confirm" }))) return;
           addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: s.grams, unit: "g", by: who(), at: stamp(), ok: true });
           log(`Audit ${a.no}: ${spoolName(s)} confirmed at ${g(s.grams)}`, spoolName(s), "stock");
         }}>Next</Button>
