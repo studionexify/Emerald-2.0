@@ -47,19 +47,19 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
-    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute top-[2.5vh] bottom-[2.5vh] left-1/2 -translate-x-1/2 w-max min-w-[min(900px,95vw)] max-w-[95vw] bg-c0 rounded-2xl shadow-2xl flex flex-col">
-      <button type="button" aria-label="Close Floor" onClick={onClose} class="absolute -top-3 -right-3 z-20 w-13 h-13 ring-4 ring-c0 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
-      <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-2xl overscroll-contain"><div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8">
+    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute top-[2.5dvh] bottom-[2.5dvh] left-1/2 -translate-x-1/2 w-max min-w-[min(900px,95vw)] max-w-[95vw] bg-c0 rounded-2xl shadow-2xl flex flex-col max-[640px]:inset-0 max-[640px]:translate-x-0 max-[640px]:left-0 max-[640px]:w-full max-[640px]:min-w-0 max-[640px]:max-w-none max-[640px]:rounded-none">
+      <button type="button" aria-label="Close Floor" onClick={onClose} class="absolute -top-3 -right-3 max-[640px]:top-2 max-[640px]:right-2 max-[640px]:w-11 max-[640px]:h-11 max-[640px]:text-[20px] z-20 w-13 h-13 ring-4 ring-c0 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
+      <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-2xl max-[640px]:rounded-none overscroll-contain"><div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8 max-[640px]:pt-4 max-[640px]:pb-6">
         <div class="flex flex-wrap items-start gap-3 pr-16">
           <div class="mr-auto min-w-0"><h2 class="text-[20px] font-semibold leading-tight">{o.no} · {o.customer}</h2>
             <div class="t-meta mt-1">Due {shortDate(o.due)} · {rows.length} designs · {tot.q} pcs</div></div>
           <Button variant="outline" onClick={() => setLines(true)}>✎ Edit line items</Button>
           <Button variant="outline" onClick={() => setCols(true)}>✎ Edit colours</Button>
         </div>
-        <div class="flex flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] sm:flex sm:flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
           {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${kg.toFixed(2)} kg`)}
         </div>
-        <table class="w-auto border-collapse text-[15px] num">
+        <div class="overflow-auto overscroll-contain max-h-[max(320px,calc(100dvh-300px))] max-[640px]:max-h-[calc(100dvh-250px)] rounded-lg border border-line"><table class="w-auto border-collapse text-[15px] num">
           <thead class="sticky top-0 z-[5] bg-c4 text-c0"><tr>
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
             {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-bottom !px-1 w-10 min-w-10 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
@@ -91,7 +91,8 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
             <tr><td colSpan={11} class="px-1 py-1.5 text-right">Needed for pending (g)</td>{columns.map((c) => <td key={c} class={`${td} ${store[c] ? "" : "floor-empty"}`}>{need[c] || "—"}</td>)}</tr>
             <tr><td colSpan={11} class="px-1 py-1.5 text-right">Balance after job (g)</td>{columns.map((c) => { const b = store[c] - need[c]; return <td key={c} class={`${td} font-semibold ${b < 0 ? "text-red" : "text-grn"} ${store[c] ? "" : "floor-empty"}`}>{b > 0 ? "+" : ""}{b}</td>; })}</tr>
           </tfoot>
-        </table>
+        </table></div>
+        {columns.length > 0 && <p class="t-meta mt-2 min-[1100px]:hidden">← Swipe the sheet sideways to see all {columns.length} colour columns →</p>}
         {!rows.length && <p class="t-meta py-6 text-center">No line items on the sheet. Use Edit line items to add one.</p>}
       </div></div>
     </div>

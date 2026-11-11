@@ -131,13 +131,21 @@ function SegRow({ seg, o, onOpen, onEdit, onFloor }: { seg: Segment; o: Order; o
 /** One strip: key numbers, queue and the pipeline stages, each with a glyph. Stages filter the list. */
 const STAGE_GLYPH: Record<string, string> = { production: "printer", qc: "shield", packing: "box", archive: "archive", archived: "archive", quotation: "doc", po: "stamp", invoice: "receipt", shipping: "truck" };
 function Summary({ kpis, list, active, onPick, stages }: { kpis: [string, string | number, string, string?][]; list: Order[]; active: string; onPick: (k: string) => void; stages: typeof STAGES }) {
-  const tile = "px-3 py-2.5 min-w-0 text-left border-line";
-  return <div class="grid rounded-[var(--radius-card)] bg-c0 border border-line overflow-hidden divide-x divide-line" style={{ gridTemplateColumns: `repeat(${kpis.length + stages.length}, minmax(0, 1fr))` }}>
-    {kpis.map(([k, v, ic, cl]) => <div key={k} class={tile}><div class="t-meta flex items-center gap-1.5 truncate"><Icon name={ic} size={14} /><span class="truncate">{k}</span></div><div class={`num text-[22px] font-semibold leading-tight ${cl ?? ""}`}>{v}</div></div>)}
-    {stages.map((s) => { const n = list.filter((o) => o.stage === s.key).length, on = active === s.key; return (
-      <button key={s.key} type="button" onClick={() => onPick(on ? "" : s.key)} aria-pressed={on} class={`${tile} cursor-pointer !min-h-0 ${on ? "bg-c4 text-c0" : "bg-c1/50 hover:bg-c1"}`}>
-        <div class={`text-[12px] flex items-center gap-1.5 truncate ${on ? "opacity-80" : "text-c3"}`}><Icon name={STAGE_GLYPH[s.key] ?? "rows"} size={14} /><span class="truncate">{s.label}</span></div>
-        <div class="num text-[22px] font-semibold leading-tight">{n}</div></button>); })}
+  const tile = "px-3 py-2.5 min-w-0 text-left bg-c0";
+  const lab = "t-meta flex flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-1.5 leading-tight";
+  const grid = "grid gap-px bg-line";
+  return <div class="flex flex-col xl:flex-row gap-px bg-line rounded-[var(--radius-card)] border border-line overflow-hidden" style={{ "--k": kpis.length, "--s": stages.length } as never}>
+    <div class={`${grid} grid-cols-2 sm:grid-cols-[repeat(var(--k),minmax(0,1fr))] xl:flex-[var(--k)]`}>
+      {kpis.map(([k, v, ic, cl]) => <div key={k} class={tile}><div class={lab}><Icon name={ic} size={14} /><span>{k}</span></div><div class={`num text-[22px] font-semibold leading-tight ${cl ?? ""}`}>{v}</div></div>)}
+      {kpis.length % 2 === 1 && <div class="bg-c0 sm:hidden" />}
+    </div>
+    <div class={`${grid} grid-cols-4 xl:grid-cols-[repeat(var(--s),minmax(0,1fr))] xl:flex-[var(--s)]`}>
+      {stages.map((s) => { const n = list.filter((o) => o.stage === s.key).length, on = active === s.key; return (
+        <button key={s.key} type="button" onClick={() => onPick(on ? "" : s.key)} aria-pressed={on} class={`${tile} cursor-pointer !min-h-0 ${on ? "!bg-c4 text-c0" : "!bg-c1 hover:!bg-c2/20"}`}>
+          <div class={`${lab} ${on ? "opacity-80" : ""}`}><Icon name={STAGE_GLYPH[s.key] ?? "rows"} size={14} /><span>{s.label}</span></div>
+          <div class="num text-[22px] font-semibold leading-tight">{n}</div></button>); })}
+      {Array.from({ length: (4 - (stages.length % 4)) % 4 }, (_, i) => <div key={`f${i}`} class="bg-c1 xl:hidden" />)}
+    </div>
   </div>;
 }
 
@@ -257,7 +265,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
       {seg === "inhouse" && <button type="button" onClick={() => setQuick(true)} class="self-start !min-h-0 h-11 px-5 rounded-xl bg-grn text-c0 inline-flex items-center gap-2 text-[15px] font-bold tracking-wide cursor-pointer hover:opacity-90"><Icon name="plus" size={18} />Create</button>}
       <Section title={st ? `${STAGES.find((x) => x.key === st)?.label} orders` : "Live orders"} note={String(live.length)} action={st ? <button class="t-meta underline cursor-pointer !min-h-0" onClick={() => setSt("")}>Show all live</button> : undefined}>
           <div class="flex flex-wrap items-center gap-2 mb-2">
-            <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search client, order no. or product" aria-label="Search live orders" class="h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] flex-1 min-w-[180px]" />
+            <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search orders or products" aria-label="Search live orders" class="h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] flex-1 min-w-[180px]" />
             <select value={sort} onChange={(e) => setSort((e.target as HTMLSelectElement).value as typeof sort)} aria-label="Sort live orders" class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer">
               <option value="due">{seg === "inhouse" ? "Sort: newest" : "Sort: deadline"}</option>{seg !== "client" && <option value="done">Sort: most done</option>}{seg !== "client" && <option value="pending">Sort: most pending</option>}
             </select>
