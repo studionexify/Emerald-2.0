@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
 import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross } from "../../data";
-import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
+import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 const n0 = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
@@ -136,14 +136,14 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked }: { colour:
   const all = spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0);
   const mats = [...new Set(all.map((s) => s.material))].sort(), brands = [...new Set(all.map((s) => s.brand).filter(Boolean))].sort();
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const hit = (s: Spool) => (!mat || s.material === mat) && (!brand || s.brand === brand) && words.every((w) => `${s.material} ${s.colour} ${s.brand} ${s.spoolNo}`.toLowerCase().includes(w));
+  const hit = (s: Spool) => (!mat || s.material === mat) && (!brand || s.brand === brand) && words.every((w) => `${s.material} ${s.colour} ${s.brand} ${spoolNum(s)}`.toLowerCase().includes(w));
   const loaded = (s: Spool) => s.status === "loaded" && !!machine && machine.split(" + ").some((m) => eq(s.printer, m));
   const rank = (a: Spool, b: Spool) => Number(loaded(b)) - Number(loaded(a)) || b.grams - a.grams;
   const match = all.filter((s) => eq(s.colour, colour) && hit(s)).sort(rank), other = all.filter((s) => !eq(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
   const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = picked ? picked.includes(s.id) : value === s.id, busy = spoolBusy(s.id, self); return (
     <button type="button" disabled={!!busy} onClick={() => !busy && onPick(s.id)} aria-pressed={on} title={busy ? "In use until that print is completed" : undefined} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 ${busy ? "cursor-not-allowed border border-dashed border-red/50 bg-red-bg/40" : "cursor-pointer"} ${on ? "border-2 border-grn bg-grn-bg" : busy ? "" : "border border-line hover:bg-c1"} ${(dim || busy) && !on ? "opacity-60" : ""}`}>
       <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
-      <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · {s.spoolNo}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span>{busy && <span class="block text-[11px] font-semibold text-red truncate">In use · {busy.orderNo} · {busy.name}{busy.printer ? ` · ${busy.printer}` : ""}</span>}</span>
+      <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · #{spoolNum(s)}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span>{busy && <span class="block text-[11px] font-semibold text-red truncate">In use · {busy.orderNo} · {busy.name}{busy.printer ? ` · ${busy.printer}` : ""}</span>}</span>
       {busy ? <span class="text-[10px] font-bold text-red bg-red-bg rounded px-1.5 py-0.5 whitespace-nowrap">IN USE</span> : loaded(s) ? <span class="text-[10px] font-bold text-grn bg-grn-bg rounded px-1.5 py-0.5 whitespace-nowrap">LOADED</span> : <span />}
       <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{spoolGross(s)} g</span></button>); };
   const chip = (on: boolean, l: string, f: () => void) => <button type="button" onClick={f} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${on ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>;
@@ -159,7 +159,9 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked }: { colour:
     </div>
   </div>;
 }
-const spoolName = (id?: string) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? { s, t: `${s.material} · ${s.colour} · ${s.spoolNo}` } : null; };
+/** The number written on the spool in the store (its slot), never the internal id. */
+const spoolNum = (s: Spool) => String(s.slot ?? s.spoolNo);
+const spoolName = (id?: string) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? { s, t: `${s.material} · ${s.colour} · #${spoolNum(s)}` } : null; };
 /** Fullest spool of a colour, preferring the one loaded on this machine. */
 const bestSpool = (colour: string, machine?: string) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && eq(s.colour, colour) && !spoolBusy(s.id)).sort((a, b) => Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
 
@@ -174,12 +176,13 @@ const inp = "h-9 w-16 px-2 rounded-lg border border-line bg-c0 text-[15px] num";
 export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onClose: () => void; simple?: boolean }) {
   const i = o.items[k], f = floorLine(o, i), cs = lineColours(i);
   const [machine, setMachine] = useState(i.machine ?? ""), [plates, setPlates] = useState(1), [per, setPer] = useState(simple ? Math.max(1, f.remaining) : i.perPlate ?? 1), [bad, setBad] = useState(0);
-  const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c) => [c, bestSpool(c, i.machine) ?? ""])));
+  const last = pendingWeigh(o, i).slice(-1)[0];
+  const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c) => { const j = last?.colours?.findIndex((x) => eq(x, c)) ?? -1, id = j >= 0 ? last!.spoolIds?.[j] : undefined; return [c, id && !spoolBusy(id) ? id : bestSpool(c, i.machine) ?? ""]; })));
   const [tab, setTab] = useState(cs.find((c) => !sp[c]) ?? cs[0]);
   const [machines, setMachines] = useState<string[]>(i.machine ? i.machine.split(" + ") : []), [picked, setPicked] = useState<string[]>([]);
   const pcs = plates * per, ready = simple ? picked.length > 0 && !picked.some((id) => spoolBusy(id)) : cs.every((c) => sp[c] && !spoolBusy(sp[c]));
   /** Free choice of spools: any material, colour or brand. Keys are the colour name, made unique when a colour repeats. */
-  const freeSpools = () => { const out: Record<string, string> = {}; for (const id of picked) { const s = spoolsSig.value.find((x) => x.id === id); let key = s?.colour || "Spool"; if (out[key]) key = `${key} · ${s?.spoolNo}`; out[key] = id; } return out; };
+  const freeSpools = () => { const out: Record<string, string> = {}; for (const id of picked) { const s = spoolsSig.value.find((x) => x.id === id); let key = s?.colour || "Spool"; if (out[key]) key = `${key} · #${s ? spoolNum(s) : ""}`; out[key] = id; } return out; };
   const start = () => { startPlates(o, k, { machine: simple ? machines.join(" + ") || undefined : machine || undefined, plates, perPlate: per, spools: simple ? freeSpools() : Object.fromEntries(cs.map((c) => [c, sp[c]])) }); onClose(); };
   const skip = () => { logPlates(o, k, { good: pcs - Math.min(bad, pcs), wasted: Math.min(bad, pcs), plates, perPlate: per, gpp: {}, deduct: false }); onClose(); };
   return <Sheet huge open onClose={onClose} title={`▶ Start print · ${i.name}`}
@@ -201,7 +204,7 @@ export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onC
       <SpoolPicker colour="" machine={machines.join(" + ")} picked={picked} onPick={(id) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id])} />
     </> : cs.length ? <>
       <div class="flex flex-wrap gap-1.5 mt-4 mb-2">{cs.map((c) => { const n = spoolName(sp[c]); return <button key={c} type="button" onClick={() => setTab(c)} class={`h-8 px-3 !min-h-0 rounded-full flex items-center gap-1.5 text-[12px] font-semibold cursor-pointer ${tab === c ? "bg-c4 text-c0" : "bg-c1 text-c4"}`}>
-        <Sq hex={colourHex(c)} size="w-3.5 h-3.5" />{c}{n ? <span class={tab === c ? "opacity-80" : "text-grn"}>✓ {n.s.spoolNo}</span> : <span class="opacity-70">· pick spool</span>}</button>; })}</div>
+        <Sq hex={colourHex(c)} size="w-3.5 h-3.5" />{c}{n ? <span class={tab === c ? "opacity-80" : "text-grn"}>✓ #{spoolNum(n.s)}</span> : <span class="opacity-70">· pick spool</span>}</button>; })}</div>
       {tab && <SpoolPicker colour={tab} machine={machine} value={sp[tab]} onPick={(id) => { const next = { ...sp, [tab]: id }; setSp(next); const nx = cs.find((c) => !next[c]); if (nx) setTab(nx); }} />}
     </> : <p class="t-meta mt-3">No colours set for this design. Use Edit colours first, or Skip to log counts only.</p>}
     </div>
@@ -216,10 +219,13 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c, j) => [c, run.spoolIds?.[j] ?? bestSpool(c, run.printer) ?? ""])));
   const [g, setG] = useState<Record<string, number>>(() => Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
   const [chg, setChg] = useState<string | null>(null), [w, setW] = useState<Record<string, number>>({});
-  /** Spool weighed after the print (gross): grams used = gross before − gross now, spread over the plates. */
-  const weigh = (c: string, v: number) => { setW({ ...w, [c]: v }); const n = spoolName(sp[c]); if (n && v > 0) setG({ ...g, [c]: Math.max(0, Math.round((spoolGross(n.s) - v) / plates)) }); };
-  const pcs = plates * per, wasted = Math.min(bad, pcs), perG = cs.reduce((a, c) => a + (g[c] || 0), 0);
-  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g }); onClose(); };
+  const prior = pendingWeigh(o, i), priorPlates = prior.reduce((a, x) => a + (x.plates ?? 1), 0), priorPcs = prior.reduce((a, x) => a + x.units, 0);
+  const pcs = plates * per, wasted = Math.min(bad, pcs), perG = cs.reduce((a, c) => a + (g[c] || 0), 0), allPlates = plates + priorPlates;
+  /** Spools stay loaded between plates: log counts now, weigh once when the batch is done. On by default while pieces remain. */
+  const [later, setLater] = useState(!simple && f.remaining > pcs);
+  /** Spool weighed at the end (gross): grams used = gross before − gross now, spread over every plate since it was loaded. */
+  const weigh = (c: string, v: number) => { setW({ ...w, [c]: v }); const n = spoolName(sp[c]); if (n && v > 0) setG({ ...g, [c]: Math.max(0, Math.round((spoolGross(n.s) - v) / allPlates)) }); };
+  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later }); onClose(); };
   const when = run.at ? new Date(run.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
   return <Sheet huge open onClose={onClose} title={`■ Complete print · ${i.name}`}
     footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs}>Complete log</Button></>}>
@@ -233,6 +239,10 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
       <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2">{simple ? "Failed (of these)" : "Wasted (of these)"}<input type="number" min={0} max={pcs} class={`${inp} !border-red/40`} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
     </div>
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
+    {!simple && <label class="flex items-start gap-2 mt-4 p-3 rounded-xl border border-line cursor-pointer text-[13px]"><input type="checkbox" class="mt-0.5 accent-grn" checked={later} onChange={(e) => setLater((e.target as HTMLInputElement).checked)} />
+      <span><b>Spools stay loaded — weigh at the end</b><span class="block text-[12px] text-c2">Logs pieces only. Print the next plates from the same spools; weigh once when the batch is done and the grams are split over every plate.</span></span></label>}
+    {!later && prior.length > 0 && <div class="mt-2 text-[12px] rounded-lg bg-amb-bg text-amb px-3 py-2">This weigh covers <b>{allPlates} plates</b> — {priorPlates} earlier ({priorPcs} pcs, not yet weighed) + {plates} now.</div>}
+    {!later && <>
     <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Material used · weigh each spool now (gross), or type grams {simple ? "used" : "per plate"}</div>
     {cs.map((c) => { const n = spoolName(sp[c]); return <div key={c} class="mb-1.5">
       <div class="grid grid-cols-[16px_minmax(0,1fr)_auto_auto_64px_12px] items-center gap-2.5 px-2.5 py-2 rounded-lg border border-line">
@@ -244,7 +254,7 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
       </div>
       {chg === c && <div class="mt-1.5 p-2 rounded-lg bg-c1"><SpoolPicker colour={c} machine={run.printer} self={run.id} value={sp[c]} onPick={(id) => { setSp({ ...sp, [c]: id }); setChg(null); }} /></div>}
     </div>; })}
-    <div class="mt-3 text-[13px]">Deduct <b class="num">{perG * plates} g</b> from store <span class="text-c2">· {plates} plate{plates > 1 ? "s" : ""} × {perG} g</span></div>
+    <div class="mt-3 text-[13px]">Deduct <b class="num">{perG * allPlates} g</b> from store <span class="text-c2">· {allPlates} plate{allPlates > 1 ? "s" : ""} × {perG} g</span></div></>}
     </div>
   </Sheet>;
 }
