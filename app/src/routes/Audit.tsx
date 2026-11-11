@@ -10,7 +10,7 @@ import {
 type Cat = "filament" | "packing" | "accessory" | "part";
 const CATS: Cat[] = ["filament", "packing", "accessory", "part"];
 const CAT_LABEL: Record<Cat, string> = { filament: "Filament", packing: "Packaging", accessory: "Accessories", part: "Spares" };
-type Line = { ref: string; label: string; before: number; after: number; unit: string; by: string; at: string; isNew?: boolean };
+type Line = { ref: string; label: string; before: number; after: number; unit: string; by: string; at: string; isNew?: boolean; /** confirmed as-is with Next, no weighing */ ok?: boolean };
 type WriteOff = { label: string; grams: number; value: number; next: string };
 export type Audit = { id: string; no: string; cat: Cat; status: "open" | "done"; started: string; by: string; finished?: string; finishedBy?: string; lines: Line[]; writeOffs?: WriteOff[] };
 
@@ -53,12 +53,12 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
   const [gross, setGross] = useState(0);
   const tare = s.tare ?? bodyTare(s.spoolMat) ?? filMasterSig.value.tare;
   const net = Math.max(0, gross - tare);
-  const cols = "grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_96px_200px] items-center gap-x-3 gap-y-2 py-2.5 border-t border-line first:border-0";
+  const cols = "grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_96px_270px] items-center gap-x-3 gap-y-2 py-2.5 border-t border-line first:border-0";
   if (line) return (
     <div class={cols}>
       <SpoolHead s={s} />
-      <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span><s class="text-c3">{g(line.before)}</s> <b>{g(line.after)}</b></span>
-      <span class="flex items-center gap-2 justify-end max-sm:col-span-2"><Status tone="done">{line.isNew ? "Added" : "Updated"}</Status>
+      <span class="text-sm text-right num"><span class="t-meta block">In Emerald</span>{line.before !== line.after && <><s class="text-c3">{g(line.before)}</s> </>}<b>{g(line.after)}</b></span>
+      <span class="flex items-center gap-2 justify-end max-sm:col-span-2"><Status tone="done">{line.isNew ? "Added" : line.ok ? "Confirmed" : "Updated"}</Status>
         {!line.isNew && <Button variant="outline" onClick={() => { setSpoolGrams({ ...s, grams: line.after }, line.before, line.before + tare, a, "Audit undo"); put({ ...a, lines: a.lines.filter((l) => l.ref !== s.id) }); log(`Audit ${a.no}: undo ${spoolName(s)}`, spoolName(s), "stock"); }}>Undo</Button>}</span>
     </div>
   );
@@ -74,6 +74,10 @@ function SpoolRow({ s, a }: { s: Spool; a: Audit }) {
           addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: net, unit: "g", by: who(), at: stamp() });
           log(`Audit ${a.no}: ${spoolName(s)} ${g(s.grams)} → ${g(net)} (gross ${g(gross)})`, spoolName(s), "stock");
         }}>Update</Button>
+        <Button variant="outline" title="Weight in Emerald is correct — confirm and move on" onClick={() => {
+          addLine(a, { ref: s.id, label: spoolName(s), before: s.grams, after: s.grams, unit: "g", by: who(), at: stamp(), ok: true });
+          log(`Audit ${a.no}: ${spoolName(s)} confirmed at ${g(s.grams)}`, spoolName(s), "stock");
+        }}>Next</Button>
       </span>
     </div>
   );
