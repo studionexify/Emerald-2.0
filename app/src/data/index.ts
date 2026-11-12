@@ -44,13 +44,11 @@ export * from "./flows";
 export * from "./rates";
 export * from "./store";
 export * from "./ledger";
-export * from "./invoicing";
 export * from "./auth";
 export * from "./image";
 export * from "./media";
 import { me } from "./auth";
 import { setLogger, historySig } from "./ledger";
-import { blankParty, lookupParty, newDraft } from "./invoicing";
 import { rate } from "./rates";
 
 const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -133,7 +131,7 @@ export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
   if (what === "print") batchSet(b, { done: b.units }, "Batch printed");
   // A dispatch invoice starts as a draft: the owner checks it and issues it, which takes the number.
   if (what === "invoice") { const o = ordersSig.value.find((x) => x.no === b.orderNo); const price = o?.items.find((i) => i.name === b.name)?.price ?? o?.items[0]?.price ?? 0;
-    newDraft({ billTo: lookupParty({ name: b.customer }) ?? { ...blankParty(), name: b.customer }, orderNo: b.orderNo, batch: b.name, lines: [{ desc: b.name, hsn: "491199", qty: b.done || b.units, rate: price }] }); log("Drafted dispatch invoice", `${b.orderNo} · ${b.name}`); }
+    import("./invoicing").then(({ newDraft, lookupParty, blankParty }) => newDraft({ billTo: lookupParty({ name: b.customer }) ?? { ...blankParty(), name: b.customer }, orderNo: b.orderNo, batch: b.name, lines: [{ desc: b.name, hsn: "491199", qty: b.done || b.units, rate: price }] })); log("Drafted dispatch invoice", `${b.orderNo} · ${b.name}`); }
   if (what === "tracking") batchSet(b, { tracking: `TRK${Math.floor(Math.random() * 1e8)}` }, "Added tracking");
 }
 

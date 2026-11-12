@@ -1,5 +1,6 @@
+import { invoiceBiz, stateLabel, termsOf } from "../../data/invoicing";
 /** The document generator: tax invoice, credit note and quotation laid out like the studio's existing PDFs (A4, printed from the browser). */
-import { invTax, invoiceBiz, stateLabel, termsOf, type InvLine, type Invoice, type Party, type Quote } from "../../data";
+import {invTax, type InvLine, type Invoice, type Party, type Quote} from "../../data";
 import type { Biz } from "../../data/biz";
 
 export const words = (n: number): string => {

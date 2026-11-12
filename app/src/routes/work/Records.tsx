@@ -1,19 +1,14 @@
+import { lookupParty, stateLabel } from "../../data/invoicing";
 import { sortAbc } from "../../mock/types";
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
-import { ordersSig } from "../../data";
-import { vOrders, vQuotes } from "../../data";
+import {ordersSig} from "../../data";
+import {vOrders, vQuotes} from "../../data";
 import { useState } from "preact/hooks";
 import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
-import {
-  inr, invoicesSig, invTax, nextNo, photosSig, quotesSig,
-  rate, shipmentsSig, shortDate, today, uid, log, patchOrder, nowS, consume,
-  type InvLine, type Order, type Quote, type Shipment,
-  lookupParty, 
-  stateLabel, 
-} from "../../data";
+import {inr, invoicesSig, invTax, nextNo, photosSig, quotesSig, rate, shipmentsSig, shortDate, today, uid, log, patchOrder, nowS, consume, type InvLine, type Order, type Quote, type Shipment} from "../../data";
 import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
 import { MediaImg } from "../../ui/media";
-import { clientsSig, shrinkImage, storeMedia, type Client } from "../../data";
+import {clientsSig, shrinkImage, storeMedia, type Client} from "../../data";
 import { DocSheet, fromInvoice, fromQuote, type DocData } from "./Doc";
 import { WorkShell } from "./shared";
 
