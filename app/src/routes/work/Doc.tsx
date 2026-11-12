@@ -1,6 +1,6 @@
 /** The document generator: tax invoice, credit note and quotation laid out like the studio's existing PDFs (A4, printed from the browser). */
-import { invTax, type InvLine, type Invoice, type Quote } from "../../data";
-import { bizSig, type Biz } from "../../data/biz";
+import { invTax, invoiceBiz, stateLabel, termsOf, type InvLine, type Invoice, type Party, type Quote } from "../../data";
+import type { Biz } from "../../data/biz";
 
 const words = (n: number): string => {
   const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -42,11 +42,14 @@ export const QUOTE_TERMS = [
 export type DocData = {
   kind: "invoice" | "credit" | "quote" | "challan"; title: string; no: string; date: string; party: string; gstin?: string; address?: string; shipTo?: string; contact?: string; pos?: string;
   lines: InvLine[]; gstRate: number; interstate: boolean; shipping?: number; note?: string; valid?: string; tech?: string; cancelled?: boolean; extra?: [string, string][];
+  /** New invoices: the parties and the company details frozen at issue. */
+  billTo?: Party; shipToParty?: Party; seller?: Biz; draft?: boolean;
 };
 export const fromInvoice = (i: Invoice): DocData => ({
   kind: i.kind, title: i.kind === "credit" ? "Credit note" : "Tax invoice", cancelled: i.status === "cancelled", no: i.no, date: i.date, party: i.customer, gstin: i.gstin, address: i.address,
   shipTo: i.shipTo, contact: i.contact, pos: i.pos, lines: i.lines, gstRate: i.gstRate, interstate: i.interstate, shipping: i.shipping,
-  note: i.against ? `Against ${i.against}. ${i.note ?? ""}` : undefined, extra: i.orderNo ? [["Order", i.orderNo + (i.batch ? ` · ${i.batch}` : "")]] : undefined,
+  note: i.against ? `Against ${i.against}. ${i.note ?? ""}` : undefined, extra: i.orderNo && !i.billTo ? [["Order", i.orderNo + (i.batch ? ` · ${i.batch}` : "")]] : undefined,
+  billTo: i.billTo, shipToParty: i.sameShip ? i.billTo : i.shipToParty, seller: i.seller?.biz, draft: i.no === "Draft",
 });
 export const fromQuote = (q: Quote): DocData => ({ kind: "quote", title: "Quotation", no: q.no, date: q.date, party: q.customer, address: q.address, lines: q.lines, gstRate: q.gstRate, interstate: false, valid: q.valid, tech: q.tech });
 
@@ -63,49 +66,90 @@ function Contact({ b }: { b: Biz }) {
   return <div class="text-[11px] text-right"><div class="font-bold">{b.name.toUpperCase()}</div><div>{b.phone}</div><div>{b.email}</div><div>{b.addressShort || b.address}</div>{b.website && <div>{b.website}</div>}</div>;
 }
 
-export function DocSheet({ d }: { d: DocData }) {
-  const b = bizSig.value;
-  const t = invTax({ id: "", kind: d.kind === "credit" ? "invoice" : "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued", shipping: d.shipping });
+/* Fonts used by the studio's invoice PDFs, loaded only when a document is shown. */
+let fontsIn = false;
+function useDocFonts() {
+  if (fontsIn || typeof document === "undefined") return; fontsIn = true;
+  const l = document.createElement("link"); l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Dancing+Script:wght@600&family=Montserrat:wght@400;600;700&display=swap";
+  document.head.appendChild(l);
+}
+const site = (w?: string) => (w ? (w.startsWith("http") ? w : "https://" + w) : "");
+
+/** One A4 tax invoice / credit note page, laid out like the studio's invoices. `copy` prints "Original for Recipient" etc. */
+export function DocSheet({ d, copy }: { d: DocData; copy?: string }) {
+  useDocFonts();
+  const b = d.seller ?? invoiceBiz.value;
+  const t = invTax({ id: "", kind: "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued", shipping: d.shipping });
   if (d.kind === "quote") return <QuoteSheet d={d} b={b} t={t} />;
-  const party = (label: string, addr?: string) => (
-    <div class="grid grid-cols-[70px_1fr] gap-x-2"><span class="font-semibold">{label}</span><span>{d.party}{addr && <><br />{addr}</>}</span>
-      <span class="font-semibold">Contact:</span><span>{d.contact || ""}</span><span class="font-semibold">GST No.</span><span>{d.gstin || ""}</span></div>
-  );
+  const bill: Party = d.billTo ?? { name: d.party, address: d.address ?? "", contact: d.contact ?? "", gstin: d.gstin ?? "", email: "", state: "" };
+  const ship: Party = d.shipToParty ?? (d.shipTo ? { ...bill, name: d.shipTo.split("\n")[0], address: d.shipTo.split("\n").slice(1).join("\n") || d.shipTo } : bill);
+  const cell = "border border-[#c8c8c8] px-[5px] py-[3px] align-top";
+  const party = (label: string, p: Party) => <>
+    <tr><td class={`${cell} bg-black text-white font-bold w-[96px]`}>{label}</td><td class={`${cell} font-bold`}>{p.name}</td></tr>
+    <tr><td colSpan={2} class={`${cell} font-bold whitespace-pre-line h-[66px]`}>{p.address}</td></tr>
+    <tr><td class={cell}>Contact:</td><td class={`${cell} font-bold`}>{p.contact || "-"}</td></tr>
+    {p.email && <tr><td class={cell}>Email:</td><td class={`${cell} font-bold`}>{p.email}</td></tr>}
+    <tr><td class={cell}>GST No.</td><td class={`${cell} font-bold`}>{p.gstin || "-"}</td></tr>
+    {p.state && <tr><td class={cell}>State:</td><td class={`${cell} font-bold`}>{stateLabel(p.state)}</td></tr>}
+  </>;
+  const rows = [...d.lines, ...Array.from({ length: Math.max(0, 5 - d.lines.length) }, () => null)];
+  const credit = d.kind === "credit";
   return (
-    <article class="print-area bg-white text-black rounded-xl p-4 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] @container overflow-x-auto [&_td.text-right]:whitespace-nowrap relative">
-      {d.cancelled && <div class="absolute inset-x-0 top-1/3 text-center text-5xl font-bold opacity-20 rotate-[-12deg] pointer-events-none">CANCELLED</div>}
-      <header class="text-center mb-3">
-        <div class="text-xl font-bold">{b.name.toUpperCase()}</div><div>{b.address}</div>
-        <div>Mo: {b.phone} | Email: {b.email}</div><div>{b.website ? `${b.website} | ` : ""}GSTIN: {b.gstin || "—"}</div>
-      </header>
-      <h1 class="text-right text-lg font-bold uppercase mb-3">{d.title}</h1>
-      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6 mb-3">
-        <div class="space-y-2">{party("Bill to:", d.address)}{party("Ship to:", d.shipTo || d.address)}</div>
-        <div class="grid grid-cols-[auto_auto] gap-x-4 h-fit">
-          <span>{d.kind === "credit" ? "Credit note No.:" : d.kind === "challan" ? "Challan No.:" : "Invoice No.:"}</span><b class="text-right">{d.no}</b>
-          <span>{d.kind === "credit" ? "Date:" : "Invoice Date:"}</span><span class="text-right">{longDate(d.date)}</span>
-          <span>Place of Supply:</span><span class="text-right">{d.pos || (d.interstate ? "Other state" : "Gujarat")}</span>
-          <span>Reverse Charges:</span><span class="text-right">No</span>
-          {d.extra?.map(([k, v]) => <><span key={k}>{k}:</span><span class="text-right">{v}</span></>)}
+    <article class="doc-a4 bg-white text-black relative mx-auto shadow-sm border border-c2 text-[11.5px] leading-[1.35]" style={{ fontFamily: "Montserrat, var(--font-sans)" }}>
+      {d.cancelled && <div class="absolute inset-x-0 top-[40%] text-center text-6xl font-bold opacity-15 rotate-[-14deg] pointer-events-none">CANCELLED</div>}
+      {d.draft && <div class="absolute inset-x-0 top-[40%] text-center text-6xl font-bold opacity-10 rotate-[-14deg] pointer-events-none">DRAFT</div>}
+      <header class="flex justify-between items-start">
+        <div class="font-bold text-[12px] leading-[1.75]">
+          <div class="text-[17px] mb-0.5">{b.name.toUpperCase()}</div>
+          <div>{b.address}</div>
+          <div>Mo: {b.phone}&nbsp;&nbsp;|&nbsp;&nbsp;Email: {b.email}</div>
+          <div>{b.website && <><a href={site(b.website)} class="text-[#1155cc] underline">{b.website}</a>&nbsp;&nbsp;|&nbsp;&nbsp;</>}GSTIN: {b.gstin}</div>
         </div>
-      </section>
-      <table class="w-full border-collapse mb-3 [&_td]:px-1 [&_th]:px-1">
-        <thead><tr class="border-y border-black text-left"><th class="py-1 w-12">Sr. No.</th><th>Description</th><th>HSN / SAC</th><th class="text-right">Unit Price</th><th class="text-right">Qty</th><th class="text-right">Total</th></tr></thead>
-        <tbody>{d.lines.map((l, i) => <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td>{l.hsn}</td><td class="text-right">{amt(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{amt(l.qty * l.rate)}</td></tr>)}</tbody>
-      </table>
-      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6">
-        <div><div class="font-bold">TERMS AND CONDITIONS</div><ol class="list-decimal pl-4">{INVOICE_TERMS(b).map((x) => <li key={x}>{x}</li>)}</ol>{d.note && <p class="mt-2">{d.note}</p>}</div>
-        <table class="w-full @lg:w-64 h-fit whitespace-nowrap [&_td]:pl-3 [&_td:first-child]:pl-0"><tbody>
-          <tr><td>Sub total</td><td class="text-right">{amt(t.taxable)}</td></tr>
-          {!d.gstRate ? null : d.interstate ? <tr><td>IGST ({d.gstRate}%)</td><td class="text-right">{amt(t.igst)}</td></tr> : <><tr><td>CGST ({d.gstRate / 2}%)</td><td class="text-right">{amt(t.cgst)}</td></tr><tr><td>SGST ({d.gstRate / 2}%)</td><td class="text-right">{amt(t.sgst)}</td></tr></>}
-          <tr><td>Shipping cost</td><td class="text-right">{amt(t.shipping)}</td></tr>
-          <tr><td>Round-off</td><td class="text-right">{t.roundOff < 0 ? "−" : ""}{amt(t.roundOff)}</td></tr>
-          <tr class="border-t-2 border-black font-bold"><td class="py-1">Total</td><td class="text-right">{rs(t.total)}</td></tr>
+        <img src="/nexify-logo.png" alt={b.name} class="h-[68px] w-auto mt-1" />
+      </header>
+      {copy && <div class="text-right text-[10px] font-semibold mt-3 uppercase tracking-wide">{copy}</div>}
+      <h1 class={`text-center text-[21px] font-normal underline underline-offset-4 ${copy ? "mt-1" : "mt-7"} mb-7`}>{credit ? "CREDIT NOTE" : "TAX INVOICE"}</h1>
+      <section class="grid grid-cols-[52%_48%] items-start">
+        <table class="w-full border-collapse"><tbody>{party("Bill to:", bill)}{party("Ship to:", ship)}</tbody></table>
+        <table class="w-full border-collapse"><tbody>
+          {([[credit ? "Credit Note No.:" : "Invoice No.:", d.no], [credit ? "Date:" : "Invoice Date:", longDate(d.date)], ["Place of Supply:", d.pos || (d.interstate ? "Other state" : "Gujarat (24)")], ["Reverse Charges:", "No"], ...(d.note && credit ? [["Against:", d.note.replace(/^Against ([^.]+).*$/, "$1")]] : []), ...(d.extra ?? [])] as [string, string][]).map(([k, v]) =>
+            <tr key={k}><td class={`${cell} text-right w-1/2`}>{k}</td><td class={`${cell} text-right font-bold`}>{v}</td></tr>)}
         </tbody></table>
       </section>
-      <p class="mt-2">Amount in words: <b>Rupees {words(t.total)} only</b></p>
-      <p class="mt-3 text-center italic">Thank you for purchasing from us!</p>
-      <footer class="mt-4 flex justify-between items-end gap-4"><PayInfo b={b} /><Contact b={b} /></footer>
+      <table class="w-full border-collapse mt-6 text-center">
+        <thead><tr class="font-bold">{["Sr. No.", "Description", "HSN / SAC", "Unit Price", "Qty", "Total"].map((h, k) => <th key={h} class={`${cell} ${k === 1 ? "text-left" : ""} ${["w-[10%]", "w-[27%]", "w-[13.5%]", "w-[13.5%]", "w-[13.5%]", "w-[22%]"][k]}`}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((l, i) => <tr key={i} class="h-[25px]">{l ? <><td class={cell}>{i + 1}</td><td class={`${cell} text-left`}>{l.desc}</td><td class={cell}>{l.hsn}</td><td class={cell}>₹{amt(l.rate)}</td><td class={cell}>{l.qty}</td><td class={cell}>{amt(l.qty * l.rate)}</td></> : [0, 1, 2, 3, 4, 5].map((k) => <td key={k} class={cell} />)}</tr>)}</tbody>
+      </table>
+      <section class="grid grid-cols-[1fr_auto] gap-8 mt-6 items-start">
+        <div class="pt-6 text-[11px]">
+          <div class="font-bold mb-3">{credit ? "NOTE" : "TERMS AND CONDITIONS"}</div>
+          {credit && d.note ? <p>{d.note}</p> : <ol class="list-none">{termsOf(b).map((x, k) => <li key={k}>{k + 1}. {x}</li>)}</ol>}
+        </div>
+        <table class="border-collapse w-[290px]"><tbody>
+          <tr><td class="text-right pr-1 py-[3px] font-bold">Sub total</td><td class={`${cell} text-center w-[175px]`}>{amt(t.taxable)}</td></tr>
+          {d.interstate ? <tr><td class="text-right pr-1 py-[3px]">IGST ({d.gstRate}%)</td><td class={`${cell} text-center`}>{amt(t.igst)}</td></tr>
+            : <><tr><td class="text-right pr-1 py-[3px]">CGST ({d.gstRate / 2}%)</td><td class={`${cell} text-center`}>{amt(t.cgst)}</td></tr><tr><td class="text-right pr-1 py-[3px]">SGST ({d.gstRate / 2}%)</td><td class={`${cell} text-center`}>{amt(t.sgst)}</td></tr></>}
+          {t.shipping ? <tr><td class="text-right pr-1 py-[3px]">Shipping cost</td><td class={`${cell} text-center`}>{amt(t.shipping)}</td></tr> : null}
+          <tr><td class="text-right pr-1 py-[3px] font-bold">Round-off</td><td class={`${cell} text-center`}>{t.roundOff < 0 ? "-" : ""}{amt(t.roundOff)}</td></tr>
+          <tr><td class="border border-black bg-[#efefef] text-center font-bold py-3">Total</td><td class="border border-black bg-black text-white text-center font-bold text-[17px]">₹{amt(t.total)}</td></tr>
+        </tbody></table>
+      </section>
+      <div class="flex justify-between items-end gap-6 mt-4">
+        <p class="text-[11px]">Amount in words: <b>Indian Rupees {words(t.total)} Only</b></p>
+        <div class="text-center text-[11px] shrink-0 w-[200px]">
+          <div class="font-bold">For {b.name.toUpperCase()}</div>
+          <div class="text-[#1a3fbf] text-[28px] leading-none my-1.5" style={{ fontFamily: "'Dancing Script', cursive" }}>{b.signName || "Ankit P"}</div>
+          <div class="border-t border-[#999] pt-0.5">Authorised Signatory</div>
+        </div>
+      </div>
+      <p class="mt-5 text-[19px] underline underline-offset-4" style={{ fontFamily: "Comfortaa, cursive" }}>{b.thanks || "Thank you for purchasing from us!"}</p>
+      <footer class="mt-4 flex justify-between items-start text-[11.5px]">
+        <div><div class="font-bold mb-4">PAYMENT INFORMATION</div>
+          {b.upi && <div>UPI: {b.upi}</div>}{b.upiNumber && <div>UPI Number: {b.upiNumber}</div>}
+          <div class="mt-4">{b.bankName ? <><div>Bank: {b.bankName}</div><div>A/C Name: {b.accName}</div><div>A/C: {b.accNo}</div><div>IFSC: {b.ifsc}</div></> : b.bank}</div></div>
+        <div class="text-right"><div class="font-bold mb-[52px]">{b.name.toUpperCase()}</div><div>{b.phone}</div><div>{b.email}</div><div>{b.addressShort || b.address}</div>{b.website && <a href={site(b.website)} class="text-[#1155cc] underline">{b.website}</a>}</div>
+      </footer>
     </article>
   );
 }

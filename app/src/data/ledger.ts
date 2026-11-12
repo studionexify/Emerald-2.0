@@ -12,7 +12,13 @@ export type Invoice = {
   orderNo?: string; batch?: string; lines: InvLine[]; gstRate: number; interstate: boolean;
   status: "issued" | "cancelled"; paidOn?: string; paidAccount?: string; against?: string; note?: string;
   shipTo?: string; contact?: string; pos?: string; shipping?: number;
+  /** Structured parties (new invoices). Old invoices keep the flat fields above. */
+  billTo?: Party; shipToParty?: Party; sameShip?: boolean;
+  /** Company details, terms and signatory frozen on the invoice: later settings changes never alter it. */
+  seller?: SellerSnap;
 };
+export type Party = { name: string; address: string; state: string; contact: string; email: string; gstin: string };
+export type SellerSnap = { biz: import("./biz").Biz; ver: string };
 export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string; pay?: "alpha" | "beta" };
 export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string; pay?: "alpha" | "beta" };
 export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number; qty?: number; unit?: string }[]; stockApplied?: string; pay?: "alpha" | "beta" };
@@ -79,8 +85,12 @@ export function nextNo(kind: "invoice" | "credit" | "quote", date = today()) {
     return prefix + String(Math.max(0, ...quotesSig.value.map((q) => seqOf(q.no, prefix))) + 1).padStart(3, "0");
   }
   const prefix = seriesPrefix(kind, date);
-  return prefix + String(Math.max(0, ...invoicesSig.value.map((i) => seqOf(i.no, prefix))) + 1).padStart(3, "0");
+  const floor = kind === "invoice" ? (seriesFloor()[prefix] ?? 0) : 0;
+  return prefix + String(Math.max(floor, ...invoicesSig.value.map((i) => seqOf(i.no, prefix))) + 1).padStart(3, "0");
 }
+/** Last number already used in a series outside Emerald (e.g. B-018 issued before the app): the next one follows it. */
+let seriesFloor: () => Record<string, number> = () => ({});
+export const setSeriesFloor = (f: typeof seriesFloor) => (seriesFloor = f);
 /** A new invoice may not be dated before the latest one in its series (B-017 cannot predate B-016). */
 export function seriesLatest(kind: "invoice" | "credit", date = today()) {
   const prefix = seriesPrefix(kind, date);

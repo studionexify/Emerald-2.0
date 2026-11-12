@@ -295,7 +295,7 @@ export function Users() {
 
 export function Business() {
   const b = bizSig.value;
-  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={b[k] ?? ""} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
+  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={(b[k] as string) ?? ""} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
   return (
     <SettingsShell>
       <Card class="grid sm:grid-cols-2 gap-3">
