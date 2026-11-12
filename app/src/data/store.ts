@@ -63,7 +63,18 @@ export function applyRemote(changes: Change[]) {
 }
 export const setSyncSink = (f: Sink | null) => (sink = f);
 /** Snapshot of everything syncable, used for the first upload of a device. */
+export const syncedKinds = () => new Set([...registry.keys()].filter((k) => !LOCAL_ONLY.has(k)));
 export const allRecords = (): Change[] => [...registry].filter(([k]) => !LOCAL_ONLY.has(k)).flatMap(([k, s]) => diff(k, undefined, s.value));
+
+/** Key-order-independent fingerprint of a record, so a row read back from the database (jsonb reorders keys) matches the local copy. */
+const stable = (v: unknown): string => v === null || typeof v !== "object" ? JSON.stringify(v) ?? "null"
+  : Array.isArray(v) ? "[" + v.map(stable).join(",") + "]"
+  : "{" + Object.keys(v as object).filter((k) => (v as any)[k] !== undefined).sort().map((k) => JSON.stringify(k) + ":" + stable((v as any)[k])).join(",") + "}";
+export function fingerprint(data: unknown): string {
+  const t = stable(data); let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36) + t.length.toString(36);
+}
 
 /* Tabs on the same device stay in step for free. */
 const tabs = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("emerald") : null;
