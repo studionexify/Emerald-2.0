@@ -3,7 +3,11 @@ import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { ordersSig } from "../../data";
 import { vOrders, vQuotes } from "../../data";
 import { useEffect, useState } from "preact/hooks";
-import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
+import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, Icon, inputCls, Section, Sheet, Stat, Status, SubTabs, Table } from "../../ui";
+import { Menu } from "../../ui/disclose";
+import { downloadInvoicePdf, FitA4 } from "./pdf";
+import { navigate } from "../../router";
+import { openOrderSig, segmentOf, SEGMENT_HREF } from "../../data/inventory";
 import {
   accountsSig, batchesSig, cancelInvoice, creditNote, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, photosSig, quotesSig,
   rate, shipmentsSig, shortDate, today, uid, log, patchOrder, nowS, consume,
@@ -103,41 +107,73 @@ function Totals({ i }: { i: Invoice }) {
 }
 const inr2 = (n: number) => (n < 0 ? "-" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Draft editor: everything is editable until it is issued. */
-function DraftEditor({ d, onIssued }: { d: Invoice; onIssued: (i: Invoice) => void }) {
-  const allowed = canInvoice(me.value?.role);
+/** Draft form: everything is editable until it is issued. */
+function DraftForm({ d }: { d: Invoice }) {
   const up = (p: Partial<Invoice>) => updateDraft(d, p);
   const errs = problems(d);
-  const issue = async () => {
-    let keepOld = true;
-    if (draftOutdated(d)) keepOld = !(await ask("Invoice settings (company details, terms, bank…) changed after this draft was started. Use the NEW details on this invoice? Cancel keeps the details it was started with.", { ok: "Use new details" }));
-    const no = nextNo("invoice", d.date);
-    if (!(await ask(`Issue this invoice as ${no}? Once issued it cannot be edited — only cancelled (number kept) or corrected with a credit note.`, { ok: `Issue ${no}` }))) return;
-    let inv: Invoice; try { inv = issueDraft(d, keepOld); } catch (e) { alert((e as Error).message); return; }
-    if (inv.batch) batchesSig.value = batchesSig.value.map((b) => (b.orderNo === inv.orderNo && b.name === inv.batch ? { ...b, invoiceNo: inv.no } : b));
-    else if (inv.orderNo) { const o = ordersSig.value.find((x) => x.no === inv.orderNo); if (o) patchOrder(o, { invoiced: true }); }
-    onIssued(inv);
-  };
   return (
     <div class="flex flex-col gap-3">
       {draftOutdated(d) && <div class="rounded-xl bg-warn/15 p-2.5 text-[12px] flex flex-wrap items-center gap-2"><span class="flex-1 min-w-[180px]">Invoice settings changed since this draft was started.</span>
-        <Button variant="outline" class="!h-7" onClick={() => up({ seller: sellerNow() })}>Use new details</Button><span class="t-meta">or keep the old ones (chosen when you issue)</span></div>}
-      <div class="grid grid-cols-2 gap-2">
+        <Button variant="outline" class="!h-7" onClick={() => up({ seller: sellerNow() })}>Use new details</Button><span class="t-meta">or keep the old ones (asked when you issue)</span></div>}
+      <div class="grid grid-cols-2 gap-2 md:max-w-[520px]">
         <Field label="Invoice date"><input class={inputCls} type="date" max={today()} value={d.date} onInput={(e) => up({ date: val(e) })} /></Field>
-        <Field label="Number"><input class={inputCls} disabled value={`${nextNo("invoice", d.date)} (taken when issued)`} /></Field>
+        <Field label="Number (given when issued)"><input class={inputCls} disabled value={nextNo("invoice", d.date)} /></Field>
       </div>
-      <PartyForm title="Bill to" p={d.billTo ?? blankParty()} on={(billTo) => up({ billTo })} />
-      <label class="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={!!d.sameShip} onChange={() => up({ sameShip: !d.sameShip, shipToParty: d.shipToParty?.name ? d.shipToParty : { ...(d.billTo ?? blankParty()) } })} /> Ship to the same party &amp; address</label>
-      {!d.sameShip && <PartyForm title="Ship to" p={d.shipToParty ?? blankParty()} on={(shipToParty) => up({ shipToParty })} />}
+      <div class="grid gap-3 md:grid-cols-2 items-start">
+        <PartyForm title="Bill to" p={d.billTo ?? blankParty()} on={(billTo) => up({ billTo })} />
+        <div class="flex flex-col gap-2">
+          <label class="flex items-center gap-2 text-[13px] min-h-10"><input type="checkbox" checked={!!d.sameShip} onChange={() => up({ sameShip: !d.sameShip, shipToParty: d.shipToParty?.name ? d.shipToParty : { ...(d.billTo ?? blankParty()) } })} /> Ship to the same party &amp; address</label>
+          {!d.sameShip && <PartyForm title="Ship to" p={d.shipToParty ?? blankParty()} on={(shipToParty) => up({ shipToParty })} />}
+        </div>
+      </div>
       <ItemsForm lines={d.lines} on={(lines) => up({ lines })} />
-      <Field label="Shipping ₹ (leave blank if none — the line is then left off the invoice)"><input class={inputCls} type="number" min="0" step="0.01" value={d.shipping || ""} onInput={(e) => up({ shipping: num(e) || undefined })} /></Field>
-      <Totals i={d} />
-      {errs.length > 0 && <ul class="rounded-xl border border-red/40 p-2.5 text-[12px] text-red list-disc pl-6">{errs.map((x) => <li key={x}>{x}</li>)}</ul>}
-      <div class="flex flex-wrap gap-2">
-        {allowed ? <Button disabled={errs.length > 0} onClick={issue}>Issue invoice</Button> : <span class="t-meta">Only the Owner or a Partner can issue invoices.</span>}
-        <Button variant="ghost" onClick={() => ask("Delete this draft? No number has been used.", { ok: "Delete draft", danger: true }).then((ok) => ok && deleteDraft(d))}>Delete draft</Button>
+      <div class="grid gap-3 md:grid-cols-2 items-start">
+        <Field label="Shipping ₹ (blank = no shipping line on the invoice)"><input class={inputCls} type="number" min="0" step="0.01" value={d.shipping || ""} onInput={(e) => up({ shipping: num(e) || undefined })} /></Field>
+        <Totals i={d} />
       </div>
+      {errs.length > 0 && <ul class="rounded-xl border border-red/40 p-2.5 text-[12px] text-red list-disc pl-6">{errs.map((x) => <li key={x}>{x}</li>)}</ul>}
     </div>
+  );
+}
+
+const pdfName = (i: Invoice, copy?: string) => `Tax Invoice - ${i.no}${copy?.startsWith("Duplicate") ? " - Transporter copy" : ""}.pdf`;
+async function savePdf(i: Invoice, copy?: string) {
+  try { await downloadInvoicePdf(fromInvoice(i), [i.billTo ? copy ?? COPIES[0] : undefined], pdfName(i, copy)); }
+  catch (e) { alert("Could not create the PDF: " + (e as Error).message); }
+}
+const goOrder = (no?: string) => { const o = no && vOrders().find((x) => x.no === no); if (!o) return; openOrderSig.value = o.no; navigate(SEGMENT_HREF[segmentOf(o)]); };
+
+/** Floating window for a draft: fill in → review the A4 page → issue, which takes the number and downloads the PDF. */
+function DraftWindow({ d, onClose, onIssued }: { d: Invoice; onClose: () => void; onIssued: (i: Invoice) => void }) {
+  const [step, setStep] = useState<"edit" | "review">("edit");
+  const [busy, setBusy] = useState(false);
+  const allowed = canInvoice(me.value?.role);
+  const errs = problems(d);
+  const next = nextNo("invoice", d.date);
+  const issue = async () => {
+    let keepOld = true;
+    if (draftOutdated(d)) keepOld = !(await ask("Invoice settings (company details, terms, bank…) changed after this draft was started. Use the NEW details on this invoice? Cancel keeps the details it was started with.", { ok: "Use new details" }));
+    if (!(await ask(`Issue this invoice as ${next}? Once issued it cannot be edited — only cancelled (number kept) or corrected with a credit note.`, { ok: `Issue ${next}` }))) return;
+    let inv: Invoice; try { inv = issueDraft(d, keepOld); } catch (e) { alert((e as Error).message); return; }
+    if (inv.batch) batchesSig.value = batchesSig.value.map((b) => (b.orderNo === inv.orderNo && b.name === inv.batch ? { ...b, invoiceNo: inv.no } : b));
+    else if (inv.orderNo) { const o = ordersSig.value.find((x) => x.no === inv.orderNo); if (o) patchOrder(o, { invoiced: true }); }
+    setBusy(true); await savePdf(inv); setBusy(false);
+    onIssued(inv);
+  };
+  const footer = step === "edit"
+    ? <><Button variant="outline" onClick={() => ask("Delete this draft? No number has been used.", { ok: "Delete draft", danger: true }).then((ok) => { if (ok) { deleteDraft(d); onClose(); } })}>Delete draft</Button>
+        <Button disabled={errs.length > 0} onClick={() => setStep("review")}>Review →</Button></>
+    : <><Button variant="outline" onClick={() => setStep("edit")}>← Edit</Button>
+        {allowed ? <Button disabled={busy || errs.length > 0} onClick={issue}>{busy ? "Preparing PDF…" : `Issue ${next} & download PDF`}</Button> : <Button disabled>Only Owner / Partner can issue</Button>}</>;
+  return (
+    <Sheet huge open onClose={onClose} title={step === "edit" ? (d.customer ? `Invoice · ${d.customer}` : "New invoice") : `Review · ${next}`} footer={footer}>
+      <div class="w-full md:w-[min(980px,86vw)]">
+        {step === "edit" ? <DraftForm d={d} /> : <>
+          <p class="rounded-xl bg-c1 p-2.5 text-[12px] mb-3">Check every detail. Issuing gives it number <b>{next}</b>, locks it and downloads the PDF to this device.</p>
+          <FitA4><DocSheet d={{ ...fromInvoice(d), no: next, draft: false }} /></FitA4>
+        </>}
+      </div>
+    </Sheet>
   );
 }
 
@@ -198,39 +234,46 @@ function InvoiceSettings() {
   );
 }
 
-/** An issued invoice: read-only, printable in one or more copies. */
-function IssuedView({ cur, onCredit }: { cur: Invoice; onCredit: (i: Invoice) => void }) {
-  const [copies, setCopies] = useState<string[]>([COPIES[0]]);
-  const [cn, setCn] = useState(0);
+/** An issued invoice in a floating window: preview, download, transporter copy, payment, cancel / credit note. */
+function ViewWindow({ cur, onClose, onOpen }: { cur: Invoice; onClose: () => void; onOpen: (i: Invoice) => void }) {
+  const [cn, setCn] = useState(0), [busy, setBusy] = useState("");
   const allowed = canInvoice(me.value?.role);
-  const d = fromInvoice(cur);
-  const toggle = (c: string) => setCopies(copies.includes(c) ? copies.filter((x) => x !== c) : COPIES.filter((x) => x === c || copies.includes(x)));
+  const run = async (what: string, copy?: string) => { setBusy(what); await savePdf(cur, copy); setBusy(""); };
   return (
-    <div class="flex flex-col gap-3">
-      <div class="rounded-xl bg-c1 p-2 text-xs">{cur.status === "cancelled" ? "Cancelled — the number stays used in the series." : "Issued — locked. Correct mistakes by cancelling or with a credit note."}</div>
-      <div class="flex flex-wrap items-center gap-2 no-print"><span class="text-[12px] text-c3">Copies to print</span>{COPIES.map((c) => <Chip key={c} active={copies.includes(c)} onClick={() => toggle(c)}>{c}</Chip>)}
-        <Button onClick={() => window.print()} disabled={!copies.length}>Print / save PDF</Button></div>
-      <div class="doc-scroll"><div class="print-area flex flex-col gap-4">{(copies.length ? copies : [undefined]).map((c, k) => <DocSheet key={k} d={d} copy={cur.billTo ? c : undefined} />)}</div></div>
-      {cur.kind === "invoice" && cur.status === "issued" && (cur.paidOn
-        ? <div class="flex items-center justify-between text-sm"><Status tone="done">Paid {shortDate(cur.paidOn)}</Status><Button variant="ghost" onClick={() => markUnpaid(cur)}>Mark unpaid</Button></div>
-        : <div class="flex flex-wrap items-center gap-2">{accountsSig.value.map((a) => <Button key={a.id} variant="outline" onClick={() => markPaid(cur, a.id)}>Paid → {a.name.split(" ")[0]}</Button>)}</div>)}
-      {allowed && cur.kind === "invoice" && cur.status === "issued" && (
-        <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
-          <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(num(e))} /></Field>
-          <Button variant="outline" onClick={() => { if (cn) { onCredit(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
-          {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.`).then((ok) => ok && cancelInvoice(cur))}>Cancel invoice</Button>}
+    <Sheet huge open onClose={onClose} title={`${cur.no} · ${cur.customer}`}
+      footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button disabled={!!busy} onClick={() => run("dl")}>{busy === "dl" ? "Preparing PDF…" : "Download PDF"}</Button></>}>
+      <div class="w-full md:w-[min(860px,86vw)] flex flex-col gap-3">
+        <div class="rounded-xl bg-c1 p-2 text-xs">{cur.status === "cancelled" ? "Cancelled — the number stays used in the series." : "Issued — locked. Correct mistakes by cancelling or with a credit note."}</div>
+        <div class="flex flex-wrap gap-2">
+          {cur.billTo && <Button variant="outline" disabled={!!busy} onClick={() => run("tr", COPIES[1])}>{busy === "tr" ? "Preparing…" : "Create copy for transporter"}</Button>}
+          {cur.orderNo && <Button variant="outline" onClick={() => { onClose(); goOrder(cur.orderNo); }}>Go to order {cur.orderNo}</Button>}
         </div>
-      )}
-    </div>
+        <FitA4><DocSheet d={fromInvoice(cur)} copy={cur.billTo ? COPIES[0] : undefined} /></FitA4>
+        {cur.kind === "invoice" && cur.status === "issued" && (cur.paidOn
+          ? <div class="flex items-center justify-between text-sm"><Status tone="done">Paid {shortDate(cur.paidOn)}</Status><Button variant="ghost" onClick={() => markUnpaid(cur)}>Mark unpaid</Button></div>
+          : <div class="flex flex-wrap items-center gap-2">{accountsSig.value.map((a) => <Button key={a.id} variant="outline" onClick={() => markPaid(cur, a.id)}>Paid → {a.name.split(" ")[0]}</Button>)}</div>)}
+        {allowed && cur.kind === "invoice" && cur.status === "issued" && (
+          <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
+            <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(num(e))} /></Field>
+            <Button variant="outline" onClick={() => { if (cn) { onOpen(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
+            {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.`).then((ok) => ok && cancelInvoice(cur))}>Cancel invoice</Button>}
+          </div>
+        )}
+      </div>
+    </Sheet>
   );
 }
 
+type Win = { k: "new"; order?: Order } | { k: "draft"; id: string } | { k: "view"; id: string } | { k: "settings" };
 export function Invoice() {
   const [f, setF] = useState("all");
-  const [open, setOpen] = useState<{ id: string; pane: "draft" | "issued" } | { pane: "new" | "settings"; order?: Order } | null>(null);
+  const [win, setWin] = useState<Win | null>(null);
+  const [busy, setBusy] = useState("");
   useEffect(() => { fixKnownInvoices(); }, []);
   const allowed = canInvoice(me.value?.role);
-  const cur = open && "id" in open ? (open.pane === "draft" ? draftsSig.value.find((x) => x.id === open.id) : invoicesSig.value.find((x) => x.id === open.id)) : undefined;
+  const close = () => setWin(null);
+  const draft = win?.k === "draft" ? draftsSig.value.find((x) => x.id === win.id) : undefined;
+  const viewed = win?.k === "view" ? invoicesSig.value.find((x) => x.id === win.id) : undefined;
   const drafted = (o: string, b?: string) => draftsSig.value.some((d) => d.orderNo === o && d.batch === b);
   const waiting = vOrders().filter((o) => o.stage === "invoice" && !o.invoiced && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && !i.batch) && !drafted(o.no));
   const bw = batchesSig.value.filter((b) => b.stage === "invoice" && !b.invoiceNo && !drafted(b.orderNo, b.name));
@@ -238,29 +281,25 @@ export function Invoice() {
   const dup = new Set(invoicesSig.value.map((i) => i.no).filter((n, k, a) => a.indexOf(n) !== k));
   const draftFor = (o: Order, b?: { name: string; units: number }) => {
     const lines = b ? [{ desc: `${o.items[0]?.name ?? "Item"} — ${b.name}`, hsn: "491199", qty: b.units, rate: o.items[0]?.price ?? 0 }] : linesOf(o);
-    const d = newDraft({ billTo: lookupParty({ name: o.customer }) ?? { ...blankParty(), name: o.customer }, orderNo: o.no, batch: b?.name, lines });
-    setOpen({ id: d.id, pane: "draft" });
+    setWin({ k: "draft", id: newDraft({ billTo: lookupParty({ name: o.customer }) ?? { ...blankParty(), name: o.customer }, orderNo: o.no, batch: b?.name, lines }).id });
   };
-  const title = !open ? "" : open.pane === "settings" ? "Invoice settings" : open.pane === "new" ? "New invoice" : cur ? `${cur.no} · ${cur.customer || "new"}` : "";
+  const rowDl = async (i: Invoice, copy?: string) => { setBusy(i.id + (copy ?? "")); await savePdf(i, copy); setBusy(""); };
+  const iconBtn = "w-8 h-8 !min-h-0 rounded-lg inline-flex items-center justify-center hover:bg-c1 cursor-pointer disabled:opacity-40";
   return (
     <WorkShell stage="invoice" title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
-      actions={allowed && <><Button variant="outline" onClick={() => setOpen({ pane: "settings" })}>Invoice settings</Button><Button icon="plus" onClick={() => setOpen({ pane: "new" })}>New invoice</Button></>}
-      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
-      detail={open && (
-        <div>
-          <DetailHead title={title} onClose={() => setOpen(null)} />
-          {open.pane === "settings" && <InvoiceSettings />}
-          {open.pane === "new" && <div class="flex flex-col gap-4">
-            <Card><CardTitle>From scratch</CardTitle><p class="t-meta mb-2">Fill in the client, items and tax state yourself.</p><Button onClick={() => setOpen({ id: newDraft().id, pane: "draft" })}>Start blank invoice</Button></Card>
-            <Card><CardTitle>From a running order</CardTitle><FromOrder pre={open.order} onMade={(d) => setOpen({ id: d.id, pane: "draft" })} /></Card>
-          </div>}
-          {"id" in open && !cur && <p class="text-sm text-c3">This draft was issued or deleted.</p>}
-          {"id" in open && cur && open.pane === "draft" && <><DraftEditor d={cur} onIssued={(i) => setOpen({ id: i.id, pane: "issued" })} /><details class="mt-4"><summary class="text-[13px] cursor-pointer">Preview</summary><div class="doc-scroll mt-2"><DocSheet d={fromInvoice(cur)} /></div></details></>}
-          {"id" in open && cur && open.pane === "issued" && <IssuedView cur={cur} onCredit={(i) => setOpen({ id: i.id, pane: "issued" })} />}
+      actions={allowed && <><Button variant="outline" onClick={() => setWin({ k: "settings" })}>Invoice settings</Button><Button icon="plus" onClick={() => setWin({ k: "new" })}>New invoice</Button></>}
+      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}>
+      {win?.k === "settings" && <Sheet huge open onClose={close} title="Invoice settings" footer={<Button onClick={close}>Done</Button>}><div class="w-full md:w-[min(760px,86vw)]"><InvoiceSettings /></div></Sheet>}
+      {win?.k === "new" && <Sheet huge open onClose={close} title="New invoice">
+        <div class="w-full md:w-[min(720px,86vw)] grid gap-4 md:grid-cols-2 items-start">
+          <Card><CardTitle>From scratch</CardTitle><p class="t-meta mb-3">Fill in the client, items and tax state yourself.</p><Button onClick={() => setWin({ k: "draft", id: newDraft().id })}>Start blank invoice</Button></Card>
+          <Card><CardTitle>From a running order</CardTitle><FromOrder pre={win.order} onMade={(d) => setWin({ k: "draft", id: d.id })} /></Card>
         </div>
-      )}>
+      </Sheet>}
+      {draft && <DraftWindow key={draft.id} d={draft} onClose={close} onIssued={(i) => setWin({ k: "view", id: i.id })} />}
+      {viewed && <ViewWindow key={viewed.id} cur={viewed} onClose={close} onOpen={(i) => setWin({ k: "view", id: i.id })} />}
       {draftsSig.value.length > 0 && <Section title="Drafts" note={`${draftsSig.value.length} · not numbered yet`}>
-        <div class="listbox">{draftsSig.value.map((d) => <button key={d.id} class="w-full flex items-center justify-between gap-3 px-3 h-10 text-[13px] text-left cursor-pointer" onClick={() => setOpen({ id: d.id, pane: "draft" })}>
+        <div class="listbox">{draftsSig.value.map((d) => <button key={d.id} class="w-full flex items-center justify-between gap-3 px-3 h-10 text-[13px] text-left cursor-pointer" onClick={() => setWin({ k: "draft", id: d.id })}>
           <span class="min-w-0 truncate"><b>{d.customer || "New invoice"}</b>{d.orderNo && <span class="t-meta"> · {d.orderNo}{d.batch ? " · " + d.batch : ""}</span>}</span><span class="num">{inr(invTax({ ...d, status: "issued" }).total)}</span></button>)}</div>
       </Section>}
       <Section title="Awaiting invoice" note={`${waiting.length + bw.length} · orders + batch dispatches`}>
@@ -271,7 +310,7 @@ export function Invoice() {
                 <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{o.no}</span><span class="font-medium">{o.customer}</span></span>
                 <span class="hidden md:block t-meta truncate">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</span>
                 <span class="hidden md:block num text-right">{inr(o.items.reduce((s, i) => s + i.qty * i.price, 0))}</span>
-                {allowed ? <Button variant="outline" class="!h-7" onClick={() => setOpen({ pane: "new", order: o })}>Draft invoice</Button> : <span />}
+                {allowed ? <Button variant="outline" class="!h-7" onClick={() => setWin({ k: "new", order: o })}>Draft invoice</Button> : <span />}
               </div>
             ))}
             {bw.map((b) => { const o = vOrders().find((x) => x.no === b.orderNo); return o && (
@@ -287,7 +326,7 @@ export function Invoice() {
       <Section title="Register" note={`${reg.length}`}>
         {dup.size > 0 && <div class="rounded-xl border border-red/40 p-2.5 text-[12px] text-red mb-2">Duplicate invoice number{dup.size > 1 ? "s" : ""}: {[...dup].join(", ")} — two devices issued at the same moment. Cancel one and re-issue it.</div>}
         <Card class="!py-1">
-          <Table rows={reg} rowKey={(i) => i.id} onRow={(i) => setOpen({ id: i.id, pane: "issued" })} cols={[
+          <Table rows={reg} rowKey={(i) => i.id} onRow={(i) => setWin({ k: "view", id: i.id })} cols={[
             { key: "n", label: "No.", render: (i) => <b>{i.no}</b> },
             { key: "d", label: "Date", render: (i) => shortDate(i.date) },
             { key: "c", label: "Customer", render: (i) => i.customer },
@@ -295,6 +334,14 @@ export function Invoice() {
             { key: "t", label: "Taxable", align: "right", render: (i) => inr(invTax(i).taxable), hideTablet: true },
             { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) },
             { key: "p", label: "Status", card: "status", render: (i) => <Status tone={i.status === "cancelled" ? "idle" : i.kind === "credit" ? "active" : i.paidOn ? "done" : "waiting"}>{i.status === "cancelled" ? "Cancelled" : i.kind === "credit" ? "Credit note" : i.paidOn ? "Paid" : "Unpaid"}</Status> },
+            { key: "a", label: "", align: "right", render: (i) => <span class="inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+              <button type="button" class={iconBtn} title="Preview" aria-label={`Preview ${i.no}`} onClick={() => setWin({ k: "view", id: i.id })}><Icon name="doc" size={16} /></button>
+              <button type="button" class={iconBtn} title="Download PDF" aria-label={`Download ${i.no} as PDF`} disabled={busy === i.id} onClick={() => rowDl(i)}><Icon name="in" size={16} /></button>
+              <Menu label={`More for ${i.no}`} items={[
+                { label: "Create copy for transporter", hidden: !i.billTo, on: () => rowDl(i, COPIES[1]) },
+                { label: `Go to order ${i.orderNo ?? ""}`, hidden: !i.orderNo, on: () => goOrder(i.orderNo) },
+              ]} />
+            </span> },
           ]} />
         </Card>
       </Section>

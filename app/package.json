@@ -13,6 +13,8 @@
   "dependencies": {
     "@preact/signals": "^2.11.4",
     "@supabase/supabase-js": "^2.118.0",
+    "html2canvas-pro": "^1.5.8",
+    "jspdf": "^2.5.2",
     "preact": "^11.1.1"
   },
   "devDependencies": {
