@@ -13,6 +13,7 @@
   "dependencies": {
     "@preact/signals": "^2.11.4",
     "@supabase/supabase-js": "^2.118.0",
+    "fflate": "^0.8.2",
     "jspdf": "^2.5.2",
     "preact": "^11.1.1"
   },

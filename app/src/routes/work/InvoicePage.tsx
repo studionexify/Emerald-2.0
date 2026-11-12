@@ -1,4 +1,4 @@
-import { blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, sellerNow, STATES, stateOfGstin, updateDraft } from "../../data/invoicing";
+import { blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
 import { sortAbc } from "../../mock/types";
 import {ordersSig} from "../../data";
 import {vOrders} from "../../data";
@@ -171,6 +171,27 @@ function FromOrder({ pre, onMade }: { pre?: Order; onMade: (d: Invoice) => void 
   );
 }
 
+/** Fill missing client details on older invoices from the Excel invoice book (one sheet per invoice). */
+function BookImport() {
+  const [msg, setMsg] = useState(""), [busy, setBusy] = useState(false);
+  const pick = async (f?: File | null) => {
+    if (!f) return; setBusy(true); setMsg("");
+    try {
+      const { readXlsx, applyBook } = await import("../../data/xlsx-book");
+      const r = applyBook(readXlsx(await f.arrayBuffer()));
+      setMsg([r.filled.length ? `Filled details on ${r.filled.length}: ${r.filled.join(", ")}.` : "No missing details to fill.", r.already.length ? `Already complete: ${r.already.join(", ")}.` : "", r.notInEmerald.length ? `In the workbook but not in Emerald: ${r.notInEmerald.join(", ")}.` : "", r.mismatch.length ? `Skipped — customer differs: ${r.mismatch.join("; ")}.` : ""].filter(Boolean).join(" "));
+    } catch (e) { setMsg("Could not read this file: " + (e as Error).message); }
+    setBusy(false);
+  };
+  return <div class="rounded-xl border border-line p-2.5 flex flex-col gap-2">
+    <div class="text-[13px] font-semibold">Fill missing addresses from your Excel invoice book</div>
+    <p class="t-meta">Choose the .xlsx with one sheet per invoice (B-001, B-002 …). Bill-to and ship-to names, addresses, contacts and GSTINs are copied onto the matching invoices where they are missing, and saved to the clients. Numbers, dates, items and amounts never change.</p>
+    <label class="inline-flex"><span class={`inline-flex items-center h-8 px-3.5 rounded-full border border-c3 text-[13px] font-semibold cursor-pointer ${busy ? "opacity-50" : ""}`}>{busy ? "Reading…" : "Choose Excel file"}</span>
+      <input type="file" accept=".xlsx" class="sr-only" disabled={busy} onChange={(e) => { pick((e.target as HTMLInputElement).files?.[0]); (e.target as HTMLInputElement).value = ""; }} /></label>
+    {msg && <p class="text-[12px]" role="status">{msg}</p>}
+  </div>;
+}
+
 /** Invoice settings: used by invoices issued from now on. Issued invoices keep the details they were issued with. */
 function InvoiceSettings() {
   const b = invoiceBiz.value;
@@ -189,6 +210,7 @@ function InvoiceSettings() {
         {f("upi", "UPI ID")}{f("upiNumber", "UPI number")}{f("bankName", "Bank")}{f("accName", "A/C name")}{f("accNo", "A/C number")}{f("ifsc", "IFSC")}
         {f("signName", "Signature name (printed in blue cursive)")}{f("thanks", "Thank-you line")}
       </div>
+      <BookImport />
       <Field label="Terms and conditions (one per line)"><textarea class={inputCls} rows={5} value={b.invTerms} onInput={(e) => set({ invTerms: (e.target as HTMLTextAreaElement).value })} /></Field>
       <Field label={`Last invoice number already used in ${prefix} (issued outside Emerald)`}><input class={inputCls} type="number" min="0" value={b.seriesFloor?.[prefix] ?? 0} onInput={(e) => set({ seriesFloor: { ...(b.seriesFloor ?? {}), [prefix]: num(e) } })} /></Field>
       <p class="t-meta -mt-2">Next invoice will be <b>{nextNo("invoice")}</b>.</p>
@@ -205,6 +227,16 @@ function InvoiceSettings() {
   );
 }
 
+/** Older invoices that came without an address: add it here (only the address changes; tax and number stay). */
+function MissingAddress({ i }: { i: Invoice }) {
+  const [a, setA] = useState("");
+  return <div class="rounded-xl border border-warn p-2.5 flex flex-col gap-2">
+    <p class="text-[12px]">This invoice has no billing address, and none is saved for {i.customer}. Add it once — it is also saved to the client for next time.</p>
+    <textarea class={inputCls} rows={3} value={a} placeholder="Billing address" onInput={(e) => setA((e.target as HTMLTextAreaElement).value)} />
+    <Button disabled={!a.trim()} onClick={() => setMissingAddress(i, a.trim())}>Save address</Button>
+  </div>;
+}
+
 /** An issued invoice in a floating window: preview, download, transporter copy, payment, cancel / credit note. */
 function ViewWindow({ cur, onClose, onOpen }: { cur: Invoice; onClose: () => void; onOpen: (i: Invoice) => void }) {
   const [cn, setCn] = useState(0), [busy, setBusy] = useState("");
@@ -214,6 +246,7 @@ function ViewWindow({ cur, onClose, onOpen }: { cur: Invoice; onClose: () => voi
     <Sheet huge open onClose={onClose} title={`${cur.no} · ${cur.customer}`}
       footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button disabled={!!busy} onClick={() => run("dl")}>{busy === "dl" ? "Preparing PDF…" : "Download PDF"}</Button></>}>
       <div class="w-full md:w-[min(860px,86vw)] flex flex-col gap-3">
+        {allowed && missingAddress(cur) && <MissingAddress i={cur} />}
         <div class="rounded-xl bg-c1 p-2 text-xs">{cur.status === "cancelled" ? "Cancelled — the number stays used in the series." : "Issued — locked. Correct mistakes by cancelling or with a credit note."}</div>
         <div class="flex flex-wrap gap-2">
           {cur.billTo && <Button variant="outline" disabled={!!busy} onClick={() => run("tr", COPIES[1])}>{busy === "tr" ? "Preparing…" : "Create copy for transporter"}</Button>}
@@ -300,7 +333,7 @@ export function Invoice() {
           <Table rows={reg} rowKey={(i) => i.id} onRow={(i) => setWin({ k: "view", id: i.id })} cols={[
             { key: "n", label: "No.", render: (i) => <b>{i.no}</b> },
             { key: "d", label: "Date", render: (i) => shortDate(i.date) },
-            { key: "c", label: "Customer", render: (i) => i.customer },
+            { key: "c", label: "Customer", render: (i) => <>{i.customer}{missingAddress(i) && <span class="t-meta text-warn"> · no address</span>}</> },
             { key: "o", label: "Order", render: (i) => (i.orderNo ? `${i.orderNo}${i.batch ? " · " + i.batch : ""}` : "—"), hideTablet: true },
             { key: "t", label: "Taxable", align: "right", render: (i) => inr(invTax(i).taxable), hideTablet: true },
             { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) },
