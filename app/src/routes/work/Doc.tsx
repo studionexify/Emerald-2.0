@@ -1,4 +1,4 @@
-import { invoiceBiz, stateLabel, termsOf } from "../../data/invoicing";
+import { invoiceBiz, stateLabel, termsOf , addressFor, stateOfGstin } from "../../data/invoicing";
 /** The document generator: tax invoice, credit note and quotation laid out like the studio's existing PDFs (A4, printed from the browser). */
 import {invTax, type InvLine, type Invoice, type Party, type Quote} from "../../data";
 import type { Biz } from "../../data/biz";
@@ -47,8 +47,8 @@ export type DocData = {
   billTo?: Party; shipToParty?: Party; seller?: Biz; draft?: boolean;
 };
 export const fromInvoice = (i: Invoice): DocData => ({
-  kind: i.kind, title: i.kind === "credit" ? "Credit note" : "Tax invoice", cancelled: i.status === "cancelled", no: i.no, date: i.date, party: i.customer, gstin: i.gstin, address: i.address,
-  shipTo: i.shipTo, contact: i.contact, pos: i.pos, lines: i.lines, gstRate: i.gstRate, interstate: i.interstate, shipping: i.shipping,
+  kind: i.kind, title: i.kind === "credit" ? "Credit note" : "Tax invoice", cancelled: i.status === "cancelled", no: i.no, date: i.date, party: i.customer, gstin: i.gstin, address: i.address || addressFor(i),
+  shipTo: i.shipTo, contact: i.contact, pos: i.pos || (i.billTo?.state ? stateLabel(i.billTo.state) : i.gstin ? stateLabel(stateOfGstin(i.gstin)) : undefined), lines: i.lines, gstRate: i.gstRate, interstate: i.interstate, shipping: i.shipping,
   note: i.against ? `Against ${i.against}. ${i.note ?? ""}` : undefined, extra: i.orderNo && !i.billTo ? [["Order", i.orderNo + (i.batch ? ` · ${i.batch}` : "")]] : undefined,
   billTo: i.billTo, shipToParty: i.sameShip ? i.billTo : i.shipToParty, seller: i.seller?.biz, draft: i.no === "Draft",
 });
@@ -82,7 +82,7 @@ export function DocSheet({ d, copy }: { d: DocData; copy?: string }) {
   const b = d.seller ?? invoiceBiz.value;
   const t = invTax({ id: "", kind: "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued", shipping: d.shipping });
   if (d.kind === "quote") return <QuoteSheet d={d} b={b} t={t} />;
-  const bill: Party = d.billTo ?? { name: d.party, address: d.address ?? "", contact: d.contact ?? "", gstin: d.gstin ?? "", email: "", state: "" };
+  const bill: Party = d.billTo ?? { name: d.party, address: d.address ?? "", contact: d.contact ?? "", gstin: d.gstin ?? "", email: "", state: d.gstin ? stateOfGstin(d.gstin) : "" };
   const ship: Party = d.shipToParty ?? (d.shipTo ? { ...bill, name: d.shipTo.split("\n")[0], address: d.shipTo.split("\n").slice(1).join("\n") || d.shipTo } : bill);
   const credit = d.kind === "credit";
   const IN = "#d9d9d9", OUT = "#b7b7b7";

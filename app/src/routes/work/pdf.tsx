@@ -1,4 +1,4 @@
-import { invoiceBiz, stateLabel, termsOf } from "../../data/invoicing";
+import { invoiceBiz, stateLabel, termsOf , stateOfGstin } from "../../data/invoicing";
 /**
  * Invoice PDF, drawn as a real document: embedded Montserrat / Comfortaa / Dancing Script fonts, vector lines and
  * boxes, real text (selectable, searchable, editable in PDF tools) — the same layout as the on-screen A4 sheet.
@@ -44,7 +44,7 @@ function sheet(pdf: JsPDF, d: DocData, copy: string | undefined, logo: string) {
   const b: Biz = d.seller ?? invoiceBiz.value;
   const t = invTax({ id: "", kind: "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued", shipping: d.shipping });
   const credit = d.kind === "credit";
-  const bill: Party = d.billTo ?? { name: d.party, address: d.address ?? "", contact: d.contact ?? "", gstin: d.gstin ?? "", email: "", state: "" };
+  const bill: Party = d.billTo ?? { name: d.party, address: d.address ?? "", contact: d.contact ?? "", gstin: d.gstin ?? "", email: "", state: d.gstin ? stateOfGstin(d.gstin) : "" };
   const ship: Party = d.shipToParty ?? bill;
 
   /* text placed by its top edge, like the measurements */

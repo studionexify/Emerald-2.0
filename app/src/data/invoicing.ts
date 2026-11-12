@@ -10,6 +10,7 @@ import { fingerprint, persisted, today, uid } from "./store";
 import { bizSig, type Biz } from "./biz";
 import { invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type Invoice, type Party, type SellerSnap } from "./ledger";
 import { clientsSig, type Client } from "./inventory";
+import { ordersSig } from "./index";
 
 /* ---------------------------------------------------------------- states (GST state codes) */
 export const STATES: [string, string][] = [
@@ -158,12 +159,44 @@ export function issueDraft(d: Invoice, keepOldDetails = true): Invoice {
   return inv;
 }
 
+/**
+ * Best known address for an invoice that has none (older invoices imported from Emerald 1 often came without one):
+ * the client record (by GSTIN, then name), the linked order's delivery address, then another invoice for the same customer.
+ */
+export function addressFor(i: Invoice): string {
+  if (i.billTo?.address?.trim()) return i.billTo.address;
+  if (i.address?.trim()) return i.address;
+  const g = norm(i.gstin), n = norm(i.customer);
+  const c = clientsSig.value.find((x) => g && norm(x.gstin) === g && x.address?.trim()) ?? clientsSig.value.find((x) => norm(x.name) === n && x.address?.trim());
+  if (c?.address) return c.address;
+  const o = i.orderNo ? ordersSig.value.find((x) => x.no === i.orderNo) : undefined;
+  if (o?.delivery?.address?.trim()) return o.delivery.address;
+  const other = invoicesSig.value.find((x) => x.id !== i.id && ((g && norm(x.gstin) === g) || norm(x.customer) === n) && (x.billTo?.address?.trim() || x.address?.trim()));
+  return other ? other.billTo?.address || other.address || "" : "";
+}
+/** Contact number the same way, for invoices that lack one. */
+function contactFor(i: Invoice): string {
+  if (i.contact?.trim()) return i.contact;
+  const g = norm(i.gstin), n = norm(i.customer);
+  return (clientsSig.value.find((x) => (g && norm(x.gstin) === g) || norm(x.name) === n)?.phone ?? "").trim();
+}
+/** Invoices with no address anywhere — the owner is asked to add them. */
+export const missingAddress = (i: Invoice) => !addressFor(i).trim();
+/** Add a missing address to an older invoice (and to the client, so it fills next time). Tax and number are untouched. */
+export function setMissingAddress(i: Invoice, address: string) {
+  invoicesSig.value = invoicesSig.value.map((x) => (x.id === i.id ? { ...x, address, ...(x.billTo ? { billTo: { ...x.billTo, address } } : {}) } : x));
+  rememberParty({ name: i.customer, address, state: i.billTo?.state ?? (i.gstin ? stateOfGstin(i.gstin) : ""), contact: i.contact ?? "", email: "", gstin: i.gstin ?? "" });
+  logFn("Added invoice address", i.no, "money");
+}
+
 /** Corrections the owner asked for on invoices made before this generator. Safe to run any number of times. */
 export function fixKnownInvoices() {
   let changed = false;
   const next = invoicesSig.value.map((i) => {
     if (i.no === "B-015" && i.lines.length === 1 && i.lines[0].qty === 1 && i.lines[0].rate === 42000) { changed = true; return { ...i, lines: [{ ...i.lines[0], rate: 43000 }] }; }
     if (i.no === "B-017" && i.interstate) { changed = true; return { ...i, interstate: false }; } // billed to a Gujarat party: CGST + SGST, round-off 0
+    // Older invoices without an address: fill it (and the contact) from the client, order or another invoice.
+    if (!i.billTo && !i.address?.trim()) { const a = addressFor(i); if (a) { changed = true; return { ...i, address: a, contact: contactFor(i) || i.contact }; } }
     return i;
   });
   if (changed) invoicesSig.value = next;
