@@ -7,6 +7,7 @@ import { ask, Button, DetailHead, Field, inputCls } from "./index";
 import { Menu, Reveal } from "./disclose";
 import { MediaImg } from "./media";
 import { log, me, toBin, uid, type LogKind } from "../data";
+import { fillEmpty, pastValues, recall } from "../data/memory";
 
 export type FType = "text" | "number" | "date" | "select" | "textarea" | "color" | "combo" | "count";
 export type FDef<T> = { k: keyof T & string; label: string; type?: FType; /** colour dot shown before each option (custom dropdown) */ dot?: (o: string) => string | undefined; /** select / combo choices; may depend on the draft */ options?: string[] | ((r: T) => string[]);
@@ -51,7 +52,7 @@ function DotSelect({ value, opts, dot, on }: { value: string; opts: string[]; do
     </div>}
   </div>;
 }
-export function Input<T>({ f, value, on, row }: { f: FDef<T>; value: unknown; on: (v: unknown) => void; row?: T }) {
+export function Input<T>({ f, value, on, row, memo }: { f: FDef<T>; value: unknown; on: (v: unknown) => void; row?: T; /** values typed before, offered while typing */ memo?: string[] }) {
   const t = f.type ?? "text";
   const v = value ?? "";
   const opts = sortAbc(typeof f.options === "function" ? f.options(row as T) : f.options ?? []);
@@ -70,7 +71,8 @@ export function Input<T>({ f, value, on, row }: { f: FDef<T>; value: unknown; on
     : /email/i.test(f.k) ? { type: "email" as const, inputMode: "email" as const, autoComplete: "email" }
     : /phone|mobile|whatsapp/i.test(f.k) ? { type: "tel" as const, inputMode: "tel" as const, autoComplete: "tel" }
     : /pin(code)?$|zip/i.test(f.k) ? { inputMode: "numeric" as const } : {};
-  return <input class={inputCls} enterKeyHint="next" {...im} type={("type" in im ? im.type : t) as "text"} value={t === "number" && v === "" ? "" : String(v)} onInput={(e) => { const x = (e.target as HTMLInputElement).value; on(t === "number" ? (x === "" ? 0 : Number(x)) : x); }} />;
+  const sug = t === "text" && memo?.length ? `mem-${f.k}` : undefined;
+  return <><input class={inputCls} enterKeyHint="next" list={sug} {...im} type={("type" in im ? im.type : t) as "text"} value={t === "number" && v === "" ? "" : String(v)} onInput={(e) => { const x = (e.target as HTMLInputElement).value; on(t === "number" ? (x === "" ? 0 : Number(x)) : x); }} />{sug && <datalist id={sug}>{memo!.map((o) => <option key={o} value={o} />)}</datalist>}</>;
 }
 
 const groupsOf = <T,>(fields: FDef<T>[], r: T) => {
@@ -79,12 +81,12 @@ const groupsOf = <T,>(fields: FDef<T>[], r: T) => {
   return [...m.entries()];
 };
 
-export function FormGrid<T>({ fields, draft, set }: { fields: FDef<T>[]; draft: T; set: (p: Partial<T>) => void }) {
+export function FormGrid<T>({ fields, draft, set, memo }: { fields: FDef<T>[]; draft: T; set: (p: Partial<T>) => void; memo?: (k: keyof T & string) => string[] }) {
   const grid = (fs: FDef<T>[]) => (
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {fs.map((f) => (
         <div key={f.k} class={f.wide || f.type === "textarea" ? "sm:col-span-2" : ""}>
-          <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}>{f.view ? f.view(draft) : <Input f={f} row={draft} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v, ...(f.then?.(v, { ...draft, [f.k]: v } as T) ?? {}) } as Partial<T>)} />}</Field>
+          <Field label={f.suffix ? `${f.label} (${f.suffix})` : f.label}>{f.view ? f.view(draft) : <Input f={f} row={draft} memo={memo?.(f.k)} value={(draft as Record<string, unknown>)[f.k]} on={(v) => set({ [f.k]: v, ...(f.then?.(v, { ...draft, [f.k]: v } as T) ?? {}) } as Partial<T>)} />}</Field>
         </div>
       ))}
     </div>
@@ -105,6 +107,8 @@ type Cfg<T> = {
   /** Read-only facts shown above the editable ones (derived figures). */ facts?: (r: T) => [string, ComponentChildren][];
   /** Extra sections in view mode (weigh-in, history…). */ extra?: (r: T, put: (p: Partial<T>, why?: string) => void) => ComponentChildren;
   /** Extra buttons in the action row. */ actions?: (r: T, put: (p: Partial<T>, why?: string) => void) => ComponentChildren;
+  /** Fields that identify "the same thing" (default: the first text field). Typing a known value fills the rest from the last such record. false = off. */
+  recall?: (keyof T & string)[] | false;
   logKind?: LogKind; noDelete?: boolean; noDuplicate?: boolean; onSave?: (r: T, isNew: boolean) => void;
 };
 
@@ -114,7 +118,7 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
   const [draft, setDraft] = useState<T | null>(null);
   const [isNew, setNew] = useState(false);
   const cur = id ? c.sig.value.find((r) => r.id === id) ?? null : null;
-  const close = () => { setId(null); setDraft(null); setNew(false); };
+  const close = () => { setId(null); setDraft(null); setNew(false); setHint(""); };
   const put = (r: T) => (p: Partial<T>, why?: string) => {
     c.sig.value = c.sig.value.map((x) => (x.id === r.id ? { ...x, ...p } : x));
     if (why) log(why, c.title({ ...r, ...p }), c.logKind ?? "stock");
@@ -126,14 +130,28 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
     c.onSave?.(draft, isNew);
     setId(draft.id); setDraft(null); setNew(false);
   };
-  const set = (p: Partial<T>) => setDraft((d) => (d ? { ...d, ...p } : d));
+  const [blank0, setBlank0] = useState<T | null>(null);
+  const [hint, setHint] = useState("");
+  const keys = c.recall === false ? [] : c.recall ?? c.fields.filter((f) => !f.view && (!f.type || f.type === "text" || f.type === "combo")).slice(0, 1).map((f) => f.k);
+  const set = (p: Partial<T>) => setDraft((d) => {
+    if (!d) return d;
+    const n = { ...d, ...p };
+    if (!keys.some((k) => k in (p as object))) return n;
+    const src = recall(c.sig.value, Object.fromEntries(keys.map((k) => [k, (n as any)[k]])) as Partial<Record<keyof T, unknown>>, n.id);
+    const fill = fillEmpty(n, src, { keys, blank: (isNew ? blank0 : undefined) ?? undefined, only: c.fields.filter((f) => f.type !== "date" && f.type !== "count" && !f.view).map((f) => f.k) });
+    const nf = Object.keys(fill).length;
+    setHint(nf ? `Filled ${nf} detail${nf === 1 ? "" : "s"} from the last ${c.kind.toLowerCase()} “${keys.map((k) => (n as any)[k]).join(" ")}” — change anything you need.` : "");
+    return { ...n, ...fill };
+  });
+  const memo = (k: keyof T & string) => pastValues(c.sig.value, k);
 
   let detail: ComponentChildren | null = null;
   if (draft) {
     detail = (
       <div>
         <DetailHead title={isNew ? `New ${c.kind.toLowerCase()}` : `Edit · ${c.title(draft)}`} onClose={close} />
-        <FormGrid fields={c.fields} draft={draft} set={set} />
+        {hint && <p class="rounded-lg bg-c1 px-3 py-2 text-[12px] mb-3">{hint}</p>}
+        <FormGrid fields={c.fields} draft={draft} set={set} memo={memo} />
         <div class="mt-4"><Actions><Button icon="check" onClick={save}>Save</Button><Button variant="outline" onClick={() => (isNew ? close() : setDraft(null))}>Cancel</Button></Actions></div>
       </div>
     );
@@ -169,7 +187,7 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
   return {
     detail, cur, close,
     open: (r: T) => { setDraft(null); setNew(false); setId(r.id); },
-    add: (init?: Partial<T>) => { setId(null); setNew(true); setDraft({ ...c.blank(), ...init }); },
+    add: (init?: Partial<T>) => { const b = c.blank(); setBlank0(b); setHint(""); setId(null); setNew(true); setDraft({ ...b, ...init }); },
   };
 }
 

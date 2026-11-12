@@ -1,3 +1,5 @@
+import { pastValues, recall } from "../data/memory";
+import { moneySig } from "../data";
 import { sortAbc } from "../mock/types";
 import { modeAccounts } from "../data/mode";
 import { vBills, vExpenses, vMoney, vOrders, vQuotes } from "../data";
@@ -39,6 +41,12 @@ function Fig({ label, value, note, dark, rule, inputs }: { label: string; value:
   );
 }
 
+/** Every vendor typed before, on bills and expenses. */
+function VendorList() {
+  const names = [...new Set([...pastValues(billsSig.value, "vendor"), ...pastValues(vExpenses(), "vendor")])].sort((a, b) => a.localeCompare(b));
+  return <datalist id="mem-vendors">{names.map((n) => <option key={n} value={n} />)}</datalist>;
+}
+
 /* ======================================================= Overview / Mauny money book */
 const KINDS: [MoneyKind, string, 1 | -1][] = [["receipt", "Customer receipt", 1], ["advance", "Customer advance", 1], ["other_income", "Other income", 1], ["capital_in", "Capital introduced", 1], ["loan_taken", "Loan taken", 1],
   ["expense", "Expense paid", -1], ["drawings", "Drawings", -1], ["loan_repayment", "Loan repayment", -1], ["asset_purchase", "Asset purchase", -1], ["tax_payment", "GST / tax paid", -1]];
@@ -71,7 +79,7 @@ export function DayBook() {
               {form !== "transfer" ? <Field label="Kind"><select class={inputCls} value={f.kind} onChange={(e) => setF({ ...f, kind: (e.target as HTMLSelectElement).value as MoneyKind })}>{KINDS.filter((k) => (form === "in" ? k[2] > 0 : k[2] < 0)).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
                 : <Field label="To account"><select class={inputCls} value={f.to} onChange={(e) => setF({ ...f, to: (e.target as HTMLSelectElement).value })}>{accs.filter((a) => a.id !== acc).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
               <Field label={form === "transfer" ? "From" : "Account"}><select class={inputCls} value={acc} onChange={(e) => setAcc((e.target as HTMLSelectElement).value)}>{accs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-              <div class="col-span-2 md:col-span-1"><Field label="Note / party / invoice no."><input class={inputCls} value={f.note} onInput={(e) => setF({ ...f, note: (e.target as HTMLInputElement).value })} /></Field></div>
+              <div class="col-span-2 md:col-span-1"><Field label="Note / party / invoice no."><input class={inputCls} list="mem-notes" value={f.note} onInput={(e) => { const v = (e.target as HTMLInputElement).value; const last = recall(moneySig.value.filter((m) => form === "in" ? m.amount > 0 : m.amount < 0), { note: v }); setF({ ...f, note: v, ...(last && form !== "transfer" && KINDS.some((k) => k[0] === last.kind && (form === "in" ? k[2] > 0 : k[2] < 0)) ? { kind: last.kind } : {}) }); }} /><datalist id="mem-notes">{pastValues(moneySig.value, "note").map((n) => <option key={n} value={n} />)}</datalist></Field></div>
               <Field label={form === "out" ? "Debit ₹" : "Credit ₹"}><input class={`${inputCls} num text-right`} type="number" value={f.amount || ""} onInput={(e) => setF({ ...f, amount: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
               <div class="flex gap-1.5"><Button onClick={() => { if (!f.amount) return; if (form === "transfer") transfer(acc, f.to, f.amount, day); else addMoney({ date: day, account: acc, kind: f.kind, amount: form === "in" ? f.amount : -f.amount, note: f.note }); setForm(null); setF({ ...f, amount: 0, note: "" }); }}>Save</Button><Button variant="ghost" onClick={() => setForm(null)}>Cancel</Button></div>
             </div>
@@ -137,7 +145,7 @@ export function Purchases() {
           <DetailHead title={`Review · ${open.vendor || "new bill"}`} onClose={() => setOpen(null)} />
           <div class="rounded-xl bg-c1 h-44 flex items-center justify-center text-xs text-c3 mb-3 overflow-hidden"><MediaFile v={open.file} alt="Bill" class="h-full object-contain" fallback="Document preview" /></div>
           <div class="grid grid-cols-2 gap-2">
-            <Field label="Vendor"><input {...txt("vendor")} /></Field><Field label="GSTIN"><input {...txt("gstin")} placeholder="24AAA…" /></Field>
+            <Field label="Vendor"><input {...txt("vendor")} list="mem-vendors" onChange={(e) => { const v = (e.target as HTMLInputElement).value; const last = recall(billsSig.value, { vendor: v }, open.id); if (last) upd({ vendor: v, ...(open.gstin ? {} : { gstin: last.gstin }), cat: last.cat }); }} /><VendorList /></Field><Field label="GSTIN"><input {...txt("gstin")} placeholder="24AAA…" /></Field>
             <Field label="Bill no."><input {...txt("no")} /></Field><Field label="Date"><input {...txt("date")} type="date" /></Field>
             <Field label="Subtotal"><input {...num("subtotal")} /></Field><Field label="Tax"><input {...num("tax")} /></Field>
             <Field label="Total"><input {...num("total")} /></Field>
@@ -209,7 +217,7 @@ export function Finance() {
       {add && (
         <Card class="grid gap-2 grid-cols-2 md:grid-cols-6 items-end">
           <Field label="Head"><select class={inputCls} value={e.head} onChange={(x) => setE({ ...e, head: (x.target as HTMLSelectElement).value })}>{sortAbc(["Filament", "Packing", "Courier", "Electricity", "Utilities", "Rent", "Software", "Marketing", "Tools", "Other"]).map((h) => <option key={h}>{h}</option>)}</select></Field>
-          <Field label="Vendor"><input class={inputCls} value={e.vendor} onInput={(x) => setE({ ...e, vendor: (x.target as HTMLInputElement).value })} /></Field>
+          <Field label="Vendor"><input class={inputCls} list="mem-vendors" value={e.vendor} onInput={(x) => { const v = (x.target as HTMLInputElement).value; const last = recall(vExpenses(), { vendor: v }); setE({ ...e, vendor: v, ...(last ? { head: last.head, account: last.account ?? e.account } : {}) }); }} /><VendorList /></Field>
           <Field label="Amount ₹"><input class={inputCls} type="number" value={e.amount || ""} onInput={(x) => setE({ ...e, amount: Number((x.target as HTMLInputElement).value) || 0 })} /></Field>
           <Field label="GST in it ₹"><input class={inputCls} type="number" value={e.tax || ""} onInput={(x) => setE({ ...e, tax: Number((x.target as HTMLInputElement).value) || 0 })} /></Field>
           <Field label="Paid from"><select class={inputCls} value={e.account} onChange={(x) => setE({ ...e, account: (x.target as HTMLSelectElement).value })}><option value="">Not paid yet</option>{modeAccounts().map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>

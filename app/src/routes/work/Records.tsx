@@ -9,7 +9,7 @@ import {
   rate, shipmentsSig, shortDate, today, uid, log, patchOrder, nowS, consume,
   type InvLine, type Invoice, type Order, type Quote, type Shipment,
   blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, me, newDraft, problems,
-  sellerNow, seriesPrefix, STATES, stateOfGstin, updateDraft, type Party,
+  sellerNow, seriesPrefix, STATES, stateLabel, stateOfGstin, updateDraft, type Party,
 } from "../../data";
 import { bizSig, type Biz } from "../../data/biz";
 import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
@@ -325,7 +325,7 @@ export function Quotes() {
           {view === "doc" ? <><div class="doc-scroll"><div class="print-area"><DocSheet d={fromQuote(cur)} /></div></div><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></> : (
             <div class="flex flex-col gap-2">
               <div class="grid grid-cols-2 gap-2">
-                <Field label="Customer"><input class={inputCls} value={cur.customer} onInput={(e) => upd(cur, { customer: (e.target as HTMLInputElement).value })} /></Field>
+                <Field label="Customer"><input class={inputCls} list="mem-qcust" value={cur.customer} onInput={(e) => { const v = (e.target as HTMLInputElement).value; const p = lookupParty({ name: v }); upd(cur, { customer: v, ...(p && !cur.address ? { address: [p.address, stateLabel(p.state)].filter(Boolean).join(", ") } : {}) }); }} /><datalist id="mem-qcust">{[...new Set([...clientsSig.value.map((c) => c.name), ...quotesSig.value.map((q) => q.customer)].filter(Boolean))].sort().map((n) => <option key={n} value={n} />)}</datalist></Field>
                 <Field label="Valid until"><input class={inputCls} type="date" value={cur.valid} onInput={(e) => upd(cur, { valid: (e.target as HTMLInputElement).value })} /></Field>
                 <Field label="Address"><input class={inputCls} value={cur.address ?? ""} onInput={(e) => upd(cur, { address: (e.target as HTMLInputElement).value || undefined })} /></Field>
               </div>

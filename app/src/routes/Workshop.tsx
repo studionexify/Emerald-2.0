@@ -67,7 +67,7 @@ function PrinterAct({ p, open }: { p: Printer; open: (p: Printer) => void }) {
 export function Printers() {
   const [f, setF] = useState("active");
   const r = useRecord<Printer>({
-    sig: printersSig, kind: "Printer", title: (p) => p.name, fields: pFields,
+    sig: printersSig, kind: "Printer", title: (p) => p.name, fields: pFields, recall: ["model"],
     blank: () => ({ id: uid(), name: "", model: "", status: "idle", hours: 0, nozzle: "0.4 mm", volume: "256×256×256", serviceEvery: 300, active: true }),
     facts: (p) => { const m = mlog(p); return [["Status", <Status tone={pTone(p.status)}>{p.status}</Status>], ["Current job", p.job ?? "—"], ["Utilisation", `${m.util}%`], ["Uptime", `${m.uptime}%`], ["Fail rate", `${m.fail}%`], ["Hours lost to blocks", `${m.lost} h`]]; },
     actions: (p, put) => <>
@@ -305,7 +305,7 @@ export function Filament() {
   const [st, setSt] = useState("in stock");
   const [q, setQ] = useState(""); const [set, setSet] = useState(false);
   const r = useRecord<Spool>({
-    sig: spoolsSig, kind: "Spool", noDuplicate: true, title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
+    sig: spoolsSig, kind: "Spool", noDuplicate: true, recall: ["material", "colour"], title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
     blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, copies: 1, spoolMat: defaultBody(""), tare: bodyTare(defaultBody("")) ?? t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
     onSave: (s0, isNew) => { let s = s0; if (isNew) { const n = Math.max(1, s0.copies ?? 1), sl = freeSlots(s0, n); const { copies: _c, ...base } = s0; s = { ...base, slot: sl[0] };
         const extra = sl.slice(1).map((k) => ({ ...base, id: uid(), slot: k, spoolNo: "" }) as Spool);
