@@ -1,3 +1,4 @@
+import { invoiceBiz, stateLabel, termsOf } from "../../data/invoicing";
 /**
  * Invoice PDF, drawn as a real document: embedded Montserrat / Comfortaa / Dancing Script fonts, vector lines and
  * boxes, real text (selectable, searchable, editable in PDF tools) — the same layout as the on-screen A4 sheet.
@@ -5,7 +6,7 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import type { jsPDF as JsPDF } from "jspdf";
-import { invTax, invoiceBiz, stateLabel, termsOf, type Party } from "../../data";
+import {invTax, type Party} from "../../data";
 import type { Biz } from "../../data/biz";
 import { amt, longDate, words, type DocData } from "./Doc";
 
