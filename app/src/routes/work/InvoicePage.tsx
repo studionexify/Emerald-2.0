@@ -179,13 +179,13 @@ function BookImport() {
     try {
       const { readXlsx, applyBook } = await import("../../data/xlsx-book");
       const r = applyBook(readXlsx(await f.arrayBuffer()));
-      setMsg([r.filled.length ? `Filled details on ${r.filled.length}: ${r.filled.join(", ")}.` : "No missing details to fill.", r.already.length ? `Already complete: ${r.already.join(", ")}.` : "", r.notInEmerald.length ? `In the workbook but not in Emerald: ${r.notInEmerald.join(", ")}.` : "", r.mismatch.length ? `Skipped — customer differs: ${r.mismatch.join("; ")}.` : ""].filter(Boolean).join(" "));
+      setMsg([r.created.length ? `Imported ${r.created.length} invoices: ${r.created.join(", ")}.` : "", r.filled.length ? `Filled details on: ${r.filled.join(", ")}.` : "", r.already.length ? `Already complete: ${r.already.join(", ")}.` : "", r.mismatch.length ? `Skipped — customer differs: ${r.mismatch.join("; ")}.` : "", r.totals.length ? `Check totals: ${r.totals.join("; ")}.` : "", !r.created.length && !r.filled.length ? "Nothing new to import." : ""].filter(Boolean).join(" "));
     } catch (e) { setMsg("Could not read this file: " + (e as Error).message); }
     setBusy(false);
   };
   return <div class="rounded-xl border border-line p-2.5 flex flex-col gap-2">
-    <div class="text-[13px] font-semibold">Fill missing addresses from your Excel invoice book</div>
-    <p class="t-meta">Choose the .xlsx with one sheet per invoice (B-001, B-002 …). Bill-to and ship-to names, addresses, contacts and GSTINs are copied onto the matching invoices where they are missing, and saved to the clients. Numbers, dates, items and amounts never change.</p>
+    <div class="text-[13px] font-semibold">Import from your Excel invoice book</div>
+    <p class="t-meta">Choose the .xlsx with one sheet per invoice (B-001, B-002 …). Invoices not yet in Emerald are added with their date, items and client details (place of supply = client state, e.g. Gujarat (24)). Invoices already here only get missing client details — their numbers, dates, items and amounts never change. Clients are saved for autofill.</p>
     <label class="inline-flex"><span class={`inline-flex items-center h-8 px-3.5 rounded-full border border-c3 text-[13px] font-semibold cursor-pointer ${busy ? "opacity-50" : ""}`}>{busy ? "Reading…" : "Choose Excel file"}</span>
       <input type="file" accept=".xlsx" class="sr-only" disabled={busy} onChange={(e) => { pick((e.target as HTMLInputElement).files?.[0]); (e.target as HTMLInputElement).value = ""; }} /></label>
     {msg && <p class="text-[12px]" role="status">{msg}</p>}
