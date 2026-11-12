@@ -186,7 +186,7 @@ function LineRow({ order, i, k, onOpen, filG, seg }: { order: Order; i: Order["i
   const set = (p: Partial<typeof d>) => (designSig.value = { ...designSig.value, [key]: { ...d, ...p, measuredBy: "you" } });
   const putItem = (p: Partial<typeof i>) => onOpen(patchOrder(order, { items: order.items.map((x, j) => (j === k ? { ...x, ...p } : x)) }));
   const attach = async (f?: File | null) => { if (!f || !f.type.startsWith("image/")) return;
-    const [full, thumb] = await Promise.all([shrinkImage(f, 1024, 0.6), shrinkImage(f, 160, 0.6)]);
+    const [full, thumb] = await Promise.all([shrinkImage(f, 1920, 0.72), shrinkImage(f, 160, 0.6)]);
     putItem({ img: storeMedia(full, `${order.no} ${i.name}`), thumb }); };
   const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
   return <li class="border-t border-line first:border-0">

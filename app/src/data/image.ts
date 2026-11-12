@@ -1,5 +1,5 @@
-/** Shrinks a photo before it is stored or synced: longest edge ≤ 1280 px, JPEG ~0.7 → typically 80–200 KB instead of 3–8 MB. */
-export function shrinkImage(file: File, max = 1280, q = 0.7): Promise<string> {
+/** Shrinks a photo before it is stored or synced: longest edge ≤ 1920 px, JPEG ~0.72 → typically 150–350 KB instead of 3–8 MB. */
+export function shrinkImage(file: File, max = 1920, q = 0.72): Promise<string> {
   return new Promise((done) => {
     const fallback = () => { const r = new FileReader(); r.onload = () => done(String(r.result)); r.readAsDataURL(file); };
     if (!file.type.startsWith("image/")) return fallback();
