@@ -42,7 +42,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const tot = rows.reduce((a, r) => ({ q: a.q + r.i.qty, p: a.p + r.f.printed, w: a.w + r.f.wasted, r: a.r + r.f.remaining, e: a.e + r.f.extra }), { q: 0, p: 0, w: 0, r: 0, e: 0 });
   const done = rows.filter((r) => !r.f.remaining).length, kg = Object.values(need).reduce((a, x) => a + x, 0) / 1000;
   const put = (k: number, p: Partial<LineItem>) => patchOrder(o, { items: o.items.map((x, j) => (j === k ? { ...x, ...p } : x)) });
-  const attach = async (k: number, file?: File | null) => { if (!file?.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); put(k, { img: storeMedia(full, `${o.no} ${o.items[k].name}`), thumb }); };
+  const attach = async (k: number, file?: File | null) => { if (!file?.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1920, 0.72), shrinkImage(file, 160, 0.6)]); put(k, { img: storeMedia(full, `${o.no} ${o.items[k].name}`), thumb }); };
 
   const th = "px-2 py-2.5 text-[11.5px] font-bold uppercase tracking-wide !text-c0 whitespace-nowrap select-none cursor-pointer hover:opacity-75 align-bottom";
   const H = ({ k, children, left }: { k: SortKey; children: preact.ComponentChildren; left?: boolean }) =>
@@ -338,7 +338,7 @@ function EditLines({ o, onClose }: { o: Order; onClose: () => void }) {
   const [items, setItems] = useState<LineItem[]>(() => o.items.map((i) => { const f = floorLine(o, i); return { ...i, printed: f.printed + f.extra, failed: f.wasted }; }));
   const [ask, setAsk] = useState<{ g: Record<string, number>; text: string } | null>(null);
   const put = (k: number, p: Partial<LineItem>) => setItems(items.map((x, j) => (j === k ? { ...x, ...p } : x)));
-  const attach = async (k: number, file?: File | null) => { if (!file?.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); put(k, { img: storeMedia(full, `${o.no} ${items[k].name}`), thumb }); };
+  const attach = async (k: number, file?: File | null) => { if (!file?.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1920, 0.72), shrinkImage(file, 160, 0.6)]); put(k, { img: storeMedia(full, `${o.no} ${items[k].name}`), thumb }); };
   const returns = () => { const g: Record<string, number> = {}, what: string[] = [];
     o.items.forEach((old, k) => { const nw = items[k]; if (!nw) return; const f = floorLine(o, old); const drop = Math.max(0, f.printed + f.extra - (nw.printed ?? 0)) + Math.max(0, f.wasted - (nw.failed ?? 0));
       if (drop > 0) { what.push(`${old.name} −${drop} pcs`); for (const [c, x] of Object.entries(gramsFor(old, drop))) g[c] = (g[c] ?? 0) + x; } });

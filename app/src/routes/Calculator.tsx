@@ -4,7 +4,7 @@ import { CALC_TABS } from "../nav";
 import { Button, Card, CardTitle, Field, Flow, Icon, inputCls, isPhone, KV, Page, Sheet } from "../ui";
 import { navigate } from "../router";
 import { Reveal } from "../ui/disclose";
-import { createOrder, type Delivery, inr, spoolsSig, spoolGross, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
+import { clientsSig, ordersSig, createOrder, type Delivery, inr, spoolsSig, spoolGross, rate, RATE_DEFS, ratesSig, resetRates, setRate } from "../data";
 import { ladder, machineRate, nexcalSig, nexres, nexresSig, NEXCAL_DEFAULTS, NEXRES_DEFAULTS, type NexcalSettings, type NexResSettings } from "../data/pricing";
 
 type Fields = Record<string, number>;
@@ -101,7 +101,7 @@ function Steps({ steps }: { steps: [string, string, preact.ComponentChildren][] 
 export function ClientFields({ q, setQ }: { q: Quote; setQ: (q: Quote) => void }) {
   return (
     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2.5 mb-2.5">
-      <Field label="Client"><input class={inputCls} autoComplete="organization" enterKeyHint="next" value={q.customer} placeholder="New client" onInput={(e) => setQ({ ...q, customer: (e.target as HTMLInputElement).value })} /></Field>
+      <Field label="Client"><datalist id="mem-calc-cust">{[...new Set([...clientsSig.value.map((c) => c.name), ...ordersSig.value.filter((o) => o.type !== "inhouse").map((o) => o.customer)].filter(Boolean))].sort().map((n) => <option key={n} value={n} />)}</datalist><input class={inputCls} list="mem-calc-cust" autoComplete="organization" enterKeyHint="next" value={q.customer} placeholder="New client" onInput={(e) => setQ({ ...q, customer: (e.target as HTMLInputElement).value })} /></Field>
       <Field label="Item"><input class={inputCls} enterKeyHint="next" value={q.item} placeholder="Calculated item" onInput={(e) => setQ({ ...q, item: (e.target as HTMLInputElement).value })} /></Field>
       <Field label="Deliver by"><input class={inputCls} type="date" value={q.due} onInput={(e) => setQ({ ...q, due: (e.target as HTMLInputElement).value })} /></Field>
     </div>

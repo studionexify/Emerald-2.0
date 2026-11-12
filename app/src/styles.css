@@ -88,7 +88,15 @@ body { margin: 0; background: var(--bg); color: var(--c-4); font-family: var(--f
   body * { visibility: hidden !important; }
   .print-area, .print-area * { visibility: visible !important; }
   .print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000 !important; background: #fff !important; }
+  .print-area .doc-a4 { border: 0 !important; box-shadow: none !important; margin: 0 !important; break-after: page; }
+  .print-area .doc-a4:last-child { break-after: auto; }
+  .no-print { display: none !important; }
 }
+/* A4 sheet: 210 × 297 mm, margins as on the studio's PDFs. On screen it scrolls sideways on narrow panes. */
+.doc-a4 { box-sizing: border-box; width: 210mm; min-height: 297mm; padding: 19mm 17mm 14mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.doc-scroll { overflow-x: auto; max-width: 100%; }
+@page invoice { size: A4; margin: 0; }
+@media print { .doc-a4 { page: invoice; } }
 
 /* Type ramp (5 tiers): title 24 · section 13 caps · body 13 · meta 11 · figure (tabular). */
 body { font-size: 13px; line-height: 1.4; font-weight: 400; }
@@ -140,3 +148,8 @@ tbody td:first-child { font-weight: 600; }
 
 /* Floor sheet: colour with no spool in store */
 .floor-empty { background: repeating-linear-gradient(45deg, var(--red-bg) 0 4px, transparent 4px 8px); }
+/* Invoice sheet keeps its own type, not the app's table styling. */
+.doc-a4 thead th { font-size: inherit; text-transform: none; letter-spacing: 0; color: #000; font-weight: 700; }
+.doc-a4 tbody td { font-weight: 400; }
+.doc-a4 tbody td.font-bold { font-weight: 700; }
+.doc-a4 table { font-variant-numeric: normal; }

@@ -148,7 +148,7 @@ export function QC() {
   const [pick, setPick] = useState(() => { const i = done.findIndex((j) => j.id === qcFocus.value); qcFocus.value = null; return Math.max(0, i); });
   const cur = done[Math.min(pick, done.length - 1)];
   const [d, setD] = useState({ res: "pass" as QcEntry["result"], units: 0, grams: 0, defect: "—", cause: "—", lesson: "", by: teamNames()[0] ?? "You" });
-  const r = useRecord<QcEntry>({ sig: qcSig, kind: "QC entry", title: (q) => `${q.orderNo} · ${q.item}`, fields: qFields, logKind: "order",
+  const r = useRecord<QcEntry>({ sig: qcSig, kind: "QC entry", recall: false, title: (q) => `${q.orderNo} · ${q.item}`, fields: qFields, logKind: "order",
     blank: () => ({ id: uid(), orderNo: "", item: "", result: "pass", grams: 0, by: me.value?.name ?? "You", date: today() }),
     facts: (q) => [["Result", <Status tone={q.result === "pass" ? "done" : q.result === "scrap" ? "blocked" : "waiting"}>{q.result}</Status>], ["Wasted", `${q.grams} g`]] });
   const save = () => {
@@ -243,7 +243,7 @@ function PackCard({ o }: { o: Order }) {
 
 export function Packing() {
   const list = vOrders().filter((o) => o.stage === "packing");
-  const r = useRecord<PackRecord>({ sig: packRecSig, kind: "Packing record", title: (p) => `${p.order} · ${p.box || "packing"}`, fields: pkFields, logKind: "order",
+  const r = useRecord<PackRecord>({ sig: packRecSig, kind: "Packing record", recall: ["box"], title: (p) => `${p.order} · ${p.box || "packing"}`, fields: pkFields, logKind: "order",
     blank: () => ({ id: uid(), order: "", box: "", weight: "", materials: "", cost: 0, by: me.value?.name ?? "You", notes: "", date: today() }) });
   return (
     <WorkShell stage="packing" title="Packing" sub="Materials used and their cost, weight, box size, handling notes" detail={r.detail}>

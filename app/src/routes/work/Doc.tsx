@@ -1,8 +1,8 @@
 /** The document generator: tax invoice, credit note and quotation laid out like the studio's existing PDFs (A4, printed from the browser). */
-import { invTax, type InvLine, type Invoice, type Quote } from "../../data";
-import { bizSig, type Biz } from "../../data/biz";
+import { invTax, invoiceBiz, stateLabel, termsOf, type InvLine, type Invoice, type Party, type Quote } from "../../data";
+import type { Biz } from "../../data/biz";
 
-const words = (n: number): string => {
+export const words = (n: number): string => {
   const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
   const two = (x: number) => (x < 20 ? a[x] : `${b[Math.floor(x / 10)]} ${a[x % 10]}`.trim());
@@ -14,8 +14,8 @@ const words = (n: number): string => {
 };
 /** ₹ with paise, Indian grouping — documents always show two decimals. */
 const rs = (n: number) => (n < 0 ? "−" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const amt = (n: number) => Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const longDate = (d: string) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-") : "");
+export const amt = (n: number) => Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const longDate = (d: string) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-") : "");
 const quoteDate = (d: string) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "");
 
 export const INVOICE_TERMS = (b: Biz) => [
@@ -42,11 +42,14 @@ export const QUOTE_TERMS = [
 export type DocData = {
   kind: "invoice" | "credit" | "quote" | "challan"; title: string; no: string; date: string; party: string; gstin?: string; address?: string; shipTo?: string; contact?: string; pos?: string;
   lines: InvLine[]; gstRate: number; interstate: boolean; shipping?: number; note?: string; valid?: string; tech?: string; cancelled?: boolean; extra?: [string, string][];
+  /** New invoices: the parties and the company details frozen at issue. */
+  billTo?: Party; shipToParty?: Party; seller?: Biz; draft?: boolean;
 };
 export const fromInvoice = (i: Invoice): DocData => ({
   kind: i.kind, title: i.kind === "credit" ? "Credit note" : "Tax invoice", cancelled: i.status === "cancelled", no: i.no, date: i.date, party: i.customer, gstin: i.gstin, address: i.address,
   shipTo: i.shipTo, contact: i.contact, pos: i.pos, lines: i.lines, gstRate: i.gstRate, interstate: i.interstate, shipping: i.shipping,
-  note: i.against ? `Against ${i.against}. ${i.note ?? ""}` : undefined, extra: i.orderNo ? [["Order", i.orderNo + (i.batch ? ` · ${i.batch}` : "")]] : undefined,
+  note: i.against ? `Against ${i.against}. ${i.note ?? ""}` : undefined, extra: i.orderNo && !i.billTo ? [["Order", i.orderNo + (i.batch ? ` · ${i.batch}` : "")]] : undefined,
+  billTo: i.billTo, shipToParty: i.sameShip ? i.billTo : i.shipToParty, seller: i.seller?.biz, draft: i.no === "Draft",
 });
 export const fromQuote = (q: Quote): DocData => ({ kind: "quote", title: "Quotation", no: q.no, date: q.date, party: q.customer, address: q.address, lines: q.lines, gstRate: q.gstRate, interstate: false, valid: q.valid, tech: q.tech });
 
@@ -63,49 +66,98 @@ function Contact({ b }: { b: Biz }) {
   return <div class="text-[11px] text-right"><div class="font-bold">{b.name.toUpperCase()}</div><div>{b.phone}</div><div>{b.email}</div><div>{b.addressShort || b.address}</div>{b.website && <div>{b.website}</div>}</div>;
 }
 
-export function DocSheet({ d }: { d: DocData }) {
-  const b = bizSig.value;
-  const t = invTax({ id: "", kind: d.kind === "credit" ? "invoice" : "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued", shipping: d.shipping });
+/* Fonts used by the studio's invoice PDFs, loaded only when a document is shown. */
+let fontsIn = false;
+function useDocFonts() {
+  if (fontsIn || typeof document === "undefined") return; fontsIn = true;
+  const l = document.createElement("link"); l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Dancing+Script:wght@600&family=Montserrat:wght@400;600;700&display=swap";
+  document.head.appendChild(l);
+}
+
+/** One A4 tax invoice / credit note page — same measurements as the studio's PDFs and the downloaded PDF (mm / pt). */
+export function DocSheet({ d, copy }: { d: DocData; copy?: string }) {
+  useDocFonts();
+  const b = d.seller ?? invoiceBiz.value;
+  const t = invTax({ id: "", kind: "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued", shipping: d.shipping });
   if (d.kind === "quote") return <QuoteSheet d={d} b={b} t={t} />;
-  const party = (label: string, addr?: string) => (
-    <div class="grid grid-cols-[70px_1fr] gap-x-2"><span class="font-semibold">{label}</span><span>{d.party}{addr && <><br />{addr}</>}</span>
-      <span class="font-semibold">Contact:</span><span>{d.contact || ""}</span><span class="font-semibold">GST No.</span><span>{d.gstin || ""}</span></div>
-  );
+  const bill: Party = d.billTo ?? { name: d.party, address: d.address ?? "", contact: d.contact ?? "", gstin: d.gstin ?? "", email: "", state: "" };
+  const ship: Party = d.shipToParty ?? (d.shipTo ? { ...bill, name: d.shipTo.split("\n")[0], address: d.shipTo.split("\n").slice(1).join("\n") || d.shipTo } : bill);
+  const credit = d.kind === "credit";
+  const IN = "#d9d9d9", OUT = "#b7b7b7";
+  const td = { borderTop: `0.23mm solid ${IN}`, height: "4.9mm", padding: "0 0.8mm", verticalAlign: "middle" } as const;
+  const vl = { borderLeft: `0.23mm solid ${IN}` };
+  const addr = (p: Party) => { const st = p.state ? stateLabel(p.state) : ""; return p.address + (st && !p.address.toLowerCase().includes(p.state.toLowerCase()) ? `\n${st}` : ""); };
+  const party = (label: string, p: Party) => <>
+    <tr><td style={{ ...td, background: "#000", color: "#fff", fontWeight: 700, width: "19.6mm" }}>{label}</td><td style={{ ...td, ...vl, fontWeight: 700 }}>{p.name}</td></tr>
+    <tr><td colSpan={2} style={{ ...td, height: "14.7mm", verticalAlign: "top", paddingTop: "1.1mm", fontWeight: 700, whiteSpace: "pre-line", lineHeight: "3.3mm" }}>{addr(p)}</td></tr>
+    <tr><td style={td}>Contact:</td><td style={{ ...td, ...vl, fontWeight: 700 }}>{p.contact || "-"}</td></tr>
+    <tr><td style={td}>GST No.</td><td style={{ ...td, ...vl, fontWeight: 700 }}>{p.gstin || "-"}</td></tr>
+  </>;
+  const facts: [string, string][] = [[credit ? "Credit Note No.:" : "Invoice No.:", d.no], [credit ? "Date:" : "Invoice Date:", longDate(d.date)], ["Place of Supply:", d.pos || (d.interstate ? "Other state" : "Gujarat (24)")], ["Reverse Charges:", "No"]];
+  if (credit && d.note) facts.push(["Against:", d.note.replace(/^Against ([^.]+).*$/, "$1")]);
+  const rows = [...d.lines, ...Array.from({ length: Math.max(0, 5 - d.lines.length) }, () => null)];
+  const colW = ["19.6mm", "47.1mm", "23.6mm", "23.6mm", "23.5mm", "37.1mm"];
+  const cell = { borderTop: `0.23mm solid ${IN}`, borderLeft: `0.23mm solid ${IN}`, minHeight: "4.9mm", height: "4.9mm", padding: "0 0.8mm", verticalAlign: "top", paddingTop: "1mm", lineHeight: "3.3mm" } as const;
+  const tot: [string, string, boolean][] = [["Sub total", amt(t.taxable), true],
+    ...(d.interstate ? [[`IGST (${d.gstRate}%)`, amt(t.igst), false]] : [[`CGST (${d.gstRate / 2}%)`, amt(t.cgst), false], [`SGST (${d.gstRate / 2}%)`, amt(t.sgst), false]]) as [string, string, boolean][],
+    ...(t.shipping ? [["Shipping cost", amt(t.shipping), false]] : []) as [string, string, boolean][],
+    ["Round-off", (t.roundOff < 0 ? "-" : "") + amt(t.roundOff), true]];
+  const blue = { color: "#1155cc", textDecoration: "underline" };
   return (
-    <article class="print-area bg-white text-black rounded-xl p-4 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] @container overflow-x-auto [&_td.text-right]:whitespace-nowrap relative">
-      {d.cancelled && <div class="absolute inset-x-0 top-1/3 text-center text-5xl font-bold opacity-20 rotate-[-12deg] pointer-events-none">CANCELLED</div>}
-      <header class="text-center mb-3">
-        <div class="text-xl font-bold">{b.name.toUpperCase()}</div><div>{b.address}</div>
-        <div>Mo: {b.phone} | Email: {b.email}</div><div>{b.website ? `${b.website} | ` : ""}GSTIN: {b.gstin || "—"}</div>
+    <article class="doc-a4 bg-white text-black relative mx-auto shadow-sm border border-c2" style={{ fontFamily: "Montserrat, var(--font-sans)", fontSize: "7.7pt", lineHeight: 1.25, padding: "19mm 17.8mm 12mm 17.7mm" }}>
+      {(d.cancelled || d.draft) && <div class="absolute inset-x-0 text-center font-bold pointer-events-none" style={{ top: "120mm", fontSize: "54pt", color: "#e8e8e8", transform: "rotate(-14deg)" }}>{d.cancelled ? "CANCELLED" : "DRAFT"}</div>}
+      <img src="/nexify-logo.png" alt={b.name} class="absolute" style={{ right: "17.9mm", top: "19mm", width: "35.5mm", height: "15.7mm", objectFit: "contain" }} />
+      <header style={{ paddingLeft: "0.8mm", fontWeight: 700 }}>
+        <div style={{ fontSize: "11.2pt", lineHeight: "5.8mm", marginTop: "0.8mm" }}>{b.name.toUpperCase()}</div>
+        <div style={{ lineHeight: "4.9mm" }}>{b.address}</div>
+        <div style={{ lineHeight: "4.9mm" }}>Mo: {b.phone}&nbsp;&nbsp;|&nbsp;&nbsp;Email: {b.email}</div>
+        <div style={{ lineHeight: "4.9mm" }}>{b.website && <><a href={b.website.startsWith("http") ? b.website : "https://" + b.website} style={blue}>{b.website}</a>&nbsp;&nbsp;|&nbsp;&nbsp;</>}GSTIN: {b.gstin}</div>
       </header>
-      <h1 class="text-right text-lg font-bold uppercase mb-3">{d.title}</h1>
-      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6 mb-3">
-        <div class="space-y-2">{party("Bill to:", d.address)}{party("Ship to:", d.shipTo || d.address)}</div>
-        <div class="grid grid-cols-[auto_auto] gap-x-4 h-fit">
-          <span>{d.kind === "credit" ? "Credit note No.:" : d.kind === "challan" ? "Challan No.:" : "Invoice No.:"}</span><b class="text-right">{d.no}</b>
-          <span>{d.kind === "credit" ? "Date:" : "Invoice Date:"}</span><span class="text-right">{longDate(d.date)}</span>
-          <span>Place of Supply:</span><span class="text-right">{d.pos || (d.interstate ? "Other state" : "Gujarat")}</span>
-          <span>Reverse Charges:</span><span class="text-right">No</span>
-          {d.extra?.map(([k, v]) => <><span key={k}>{k}:</span><span class="text-right">{v}</span></>)}
-        </div>
-      </section>
-      <table class="w-full border-collapse mb-3 [&_td]:px-1 [&_th]:px-1">
-        <thead><tr class="border-y border-black text-left"><th class="py-1 w-12">Sr. No.</th><th>Description</th><th>HSN / SAC</th><th class="text-right">Unit Price</th><th class="text-right">Qty</th><th class="text-right">Total</th></tr></thead>
-        <tbody>{d.lines.map((l, i) => <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td>{l.hsn}</td><td class="text-right">{amt(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{amt(l.qty * l.rate)}</td></tr>)}</tbody>
-      </table>
-      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6">
-        <div><div class="font-bold">TERMS AND CONDITIONS</div><ol class="list-decimal pl-4">{INVOICE_TERMS(b).map((x) => <li key={x}>{x}</li>)}</ol>{d.note && <p class="mt-2">{d.note}</p>}</div>
-        <table class="w-full @lg:w-64 h-fit whitespace-nowrap [&_td]:pl-3 [&_td:first-child]:pl-0"><tbody>
-          <tr><td>Sub total</td><td class="text-right">{amt(t.taxable)}</td></tr>
-          {!d.gstRate ? null : d.interstate ? <tr><td>IGST ({d.gstRate}%)</td><td class="text-right">{amt(t.igst)}</td></tr> : <><tr><td>CGST ({d.gstRate / 2}%)</td><td class="text-right">{amt(t.cgst)}</td></tr><tr><td>SGST ({d.gstRate / 2}%)</td><td class="text-right">{amt(t.sgst)}</td></tr></>}
-          <tr><td>Shipping cost</td><td class="text-right">{amt(t.shipping)}</td></tr>
-          <tr><td>Round-off</td><td class="text-right">{t.roundOff < 0 ? "−" : ""}{amt(t.roundOff)}</td></tr>
-          <tr class="border-t-2 border-black font-bold"><td class="py-1">Total</td><td class="text-right">{rs(t.total)}</td></tr>
+      <div style={{ height: "4.6mm", textAlign: "right", fontSize: "6.2pt", fontWeight: 700, paddingRight: "0.8mm", paddingTop: "1.2mm" }}>{copy ? copy.toUpperCase() : ""}</div>
+      <h1 style={{ fontFamily: "Comfortaa, cursive", fontWeight: 700, fontSize: "12.9pt", textAlign: "center", textDecoration: "underline", textUnderlineOffset: "1mm", textDecorationThickness: "0.23mm", margin: "0 0 6.6mm", lineHeight: "5mm" }}>{credit ? "CREDIT NOTE" : "TAX INVOICE"}</h1>
+      <section style={{ display: "grid", gridTemplateColumns: "90.3mm 84.2mm", alignItems: "start" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", border: `0.23mm solid ${OUT}` }}><tbody>{party("Bill to:", bill)}{party("Ship to:", ship)}</tbody></table>
+        <table style={{ borderCollapse: "collapse", width: "100%", borderRight: `0.23mm solid ${IN}`, borderBottom: `0.23mm solid ${IN}` }}><tbody>
+          {facts.map(([k, v]) => <tr key={k}><td style={{ ...td, textAlign: "right", width: "47mm" }}>{k}</td><td style={{ ...td, ...vl, textAlign: "right", fontWeight: 700 }}>{v}</td></tr>)}
         </tbody></table>
       </section>
-      <p class="mt-2">Amount in words: <b>Rupees {words(t.total)} only</b></p>
-      <p class="mt-3 text-center italic">Thank you for purchasing from us!</p>
-      <footer class="mt-4 flex justify-between items-end gap-4"><PayInfo b={b} /><Contact b={b} /></footer>
+      <table style={{ borderCollapse: "collapse", width: "174.5mm", marginTop: "4.9mm", borderRight: `0.23mm solid ${IN}`, borderBottom: `0.23mm solid ${IN}`, tableLayout: "fixed" }}>
+        <colgroup>{colW.map((w, k) => <col key={k} style={{ width: w }} />)}</colgroup>
+        <thead><tr>{["Sr. No.", "Description", "HSN / SAC", "Unit Price", "Qty", "Total"].map((h, k) => <th key={h} style={{ ...cell, fontWeight: 700, textAlign: k === 1 || k === 2 ? "left" : "center" }}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((l, i) => <tr key={i}>{l ? <>
+          <td style={{ ...cell, textAlign: "center" }}>{i + 1}</td><td style={cell}>{l.desc}</td><td style={cell}>{l.hsn}</td>
+          <td style={{ ...cell, textAlign: "center" }}>₹{amt(l.rate)}</td><td style={{ ...cell, textAlign: "center" }}>{l.qty}</td><td style={{ ...cell, textAlign: "center" }}>{amt(l.qty * l.rate)}</td>
+        </> : colW.map((_, k) => <td key={k} style={cell} />)}</tr>)}</tbody>
+      </table>
+      <section style={{ display: "grid", gridTemplateColumns: "1fr 60.6mm", marginTop: "4.9mm", alignItems: "start" }}>
+        <div style={{ fontSize: "6.9pt", paddingLeft: "0.8mm", paddingTop: "5.8mm", lineHeight: "2.95mm", maxWidth: "88mm" }}>
+          <div style={{ fontWeight: 700, marginBottom: "3mm" }}>{credit ? "NOTE" : "TERMS AND CONDITIONS"}</div>
+          {credit && d.note ? <div>{d.note}</div> : termsOf(b).map((x, k) => <div key={k}>{k + 1}. {x}</div>)}
+          <div style={{ marginTop: "1.5mm" }}>Amount in words: <b style={{ fontWeight: 700 }}>Indian Rupees {words(t.total)} Only</b></div>
+        </div>
+        <div>
+          {tot.map(([k, v, bold]) => <div key={k} style={{ display: "grid", gridTemplateColumns: "23.5mm 37.1mm", height: "4.9mm", alignItems: "center" }}>
+            <span style={{ textAlign: "right", paddingRight: "0.8mm", fontWeight: bold ? 700 : 400 }}>{k}</span>
+            <span style={{ textAlign: "center", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", borderTop: `0.23mm solid ${IN}`, borderLeft: `0.23mm solid ${IN}`, borderRight: `0.23mm solid ${IN}` }}>{v}</span></div>)}
+          <div style={{ display: "grid", gridTemplateColumns: "23.5mm 37.1mm", height: "9.8mm" }}>
+            <span style={{ background: "#efefef", border: "0.23mm solid #000", borderRight: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>Total</span>
+            <span style={{ background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "10.3pt" }}>₹{amt(t.total)}</span>
+          </div>
+        </div>
+      </section>
+      <p style={{ fontFamily: "Comfortaa, cursive", fontSize: "11.2pt", marginTop: "10.5mm", paddingLeft: "0.8mm" }}><span style={{ textDecoration: "underline", textUnderlineOffset: "0.9mm", textDecorationThickness: "0.2mm" }}>{b.thanks || "Thank you for purchasing from us!"}</span></p>
+      <footer style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginTop: "3.6mm", padding: "0 0.7mm 0 0.8mm", lineHeight: "3.3mm" }}>
+        <div><div style={{ fontWeight: 700, marginBottom: "3.3mm" }}>PAYMENT INFORMATION</div>
+          {b.upi && <div>UPI: {b.upi}</div>}{b.upiNumber && <div>UPI Number: {b.upiNumber}</div>}
+          <div style={{ marginTop: "3.4mm" }}>{b.bankName ? <><div>Bank: {b.bankName}</div><div>A/C Name: {b.accName}</div><div>A/C: {b.accNo}</div><div>IFSC: {b.ifsc}</div></> : b.bank}</div></div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontWeight: 700 }}>{b.name.toUpperCase()}</div>
+          <div style={{ fontFamily: "'Dancing Script', cursive", color: "#1a3fbf", fontSize: "15pt", lineHeight: "6.4mm" }}>{b.signName || "Ankit P"}</div>
+          <div style={{ fontSize: "6pt", lineHeight: "3mm", marginBottom: "3.2mm" }}>Authorised Signatory</div>
+          <div>{b.phone}</div><div>{b.email}</div><div>{b.addressShort || b.address}</div>{b.website && <a href={b.website.startsWith("http") ? b.website : "https://" + b.website} style={blue}>{b.website}</a>}
+        </div>
+      </footer>
     </article>
   );
 }

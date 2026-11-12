@@ -34,7 +34,7 @@ const titleOf = (path: string) => (path === "/more" ? "More" : path === "/search
 
 /** Exact match for the production segments (they share the /work prefix); prefix match elsewhere. */
 const SEG_HREFS = ["/work", "/work/b2b", "/work/inhouse"];
-const navOn = (path: string, href: string) => (SEG_HREFS.includes(href) ? path === href || (href === "/work" && path.startsWith("/work/") && !SEG_HREFS.includes(path)) : isActive(path, href));
+const navOn = (path: string, href: string) => (SEG_HREFS.includes(href) ? path === href || (href === "/work" && path.startsWith("/work/") && !SEG_HREFS.includes(path) && path !== "/work/invoice") : isActive(path, href));
 
 function navCount(href: string) {
   const live = vOrders().filter((o) => o.stage !== "archived");

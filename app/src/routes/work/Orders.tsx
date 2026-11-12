@@ -1,3 +1,5 @@
+import { pastValues, recall } from "../../data/memory";
+import { clientsSig, ordersSig } from "../../data";
 import { sortAbc } from "../../mock/types";
 import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
@@ -104,6 +106,13 @@ function BatchCard({ b, onOpen }: { b: import("../../data").Batch; onOpen: () =>
 }
 
 export const PURPOSES = sortAbc(["Jig / tool", "Sample", "R&D", "Display", "Own use"]);
+/** Everyone who has ordered or is a saved client — offered while typing a customer. */
+const customerNames = () => [...new Set([...pastValues(clientsSig.value, "name"), ...pastValues(ordersSig.value, "customer")])].sort((a, b) => a.localeCompare(b));
+/** How this customer usually comes and orders: filled from their last order. */
+function customerMemory(name: string) {
+  const o = recall(ordersSig.value.filter((x) => x.type !== "inhouse"), { customer: name }); if (!o) return {};
+  return { medium: o.medium, ...(o.size ? { size: o.size } : {}), ...(o.b2b ? { b2b: o.b2b } : {}), ...(o.pay ? { pay: o.pay } : {}) };
+}
 function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
   const [t, setT] = useState<OrderType>("client");
   const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "", purpose: "Jig / tool", size: "small" as OrderSize, b2b: B2B_TYPES[0], pay: "alpha" as "alpha" | "beta" });
@@ -117,8 +126,8 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
         ))}
       </div>
       <div class="grid grid-cols-2 gap-2.5">
-        {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} onInput={(e) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, customer: v, ...(b2bFor(v) ?? {}) }); }} /></Field></div>}
-        <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} /></Field></div>
+        {t !== "inhouse" && <div class="col-span-2"><Field label={t === "bulk" ? "Business" : "Customer"}><input {...f("customer")} list="mem-customers" onInput={(e) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, customer: v, ...customerMemory(v), ...(b2bFor(v) ?? {}) }); }} /><datalist id="mem-customers">{customerNames().map((n) => <option key={n} value={n} />)}</datalist></Field></div>}
+        <div class="col-span-2"><Field label={t === "inhouse" ? "What are we making (jig, tool, sample)" : "Item"}><input {...f("item")} list="mem-items" onInput={(e) => { const v = (e.target as HTMLInputElement).value; const last = recall(ordersSig.value.flatMap((o) => o.items.map((i) => ({ ...i, created: o.created }))), { name: v }); setD({ ...d, item: v, ...(last && !d.price ? { price: last.price } : {}) }); }} /><datalist id="mem-items">{pastValues(ordersSig.value.flatMap((o) => o.items), "name").map((n) => <option key={n} value={n} />)}</datalist></Field></div>
         <Field label="Quantity"><input type="number" {...f("qty")} /></Field>
         {t !== "inhouse" ? <Field label="Unit price (₹)"><input type="number" {...f("price")} /></Field> : <Field label="Purpose"><select class={inputCls} value={d.purpose} onChange={(e) => setD({ ...d, purpose: (e.target as HTMLSelectElement).value })}>{PURPOSES.map((x) => <option key={x}>{x}</option>)}</select></Field>}
         {t !== "inhouse" && <Field label="Order type"><select class={inputCls} value={d.size} onChange={(e) => setD({ ...d, size: (e.target as HTMLSelectElement).value as OrderSize })}>{Object.entries(SIZE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>}

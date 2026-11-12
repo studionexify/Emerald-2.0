@@ -3,11 +3,13 @@ import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { ordersSig } from "../../data";
 import { vOrders, vQuotes } from "../../data";
 import { useState } from "preact/hooks";
-import { ask, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
+import { Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Field, inputCls, Section, Stat, Status, SubTabs, Table } from "../../ui";
 import {
-  accountsSig, batchesSig, cancelInvoice, creditNote, fyOf, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, photosSig, quotesSig, raiseInvoice,
-  rate, resequence, shipmentsSig, shortDate, today, uid, updateInvoice, log, patchOrder, nowS, consume,
-  type InvLine, type Invoice, type Order, type Quote, type Shipment,
+  inr, invoicesSig, invTax, nextNo, photosSig, quotesSig,
+  rate, shipmentsSig, shortDate, today, uid, log, patchOrder, nowS, consume,
+  type InvLine, type Order, type Quote, type Shipment,
+  lookupParty, 
+  stateLabel, 
 } from "../../data";
 import { PaneSection, useRecord, Inspect, type FDef } from "../../ui/record";
 import { MediaImg } from "../../ui/media";
@@ -26,6 +28,7 @@ function LinesEditor({ lines, on, locked }: { lines: InvLine[]; on: (l: InvLine[
       {lines.map((l, k) => (
         <div key={k} class="grid grid-cols-[1fr_56px_44px_72px_24px] gap-1">
           <input class={c} disabled={locked} value={l.desc} onInput={(e) => set(k, { desc: (e.target as HTMLInputElement).value })} aria-label="Description" />
+          <button class="text-xs cursor-pointer" aria-label="Remove item" onClick={() => on(lines.filter((_, i) => i !== k))}>✕</button>
           <input class={c} disabled={locked} value={l.hsn} onInput={(e) => set(k, { hsn: (e.target as HTMLInputElement).value })} aria-label="HSN" />
           <input class={c} disabled={locked} type="number" value={l.qty} onInput={(e) => set(k, { qty: Number((e.target as HTMLInputElement).value) || 0 })} aria-label="Qty" />
           <input class={c} disabled={locked} type="number" value={l.rate} onInput={(e) => set(k, { rate: Number((e.target as HTMLInputElement).value) || 0 })} aria-label="Rate" />
@@ -34,103 +37,6 @@ function LinesEditor({ lines, on, locked }: { lines: InvLine[]; on: (l: InvLine[
       ))}
       {!locked && <button class="text-xs underline self-start cursor-pointer" onClick={() => on([...lines, { desc: "", hsn: "491199", qty: 1, rate: 0 }])}>+ Line</button>}
     </div>
-  );
-}
-
-/* ======================================================= Invoice (stage + register) */
-export function Invoice() {
-  const [f, setF] = useState("all");
-  const [open, setOpen] = useState<Invoice | null>(null);
-  const [view, setView] = useState<"edit" | "doc">("edit");
-  const [cn, setCn] = useState(0);
-  const cur = open && (invoicesSig.value.find((i) => i.id === open.id) ?? open);
-  const waiting = vOrders().filter((o) => o.stage === "invoice" && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && !i.batch));
-  const bw = batchesSig.value.filter((b) => b.stage === "invoice" && !b.invoiceNo);
-  const reg = [...invoicesSig.value].filter((i) => f === "all" || (f === "paid" ? !!i.paidOn : f === "credit" ? i.kind === "credit" : f === "cancelled" ? i.status === "cancelled" : !i.paidOn && i.kind === "invoice" && i.status === "issued")).sort((a, b) => b.no.localeCompare(a.no));
-  const locked = !!cur && (monthLocked(cur.date) || cur.status === "cancelled");
-  const raise = (o: Order, batch?: { name: string; units: number; id: string }) => {
-    const lines = batch ? [{ desc: `${o.items[0]?.name ?? "Item"} — ${batch.name}`, hsn: "491199", qty: batch.units, rate: o.items[0]?.price }] : linesOf(o);
-    const client = clientsSig.value.find((c) => c.name === o.customer);
-    let inv; try { inv = raiseInvoice({ customer: o.customer, gstin: client?.gstin || undefined, orderNo: o.no, batch: batch?.name, lines }); } catch (e) { alert((e as Error).message); return; }
-    if (batch) batchesSig.value = batchesSig.value.map((b) => (b.id === batch.id ? { ...b, invoiceNo: inv.no } : b)); else patchOrder(o, { invoiced: true });
-    setOpen(inv); setView("doc");
-  };
-  return (
-    <WorkShell stage="invoice" title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
-      actions={<><Button variant="outline" onClick={() => ask("Renumber this FY's series in date order?").then((ok) => ok && resequence(fyOf(today())))}>Resequence</Button><Button icon="plus" onClick={() => { let inv; try { inv = raiseInvoice({ customer: "Walk-in customer", lines: [{ desc: "", hsn: "491199", qty: 1, rate: 0 }] }); } catch (e) { alert((e as Error).message); return; } setOpen(inv); setView("edit"); }}>New invoice</Button></>}
-      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}
-      detail={cur && (
-        <div>
-          <DetailHead title={`${cur.no} · ${cur.customer}`} onClose={() => setOpen(null)} />
-          <div class="mb-2"><SubTabs value={view} onChange={setView} items={[["edit", "Details"], ["doc", "Document"]]} /></div>
-          {view === "doc" ? <><DocSheet d={fromInvoice(cur)} /><div class="flex gap-2 mt-3"><Button onClick={() => window.print()}>Print / save PDF</Button></div></> : (
-            <div class="flex flex-col gap-2">
-              {locked && <div class="rounded-xl bg-c1 p-2 text-xs">{cur.status === "cancelled" ? "Cancelled — number kept in the series." : "GST month filed & locked — correct with a credit note."}</div>}
-              <div class="grid grid-cols-2 gap-2">
-                <Field label="Customer"><input class={inputCls} disabled={locked} value={cur.customer} onInput={(e) => updateInvoice(cur, { customer: (e.target as HTMLInputElement).value })} /></Field>
-                <Field label="GSTIN (blank = B2C)"><input class={inputCls} disabled={locked} value={cur.gstin ?? ""} onInput={(e) => updateInvoice(cur, { gstin: (e.target as HTMLInputElement).value || undefined })} /></Field>
-                <Field label="Date"><input class={inputCls} disabled={locked} type="date" value={cur.date} onInput={(e) => updateInvoice(cur, { date: (e.target as HTMLInputElement).value })} /></Field>
-                <Field label="Number"><input class={inputCls} disabled={locked} value={cur.no} onInput={(e) => updateInvoice(cur, { no: (e.target as HTMLInputElement).value }, "Renamed invoice")} /></Field>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <Field label="Bill-to address"><textarea class={inputCls} disabled={locked} value={cur.address ?? ""} onInput={(e) => updateInvoice(cur, { address: (e.target as HTMLTextAreaElement).value || undefined })} /></Field>
-                <Field label="Ship-to address (blank = same)"><textarea class={inputCls} disabled={locked} value={cur.shipTo ?? ""} onInput={(e) => updateInvoice(cur, { shipTo: (e.target as HTMLTextAreaElement).value || undefined })} /></Field>
-                <Field label="Contact"><input class={inputCls} disabled={locked} value={cur.contact ?? ""} onInput={(e) => updateInvoice(cur, { contact: (e.target as HTMLInputElement).value || undefined })} /></Field>
-                <Field label="Place of supply"><input class={inputCls} disabled={locked} value={cur.pos ?? ""} onInput={(e) => { const pos = (e.target as HTMLInputElement).value || undefined; updateInvoice(cur, { pos, interstate: !!pos && !/gujarat|vadodara/i.test(pos) }); }} /></Field>
-                <Field label="Shipping ₹"><input class={inputCls} disabled={locked} type="number" value={cur.shipping ?? ""} onInput={(e) => updateInvoice(cur, { shipping: Number((e.target as HTMLInputElement).value) || undefined })} /></Field>
-              </div>
-              <label class="flex items-center gap-2 text-xs"><input type="checkbox" disabled={locked} checked={cur.interstate} onChange={() => updateInvoice(cur, { interstate: !cur.interstate })} /> Out-of-state (IGST)</label>
-              <LinesEditor lines={cur.lines} locked={locked} on={(l) => updateInvoice(cur, { lines: l })} />
-              <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(invTax(cur).total)}</span></div>
-              {cur.kind === "invoice" && cur.status === "issued" && (cur.paidOn
-                ? <div class="flex items-center justify-between text-sm"><Status tone="done">Paid {shortDate(cur.paidOn)}</Status><Button variant="ghost" onClick={() => markUnpaid(cur)}>Mark unpaid</Button></div>
-                : <div class="flex flex-wrap items-center gap-2">{accountsSig.value.map((a) => <Button key={a.id} variant="outline" onClick={() => markPaid(cur, a.id)}>Paid → {a.name.split(" ")[0]}</Button>)}</div>)}
-              {cur.kind === "invoice" && cur.status === "issued" && (
-                <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
-                  <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(Number((e.target as HTMLInputElement).value) || 0)} /></Field>
-                  <Button variant="outline" onClick={() => { if (cn) { setOpen(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
-                  {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.`).then((ok) => ok && cancelInvoice(cur))}>Cancel invoice</Button>}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}>
-      <Section title="Awaiting invoice" note={`${waiting.length + bw.length} · orders + batch dispatches`}>
-        {waiting.length + bw.length === 0 ? <p class="text-sm text-c3">Nothing waiting.</p> : (
-          <div class="listbox">
-            {waiting.map((o) => (
-              <div key={o.id} class="w-full grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_100px_auto] gap-x-3 items-center px-3 py-2 md:py-0 md:h-10 text-[13px]">
-                <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{o.no}</span><span class="font-medium">{o.customer}</span></span>
-                <span class="hidden md:block t-meta truncate">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</span>
-                <span class="hidden md:block num text-right">{inr(o.items.reduce((s, i) => s + i.qty * i.price, 0))}</span>
-                <Button variant="outline" class="!h-7" onClick={() => raise(o)}>Raise invoice</Button>
-              </div>
-            ))}
-            {bw.map((b) => { const o = vOrders().find((x) => x.no === b.orderNo); return o && (
-              <div key={b.id} class="w-full grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_100px_auto] gap-x-3 items-center px-3 py-2 md:py-0 md:h-10 text-[13px]">
-                <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{b.orderNo}</span><span class="font-medium">{b.name}</span></span>
-                <span class="hidden md:block t-meta truncate">Batch dispatch · {b.customer} · {b.units} units</span>
-                <span class="hidden md:block" />
-                <Button variant="outline" class="!h-7" onClick={() => raise(o, b)}>Raise dispatch invoice</Button>
-              </div>); })}
-          </div>
-        )}
-      </Section>
-      <Section title="Register" note={`${reg.length}`}>
-        <Card class="!py-1">
-          <Table rows={reg} rowKey={(i) => i.id} onRow={(i) => { setOpen(i); setView("edit"); }} cols={[
-            { key: "n", label: "No.", render: (i) => <b>{i.no}</b> },
-            { key: "d", label: "Date", render: (i) => shortDate(i.date) },
-            { key: "c", label: "Customer", render: (i) => i.customer },
-            { key: "o", label: "Order", render: (i) => (i.orderNo ? `${i.orderNo}${i.batch ? " · " + i.batch : ""}` : "—"), hideTablet: true },
-            { key: "t", label: "Taxable", align: "right", render: (i) => inr(invTax(i).taxable), hideTablet: true },
-            { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) },
-            { key: "p", label: "Status", card: "status", render: (i) => <Status tone={i.status === "cancelled" ? "idle" : i.kind === "credit" ? "active" : i.paidOn ? "done" : "waiting"}>{i.status === "cancelled" ? "Cancelled" : i.kind === "credit" ? "Credit note" : i.paidOn ? "Paid" : "Unpaid"}</Status> },
-          ]} />
-        </Card>
-      </Section>
-    </WorkShell>
   );
 }
 
@@ -154,10 +60,10 @@ export function Quotes() {
         <div>
           <DetailHead title={`${cur.no} · ${cur.customer || "new"}`} onClose={() => setOpen(null)} />
           <div class="mb-2"><SubTabs value={view} onChange={setView} items={[["edit", "Details"], ["doc", "Document"]]} /></div>
-          {view === "doc" ? <><DocSheet d={fromQuote(cur)} /><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></> : (
+          {view === "doc" ? <><div class="doc-scroll"><div class="print-area"><DocSheet d={fromQuote(cur)} /></div></div><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></> : (
             <div class="flex flex-col gap-2">
               <div class="grid grid-cols-2 gap-2">
-                <Field label="Customer"><input class={inputCls} value={cur.customer} onInput={(e) => upd(cur, { customer: (e.target as HTMLInputElement).value })} /></Field>
+                <Field label="Customer"><input class={inputCls} list="mem-qcust" value={cur.customer} onInput={(e) => { const v = (e.target as HTMLInputElement).value; const p = lookupParty({ name: v }); upd(cur, { customer: v, ...(p && !cur.address ? { address: [p.address, stateLabel(p.state)].filter(Boolean).join(", ") } : {}) }); }} /><datalist id="mem-qcust">{[...new Set([...clientsSig.value.map((c) => c.name), ...quotesSig.value.map((q) => q.customer)].filter(Boolean))].sort().map((n) => <option key={n} value={n} />)}</datalist></Field>
                 <Field label="Valid until"><input class={inputCls} type="date" value={cur.valid} onInput={(e) => upd(cur, { valid: (e.target as HTMLInputElement).value })} /></Field>
                 <Field label="Address"><input class={inputCls} value={cur.address ?? ""} onInput={(e) => upd(cur, { address: (e.target as HTMLInputElement).value || undefined })} /></Field>
               </div>
@@ -202,7 +108,7 @@ export function Documents() {
   return (
     <WorkShell title="Documents" sub="The generator — every quotation, invoice, credit note and challan, printable"
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={kind} on={setKind} items={["all", "Quotation", "Tax invoice", "Credit note", "Delivery challan"]} label={(k) => k === "all" ? "All" : k} /></div>}
-      detail={sel && <div><DetailHead title={`${sel.title} · ${sel.no}`} onClose={() => setSel(null)} /><DocSheet d={sel} /><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></div>}>
+      detail={sel && <div><DetailHead title={`${sel.title} · ${sel.no}`} onClose={() => setSel(null)} /><div class="doc-scroll"><div class="print-area"><DocSheet d={sel} /></div></div><Button class="mt-3" onClick={() => window.print()}>Print / save PDF</Button></div>}>
       <Card class="!py-1">
         {docs.length ? <Table rows={docs} rowKey={(d) => d.id} onRow={(d) => setSel(d.d())} cols={[
           { key: "n", label: "Number", render: (d) => <b>{d.no}</b> }, { key: "k", label: "Kind", render: (d) => d.kind },

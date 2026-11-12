@@ -13,13 +13,14 @@ export function MediaFile({ v, alt, class: cls, fallback }: { v?: string; alt: s
   return src ? <a href={src} target="_blank" rel="noopener" class="text-xs underline">Open file</a> : <span class="text-xs text-c3">Loading…</span>;
 }
 
-/** Full-screen viewer for an internal reference image. Esc or tap to close. */
-export function Lightbox({ v, alt, onClose }: { v: string; alt: string; onClose: () => void }) {
-  const src = useMedia(v);
+/** Full-screen viewer: fills the screen. Shows the small preview at once (scaled up), then swaps in the full image when it arrives. */
+export function Lightbox({ v, preview, alt, onClose }: { v: string; preview?: string; alt: string; onClose: () => void }) {
+  const full = useMedia(v), small = useMedia(preview && preview !== v ? preview : undefined);
+  const src = full || small;
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && (e.stopPropagation(), onClose()); addEventListener("keydown", k, true); return () => removeEventListener("keydown", k, true); }, []);
-  return <div class="fixed inset-0 z-[80] bg-black/90 grid place-items-center p-4 cursor-zoom-out sheet-fade" onClick={onClose} role="dialog" aria-label={alt}>
-    {src ? <img src={src} alt={alt} class="max-w-full max-h-full object-contain rounded-lg" /> : <span class="text-white/70 text-sm">Loading…</span>}
-    <span class="absolute top-3 right-4 text-white/80 text-[13px]">{alt} · Esc to close</span>
+  return <div class="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-3 sm:p-6 cursor-zoom-out sheet-fade" onClick={onClose} role="dialog" aria-label={alt}>
+    {src ? <img src={src} alt={alt} class={`w-full h-full object-contain ${full ? "" : "blur-[2px]"}`} /> : <span class="text-white/70 text-sm">Loading…</span>}
+    <span class="absolute top-3 right-4 text-white/80 text-[13px]">{alt}{src && !full ? " · loading full size…" : ""} · Esc to close</span>
   </div>;
 }
 /** Small thumbnail; opens the reduced image full screen. */
@@ -31,6 +32,6 @@ export function Thumb({ thumb, full, alt, class: cls = "w-11 h-11", onAdd }: { t
   </label>;
   return <>
     <button type="button" class={`${cls} shrink-0 rounded-lg overflow-hidden bg-c1 border border-line cursor-zoom-in !min-h-0 p-0`} onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={`View ${alt}`}><MediaImg v={thumb || full} alt={alt} class="w-full h-full object-cover" /></button>
-    {open && <Lightbox v={full || thumb!} alt={alt} onClose={() => setOpen(false)} />}
+    {open && <Lightbox v={full || thumb!} preview={thumb} alt={alt} onClose={() => setOpen(false)} />}
   </>;
 }

@@ -2,7 +2,7 @@ import { sortAbc } from "../mock/types";
 import { vOrders } from "../data";
 import { useState } from "preact/hooks";
 import { clientsSig } from "../data/inventory";
-import { adminUsers, cloudEnabled, cloudSignOut, cloudUser, syncState, type SyncState } from "../data/sync";
+import { adminUsers, cloudEnabled, cloudSignOut, fullSync, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
 import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
@@ -159,6 +159,13 @@ function CloudCard() {
   return (
     <Section title="Cloud sync" action={<span class="t-meta inline-flex items-center gap-1.5" role="status"><span class={`w-2 h-2 rounded-full ${dot}`} />{SYNC_LABEL[st]}</span>}>
       <Card class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm">Signed in as <b>{u.username}</b> · changes appear on every device instantly.</span><Button variant="outline" onClick={() => cloudSignOut()}>Sign out</Button></Card>
+      <Card class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-sm">Devices showing different data? Pick the device that is right and make every device match it.</span>
+        <span class="flex flex-wrap gap-2">
+          {u.role === "owner" && <Button variant="outline" onClick={async () => { if (await ask("Send THIS device's data to every device? The cloud copy and all other devices will be replaced with what you see here.", { ok: "Send this device's data", danger: true })) await fullSync("device"); }}>This device is correct</Button>}
+          <Button variant="outline" onClick={async () => { if (await ask("Replace this device's data with the cloud copy? Anything only on this device is removed.", { ok: "Use cloud copy", danger: true })) await fullSync("cloud"); }}>Load from cloud</Button>
+        </span>
+      </Card>
     </Section>
   );
 }
@@ -288,7 +295,7 @@ export function Users() {
 
 export function Business() {
   const b = bizSig.value;
-  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={b[k] ?? ""} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
+  const f = (k: keyof Biz, l: string, wide = false) => <div class={wide ? "sm:col-span-2" : ""}><Field label={l}><input class={inputCls} value={(b[k] as string) ?? ""} onInput={(e) => (bizSig.value = { ...bizSig.value, [k]: (e.target as HTMLInputElement).value })} /></Field></div>;
   return (
     <SettingsShell>
       <Card class="grid sm:grid-cols-2 gap-3">

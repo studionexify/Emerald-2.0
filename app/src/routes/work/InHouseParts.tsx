@@ -14,7 +14,7 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
   const [d, setD] = useState({ name: "", qty: 1, material: "PLA", colours: [cols[0] ?? "Black"] as string[], purpose: "Jig / tool" }), [pic, setPic] = useState<{ img: string; thumb: string } | null>(null);
   const [made, setMade] = useState<string | null>(null);
   const f = "h-10 px-3 rounded-lg border border-line bg-c0 text-[14px] w-full min-w-0";
-  const attach = async (file?: File | null) => { if (!file || !file.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]); setPic({ img: storeMedia(full, d.name || file.name), thumb }); };
+  const attach = async (file?: File | null) => { if (!file || !file.type.startsWith("image/")) return; const [full, thumb] = await Promise.all([shrinkImage(file, 1920, 0.72), shrinkImage(file, 160, 0.6)]); setPic({ img: storeMedia(full, d.name || file.name), thumb }); };
   const create = () => { const o = createOrder({ type: "inhouse", customer: "", item: d.name.trim(), qty: d.qty, price: 0, medium: "Internal", due: today(), material: d.material, colour: d.colours[0], purpose: d.purpose });
     patchOrder(o, { items: o.items.map((i) => ({ ...i, colours: d.colours, colour: d.colours[0], ...(pic ?? {}) })) }); setMade(o.id); };
   const mo = made ? ordersSig.value.find((x) => x.id === made) : null;

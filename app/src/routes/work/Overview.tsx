@@ -156,7 +156,7 @@ function EditOrder({ order, onDone }: { order: Order; onDone: (o: Order | null) 
   const put = (k: number, patch: Partial<Order["items"][number]>) => setO((cur) => ({ ...cur, items: cur.items.map((x, j) => (j === k ? { ...x, ...patch } : x)) }));
   const attach = async (k: number, file?: File | null) => {
     if (!file || !file.type.startsWith("image/")) return;
-    const [full, thumb] = await Promise.all([shrinkImage(file, 1024, 0.6), shrinkImage(file, 160, 0.6)]);
+    const [full, thumb] = await Promise.all([shrinkImage(file, 1920, 0.72), shrinkImage(file, 160, 0.6)]);
     put(k, { img: storeMedia(full, `${o.no} ${o.items[k]?.name ?? file.name}`), thumb });
   };
   const addLine = () => setO((cur) => { const last = cur.items[cur.items.length - 1]; return { ...cur, items: [...cur.items, { name: "", material: last?.material || "PLA", colour: last?.colour || "", qty: 1, price: 0, cost: 0 }] }; });
