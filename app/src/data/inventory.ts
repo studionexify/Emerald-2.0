@@ -111,7 +111,8 @@ export const spoolLabel = (s: Spool) => `${s.material} ${s.colour} · ${s.spoolN
 export function machineStats(printer: string) {
   const js = jobsSig.value.filter((j) => j.printer === printer && (j.status === "done" || j.status === "failed"));
   const failed = js.filter((j) => j.status === "failed").length;
-  return { jobs: js.length, fail: js.length ? Math.round((failed / js.length) * 100) : 0, hours: Math.round(js.reduce((a, j) => a + j.hours, 0)), util: 0, uptime: 100, lost: 0, blocks: 0 };
+  const hrs = js.reduce((a, j) => a + j.hours, 0), failHrs = js.filter((j) => j.status === "failed").reduce((a, j) => a + j.hours, 0); // weighted by print time, so a run with 2 of 10 pieces wasted reads ~20%, not 50%
+  return { jobs: js.length, fail: js.length ? Math.round((hrs > 0 ? failHrs / hrs : failed / js.length) * 100) : 0, hours: Math.round(js.reduce((a, j) => a + j.hours, 0)), util: 0, uptime: 100, lost: 0, blocks: 0 };
 }
 
 /** Production segment: who the work is for. Client = small retail orders; Bulk = bulk + B2B (shops, stationery, gift, corporate); In-house = our own. */

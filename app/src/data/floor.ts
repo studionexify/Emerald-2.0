@@ -1,5 +1,5 @@
 /** Floor sheet (bulk work sheet): colour stock, grams needed, and logging plates per line item. */
-import { batchesSig, consume, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
+import { batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
 import { filMasterSig, spoolsSig } from "./inventory";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -90,7 +90,7 @@ export function startPlates(o: Order, k: number, d: { machine?: string; plates: 
 /** Complete plates: good + wasted pieces, grams per plate per spool all consumed from those exact spools. */
 /** Runs of a line printed with spools still loaded, waiting for the final weigh. */
 export const pendingWeigh = (o: Order, i: LineItem) => batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && b.weighLater && !b.running);
-export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean }): Order {
+export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean; hours?: number }): Order {
   const i = o.items[k], p = lineProgress(o, i), b = batchesSig.value.find((x) => x.id === runId);
   const pcs = d.plates * d.perPlate, bad = Math.min(d.wasted, pcs), grams: Record<string, number> = {}, cons: string[] = [];
   // Weighing now also covers every earlier run printed from these loaded spools.
@@ -101,8 +101,9 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
     cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : colour, qty, orderNo: o.no, batch: i.name, printer: b?.printer ?? i.machine, spoolId: sp?.id }).id);
     grams[id] = (grams[id] ?? 0) + qty;
   }
+  const lg = logMachineTime(o, { name: i.name, printer: b?.printer ?? i.machine }, d.hours ?? 0, pcs - bad, bad, Object.values(grams).reduce((a, x) => a + x, 0)); cons.push(...lg.cons);
   const priorIds = new Set(prior.map((x) => x.id));
-  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
+  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, hours: d.hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
   log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${d.later ? "weigh at the end" : `${Object.values(grams).reduce((a, x) => a + x, 0)} g over ${allPlates} plate${allPlates > 1 ? "s" : ""}`}`);
   return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } });
 }

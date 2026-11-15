@@ -14,7 +14,7 @@ export const batchesSig = P<Batch[]>("batches", []);
 export const logsSig = P<Log[]>("logs", []);
 export const consSig = P<Consumption[]>("consumption", []);
 spoolUseSrc.value = consSig;
-import { spoolUseSrc, spoolsSig, packSig, itemsSig, jobsSig, isSpoolItem, nextSpoolNo, filMasterSig } from "./inventory";
+import { spoolUseSrc, spoolsSig, packSig, itemsSig, printersSig, jobsSig, isSpoolItem, nextSpoolNo, filMasterSig } from "./inventory";
 export * from "./inventory";
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
@@ -189,12 +189,30 @@ const addToLine = (o: Order, name: string, good: number, bad: number): Order =>
   o.items.some((i) => i.name === name && (i.printed !== undefined || i.failed !== undefined))
     ? patchOrder(o, { items: o.items.map((i) => (i.name === name && (i.printed !== undefined || i.failed !== undefined) ? { ...i, printed: Math.max(0, (i.printed ?? 0) + good), failed: Math.max(0, (i.failed ?? 0) + bad) } : i)) })
     : o;
-export function finishRun(o: Order, id: string, good: number, bad: number, grams: Record<string, number> = {}, reason?: string): Order {
+/** Hours since a run was started, to one decimal: the default for "how long did it print". */
+export const runHours = (b: { at?: string }) => (b.at ? Math.max(0.1, Math.round(((Date.now() - Date.parse(b.at)) / 36e5) * 10) / 10) : 0);
+/** The printer log for a finished run: lifetime hours on each printer, a job row (done / failed) so failure % and service dates are real, and machine + electricity cost on the order. */
+export function logMachineTime(o: Order, run: { name: string; printer?: string; spoolIds?: string[] }, hours: number, good: number, bad: number, grams = 0) {
+  const names = (run.printer ?? "").split(" + ").map((x) => x.trim()).filter(Boolean);
+  const out = { cons: [] as string[], jobIds: [] as string[] };
+  if (!(hours > 0) || !names.length) return out;
+  const total = Math.max(1, good + bad);
+  for (const name of names) {
+    printersSig.value = printersSig.value.map((p) => (p.name === name ? { ...p, hours: Math.round((p.hours + hours) * 10) / 10 } : p));
+    const mk = (status: "done" | "failed", h: number, g: number) => { const j = { id: crypto.randomUUID(), orderNo: o.no, item: run.name, printer: name, operator: me.value?.name ?? "You", status, hours: Math.round(h * 10) / 10, grams: Math.round(g) }; jobsSig.value = [j, ...jobsSig.value]; out.jobIds.push(j.id); };
+    if (bad > 0 && good > 0) { mk("done", (hours * good) / total, (grams * good) / total / names.length); mk("failed", (hours * bad) / total, (grams * bad) / total / names.length); }
+    else mk(good > 0 ? "done" : "failed", hours, grams / names.length);
+    out.cons.push(consume({ kind: "machine", item: name, qty: hours, orderNo: o.no, batch: run.name, printer: name }).id, consume({ kind: "power", item: "Electricity", qty: hours, orderNo: o.no, batch: run.name, printer: name }).id);
+  }
+  return out;
+}
+export function finishRun(o: Order, id: string, good: number, bad: number, grams: Record<string, number> = {}, reason?: string, hours = 0): Order {
   const b = batchesSig.value.find((x) => x.id === id); if (!b) return o;
   // Filament used (good and failed pieces alike) comes off each spool and lands in the order's consumption.
   const cons: string[] = [];
   for (const [id, g] of Object.entries(grams)) { const sp = spoolsSig.value.find((x) => x.id === id); if (g > 0) cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : id, qty: g, orderNo: o.no, batch: b.name, printer: b.printer, spoolId: sp?.id }).id); }
-  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad, grams, cons, reason: bad > 0 ? reason || undefined : undefined, by: me.value?.name ?? x.by } : x));
+  const lg = logMachineTime(o, b, hours, good, bad, Object.values(grams).reduce((a, x) => a + x, 0)); cons.push(...lg.cons);
+  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad, grams, cons, hours: hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, reason: bad > 0 ? reason || undefined : undefined, by: me.value?.name ?? x.by } : x));
   log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}${bad && reason ? ` (${reason})` : ""}`);
   return addToLine(o, b.name, good, bad);
 }
@@ -205,7 +223,9 @@ export function undoRun(o: Order, id: string): Order {
   const rows = consSig.value.filter((c) => b.cons?.includes(c.id));
   for (const c of rows) if (!c.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(c.item, s.spoolNo) || s.spoolNo === c.item ? { ...s, grams: s.grams + c.qty } : s));
   if (b.cons?.length) consSig.value = consSig.value.filter((c) => !b.cons!.includes(c.id));
-  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: true, done: 0, failed: undefined, grams: undefined, cons: undefined, reason: undefined } : x));
+  if (b.jobIds?.length) jobsSig.value = jobsSig.value.filter((j) => !b.jobIds!.includes(j.id));
+  if (b.hours && b.printer) for (const n of b.printer.split(" + ").map((x) => x.trim())) printersSig.value = printersSig.value.map((p) => (p.name === n ? { ...p, hours: Math.max(0, Math.round((p.hours - b.hours!) * 10) / 10) } : p));
+  batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: true, done: 0, failed: undefined, grams: undefined, cons: undefined, hours: undefined, jobIds: undefined, reason: undefined } : x));
   log("Undid print", `${o.no} · ${b.name}: ${b.done} good, ${b.failed ?? 0} failed`);
   return addToLine(o, b.name, -b.done, -(b.failed ?? 0));
 }

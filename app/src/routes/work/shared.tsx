@@ -10,7 +10,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
-import { startRun, finishRun, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { startRun, finishRun, runHours, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -265,7 +265,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
   const p = lineProgress(order, item);
   const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
   const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]), [rk, setRk] = useState(0);
-  const [fin, setFin] = useState<Record<string, [number, number]>>({}), [gm, setGm] = useState<Record<string, Record<string, number>>>({}), [why, setWhy] = useState<Record<string, string>>({});
+  const [fin, setFin] = useState<Record<string, [number, number]>>({}), [gm, setGm] = useState<Record<string, Record<string, number>>>({}), [why, setWhy] = useState<Record<string, string>>({}), [hrs, setHrs] = useState<Record<string, number>>({});
   const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
   const room = Math.max(0, p.pending - p.printing);
   const gpp = gramsPerPiece(item.name);
@@ -296,11 +296,12 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
           : <p class="t-meta">Needs about {need} g · {have} g on the picked spool{picked.length > 1 ? "s" : ""}</p>; })()}
       <button class="h-8 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
     </form>
-    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id])); }}>
+    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id], hrs[r.id] ?? runHours(r))); }}>
       <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.spool ? ` · ${r.spool}` : ""}{r.by ? <span class="t-meta"> · {r.by}</span> : null}</span></div>
       <div class="flex flex-wrap items-center gap-1.5">
         <label class="t-meta">Good</label><input class={`${c} w-14`} type="number" min={0} value={f[0]} onInput={(e) => setFin({ ...fin, [r.id]: [Number((e.target as HTMLInputElement).value) || 0, f[1]] })} />
         <label class="t-meta">Failed</label><input class={`${c} w-14`} type="number" min={0} value={f[1]} onInput={(e) => setFin({ ...fin, [r.id]: [f[0], Number((e.target as HTMLInputElement).value) || 0] })} />
+        <label class="t-meta">Hours</label><input class={`${c} w-16`} type="number" min={0} step="0.1" value={hrs[r.id] ?? runHours(r)} onInput={(e) => setHrs({ ...hrs, [r.id]: Number((e.target as HTMLInputElement).value) || 0 })} aria-label="Print time in hours" />
         <button class="h-8 px-3 ml-auto rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Print done</button>
       </div>
       {f[1] > 0 && <label class="flex items-center gap-1.5"><span class="t-meta">Why failed?</span>

@@ -147,4 +147,14 @@ Limits, stated plainly:
 | 6. Real forms | The order checklist "Record" buttons open forms (approval, PO number, QC entry, packing record that draws stock, courier + tracking number + freight, payment into an account, invoice draft). Random PO/tracking numbers, "Mark printed" and the hard-coded 50-unit batch are gone; batches and dispatch are asked. | UI: QC, approval, payment saved; empty tracking refused |
 | 7. Invoice type | `Invoice.type` (Client / Bulk / B2B / In-house): set from the order, chosen on blank invoices (required to issue), shown as a Register column and filter, copied to credit notes. Old invoices fall back to their order's type. | issue test |
 
-Not done: the Floor sheet still does not write printer hours, job rows or machine/power cost (§4); `fixKnownInvoices`, the UTC date bug and the invoice-date crash are untouched.
+Floor sheet printer logs: see §11. Not done: `fixKnownInvoices`, the UTC date bug and the invoice-date crash are untouched.
+
+## 11. Floor sheet printer logs (third pass)
+
+Completing a print on the Floor sheet (and the older order-panel "Print done") now asks for **print time** (defaults to the time since Start, editable) and writes the printer log:
+- printer **lifetime hours** go up (so "next service in … h" and service alerts move);
+- **job rows** are created per printer (done / failed; a run with wasted pieces splits its hours by pieces), so the printer's failure % and the failure-rate alert are real; failure % is weighted by print time;
+- **machine and electricity cost** go onto the order at the Prices rates; filament uses the spool's own ₹/kg;
+- multi-printer runs ("A + B") log each printer; **undoing a run reverses all of it**.
+
+Test (function level): 10 pieces, 2 wasted, 3 h on a printer at 100 h → printer 103 h, jobs done 2.4 h + failed 0.6 h, failure 20 %, order cost ₹189 (filament ₹90 + machine ₹75 + power ₹24); undo → back to 100 h, no jobs, no consumption. Not tested by clicking the new "Print time" field on screen. Runs logged with "already printed" (no Start) have no printer or time and still log nothing to a printer.
