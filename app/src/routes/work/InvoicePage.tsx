@@ -1,4 +1,4 @@
-import { typeLabel, typeOfOrder, blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
+import { typeLabel, typeOfOrder, blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, reserveInvoiceNo, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
 import { sortAbc } from "../../mock/types";
 import {ordersSig} from "../../data";
 import {vOrders} from "../../data";
@@ -127,7 +127,7 @@ function DraftWindow({ d, onClose, onIssued }: { d: Invoice; onClose: () => void
     let keepOld = true;
     if (draftOutdated(d)) keepOld = !(await ask("Invoice settings (company details, terms, bank…) changed after this draft was started. Use the NEW details on this invoice? Cancel keeps the details it was started with.", { ok: "Use new details" }));
     if (!(await ask(`Issue this invoice as ${next}? Once issued it cannot be edited — only cancelled (number kept) or corrected with a credit note.`, { ok: `Issue ${next}` }))) return;
-    let inv: Invoice; try { inv = issueDraft(d, keepOld); } catch (e) { await ask((e as Error).message, { ok: "OK" }); return; }
+    let inv: Invoice; try { inv = issueDraft(d, keepOld, await reserveInvoiceNo(d.date)); } catch (e) { await ask((e as Error).message, { ok: "OK" }); return; }
     if (inv.batch) batchesSig.value = batchesSig.value.map((b) => (b.orderNo === inv.orderNo && b.name === inv.batch ? { ...b, invoiceNo: inv.no } : b));
     else if (inv.orderNo) { const o = ordersSig.value.find((x) => x.no === inv.orderNo); if (o) patchOrder(o, { invoiced: true }); }
     setBusy(true); await savePdf(inv); setBusy(false);

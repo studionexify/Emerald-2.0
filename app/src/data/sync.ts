@@ -18,6 +18,8 @@ export const cloudEnabled = !!(URL_ && KEY);
 export type SyncState = "off" | "checking" | "signed-out" | "synced" | "sending" | "offline" | "error";
 export const syncState = signal<SyncState>(cloudEnabled ? "checking" : "off");
 export const cloudUser = signal<{ id: string; username: string; org: string; role: Role } | null>(null);
+/** Record kinds the database refused to save for this role (shown as a warning). */
+export const rejectedWrites = signal<string[]>([]);
 export const DOMAIN = "emerald.app";
 export const toEmail = (username: string) => (username.includes("@") ? username : `${username.trim().toLowerCase()}@${DOMAIN}`);
 type Member = { user_id: string; org: string; role: Role; username: string; name: string; active: boolean };
@@ -51,7 +53,20 @@ async function push() {
     for (let i = 0; i < batch.length; i += 300) {
       const part = batch.slice(i, i + 300);
       const rows = part.map((c) => ({ org, kind: c.kind, id: c.id, data: c.data ?? null, deleted: c.deleted }));
-      const { error } = await c0.from("records").upsert(rows, { onConflict: "org,kind,id" });
+      let { error } = await c0.from("records").upsert(rows, { onConflict: "org,kind,id" });
+      // The database refuses writes this role may not make (e.g. a manager editing money books). One refused row must not block the rest:
+      // retry one by one, drop only the refused ones from the outbox and report them.
+      if (error && (error.code === "42501" || /row-level security/i.test(error.message))) {
+        const refused: Change[] = []; error = null;
+        for (let k = 0; k < rows.length && !error; k++) {
+          const r = await c0.from("records").upsert(rows[k], { onConflict: "org,kind,id" });
+          if (!r.error) continue;
+          if (r.error.code === "42501" || /row-level security/i.test(r.error.message)) refused.push(part[k]); else error = r.error;
+        }
+        refused.forEach((c) => outbox.delete(keyOf(c)));
+        if (refused.length) rejectedWrites.value = [...new Set([...rejectedWrites.value, ...refused.map((c) => c.kind)])];
+        if (!error) { for (const c of part) { markKnown(c); if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c)); } localSet("sync:outbox", [...outbox]); continue; }
+      }
       if (error) { localSet("sync:outbox", [...outbox]); syncState.value = navigator.onLine ? "error" : "offline"; return; }
       for (const c of part) { markKnown(c); if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c)); }
       localSet("sync:outbox", [...outbox]);
@@ -242,4 +257,10 @@ export async function adminUsers(body: Record<string, unknown>): Promise<string 
   if (error) { try { return (await (error as any).context.json()).error; } catch { return error.message; } }
   await loadMembers();
   return (data as any)?.error ?? null;
+}
+
+/** Next invoice number from the server counter, so two devices can never take the same one. Returns null when offline or not signed in (the local number is used and duplicates are flagged later). */
+export async function claimInvoiceNo(prefix: string, highestKnown: number): Promise<number | null> {
+  if (!cloudEnabled || !org || syncState.value === "signed-out" || !navigator.onLine) return null;
+  try { const { data, error } = await (await client()).rpc("claim_invoice_no", { p_prefix: prefix, p_min: highestKnown }); return error || typeof data !== "number" ? null : data; } catch { return null; }
 }

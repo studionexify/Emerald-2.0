@@ -164,11 +164,18 @@ export function problems(d: Invoice): string[] {
 }
 
 /** Issue a draft: takes the next number in the series, freezes it, and remembers the parties for autofill. */
-export function issueDraft(d: Invoice, keepOldDetails = true): Invoice {
+/** The number to issue: from the shared server counter when online (never clashes with another device), else the local next number. */
+export async function reserveInvoiceNo(date: string): Promise<string> {
+  const local = nextNo("invoice", date); if (local === "—") return local;
+  const prefix = local.slice(0, local.lastIndexOf("-") + 1), mine = Number(local.slice(prefix.length)) - 1;
+  const { claimInvoiceNo } = await import("./sync"); const n = await claimInvoiceNo(prefix, mine);
+  return n && n > mine + 1 ? prefix + String(n).padStart(3, "0") : local;
+}
+export function issueDraft(d: Invoice, keepOldDetails = true, reservedNo?: string): Invoice {
   const p = problems(d); if (p.length) throw new Error(p.join("\n"));
   const seller = keepOldDetails && d.seller ? d.seller : sellerNow();
   if (monthLocked(d.date)) throw new Error(`GST for ${d.date.slice(0, 7)} is filed and locked. Unlock that month in the GST desk first, or use a later date.`);
-  const no = nextNo("invoice", d.date);
+  const local = nextNo("invoice", d.date), no = reservedNo && reservedNo.slice(0, reservedNo.lastIndexOf("-")) === local.slice(0, local.lastIndexOf("-")) ? reservedNo : local;
   if (no === "—") throw new Error("Pick a valid invoice date.");
   if (invoicesSig.value.some((i) => i.no === no)) throw new Error(`${no} already exists — reload and try again.`);
   const clean = (x: Party): Party => ({ ...x, gstin: x.gstin.trim().toUpperCase(), name: x.name.trim() });

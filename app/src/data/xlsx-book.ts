@@ -123,7 +123,7 @@ export function applyBook(book: Map<string, Rows>): BookResult {
     const state = b.state || home;
     const i: Invoice = {
       id: uid(), kind: "invoice", no, date: inv.date, customer: b.name, gstin: b.gstin || undefined, address: b.address || undefined, contact: b.contact || undefined,
-      lines: inv.lines, gstRate: seller.biz.gstRate ?? 18, interstate: state !== home, status: "issued",
+      type: b.gstin ? "b2b" : "client", lines: inv.lines, gstRate: seller.biz.gstRate ?? 18, interstate: state !== home, status: "issued",
       billTo: { ...b, state }, shipToParty: same ? undefined : s, sameShip: same, shipTo: same ? undefined : [s.name, s.address].filter(Boolean).join("\n"),
       pos: stateLabel(state), seller,
     };

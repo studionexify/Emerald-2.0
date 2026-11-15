@@ -41,7 +41,14 @@ export function changePassword(cur: string, next: string): string | null {
   usersSig.value = usersSig.value.map((x) => (x.id === u.id ? { ...x, pass: hash(next) } : x)); return null;
 }
 export const resetPassword = (id: string) => (usersSig.value = usersSig.value.map((x) => (x.id === id ? { ...x, pass: hash("emerald") } : x)));
-export const saveUser = (u: User) => (usersSig.value = usersSig.value.some((x) => x.id === u.id) ? usersSig.value.map((x) => (x.id === u.id ? u : x)) : [...usersSig.value, { ...u, pass: hash("emerald") }]);
+/** There must always be one active owner, otherwise nobody can manage the team or open Settings. */
+export const isLastOwner = (u: User) => u.role === "owner" && u.active && usersSig.value.filter((x) => x.role === "owner" && x.active).length <= 1;
+export function saveUser(u: User): boolean {
+  const prev = usersSig.value.find((x) => x.id === u.id);
+  if (prev && isLastOwner(prev) && (!u.active || u.role !== "owner")) return false;
+  usersSig.value = prev ? usersSig.value.map((x) => (x.id === u.id ? u : x)) : [...usersSig.value, { ...u, pass: hash("emerald") }];
+  return true;
+}
 
 export const level = (m: Module): Level => (me.value ? MATRIX[me.value.role][m] ?? "none" : "none");
 export const can = (m: Module, need: Level = "view") => { const l = level(m); return need === "view" ? l !== "none" : l === "full"; };

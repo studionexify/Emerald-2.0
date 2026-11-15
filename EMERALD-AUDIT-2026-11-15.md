@@ -193,3 +193,17 @@ Not changed, on purpose or not possible here:
 - Org-wide row access (every signed-in member can read/write every record; roles are enforced in the UI only) is a database-policy redesign, not a quick fix.
 - Cross-device invoice number counter, cloud sync, real bank XLSX/PDF files, Tally import: untested.
 - Not reviewed: To-do, Bin restore, Settings/users, Excel invoice-book and E1 import.
+
+## 15. The rest (seventh pass)
+
+- **Role rules now enforced by the database** (`app/supabase/migrations/0005_role_rules_and_invoice_counter.sql`). Until now any signed-in member could read and write every record; roles lived only in the screens. Now: money books (money, statement, accounts, opening, loans, assets, goals) are readable/writable by owner, partner and accountant only; users/business/settings by owner and partner only; invoices by owner, partner, accountant; GST filed flags also by the CA; the CA reads only invoices, bills, expenses, GST flags, business and HSN; shop data (orders, stock, clients…) stays open to every role except the CA (read-only). Inactive members are locked out entirely. **Tested** in an in-memory Postgres with stubbed Supabase auth (manager blocked from money, accountant blocked from users, CA limited, counter correct); **not run against your live Supabase.** [FN, not live]
+- **Refused writes no longer jam sync.** If the server refuses a row for the signed-in role, the app retries row by row, drops only the refused ones and shows an amber banner naming the record types. [CODE]
+- **Invoice numbers can no longer clash across devices.** New server counter (`claim_invoice_no`): when online, issuing takes the next number from the shared counter; offline it falls back to the local number and the duplicate warning from §14 still catches clashes. Local fallback tested; the online path needs the migration deployed. [CODE]
+- **Real bank files tested.** An .xlsx statement (HDFC-style, with a header preamble, date cells, blank debit/credit cells) **crashed the reader** — fixed (Excel rows have holes). A text PDF made by a PDF library read correctly after adding ASCII85 support. Scanned PDFs, photos and bank PDFs with embedded-font encodings still give the "download the CSV/Excel instead" message. [FN]
+- **Excel invoice-book import:** invoices it creates now carry an internal type (B2B when the client has a GSTIN, else Client). Reviewed; not run on your real workbook. [CODE]
+- **Bin:** deleting the newest order and creating another reused its number (EM-1001 twice after a restore). New orders now count Bin numbers. Tested. [FN]
+- **Settings → Team:** the last active owner can no longer be retired or demoted (that locked everyone out of Settings). [FN]
+- **To-do reviewed, no changes:** tasks link to orders/clients by number/name, so renaming a client breaks that link; "Assigned to me" matches by name. Minor.
+- **Floor "already printed"** left as is: it records counts only because it has no printer to attribute hours to.
+
+**To deploy:** run `0004_partner_role.sql` then `0005_…sql` in the Supabase SQL editor, and deploy the `admin-users` function. Do the migration before relying on roles; after it, a manager's attempt to edit money books is refused by the server. Not tested: live sync, Tally import, scanned/font-encoded PDFs.

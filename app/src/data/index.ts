@@ -67,7 +67,7 @@ export function log(action: string, target: string, kind: LogKind = "order") {
   logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
 setLogger(log);
-import { applyMove, registerBin } from "./inventory";
+import { applyMove, binSig, registerBin } from "./inventory";
 import { setStockSink } from "./ledger";
 /** Filament on a bill arrives as sealed 1 kg spools (material and colour read from the line); other stock tops up its item. */
 setStockSink((m) => {
@@ -80,7 +80,8 @@ setStockSink((m) => {
   applyMove({ ...m, item: `${mat} ${colour}` }, true);
 });
 /** Highest EM-number in use (bulk orders carry other ids), at least 1000. */
-const nextOrderBase = () => Math.max(1000, ...ordersSig.value.map((x) => Number(/^EM-(\d+)$/.exec(x.no)?.[1] ?? 0)));
+/** Highest EM- number ever used, including orders sitting in the Bin, so a restored order never shares a number with a new one. */
+const nextOrderBase = () => Math.max(1000, ...[...ordersSig.value, ...binSig.value.filter((b) => b.kind === "Order").map((b) => b.data as Order)].map((x) => Number(/^EM-(\d+)$/.exec(x?.no ?? "")?.[1] ?? 0)));
 const putOrder = (o: Order) => (ordersSig.value = ordersSig.value.map((x) => (x.id === o.id ? o : x)));
 const putBatch = (b: Batch) => (batchesSig.value = batchesSig.value.map((x) => (x.id === b.id ? b : x)));
 

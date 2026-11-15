@@ -52,7 +52,8 @@ const H = {
   amount: /^amount|txn\s*amount|transaction\s*amount/i, type: /dr\s*\/\s*cr|^type$|cr\s*\/\s*dr/i, balance: /balance/i,
 };
 
-export function rowsFromTable(table: string[][]): StmtRow[] {
+export function rowsFromTable(raw: string[][]): StmtRow[] {
+  const table = Array.from(raw, (r) => Array.from(r ?? [], (c) => String(c ?? ""))); // Excel rows can have holes and non-text cells
   if (!table.length) return [];
   let h = table.findIndex((r) => r.some((c) => H.date.test(c.trim()) || H.value.test(c)) && r.some((c) => H.text.test(c)));
   if (h < 0) h = table.findIndex((r) => r.some((c) => /date/i.test(c)) && r.some((c) => H.debit.test(c) || H.credit.test(c) || H.amount.test(c)));
@@ -83,13 +84,22 @@ export function rowsFromTable(table: string[][]): StmtRow[] {
   return out;
 }
 
+function ascii85(b: Uint8Array): Uint8Array {
+  const t = strFromU8(b).replace(/\s/g, "").replace(/^<~/, ""), end = t.indexOf("~>"), src = end >= 0 ? t.slice(0, end) : t, out: number[] = [];
+  let g: number[] = [];
+  const flush = (n: number) => { const pad = 5 - n; while (g.length < 5) g.push(84); let v = 0; for (const x of g) v = v * 85 + x; const bytes = [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]; out.push(...bytes.slice(0, 4 - pad)); g = []; };
+  for (const ch of src) { if (ch === "z" && !g.length) { out.push(0, 0, 0, 0); continue; } g.push(ch.charCodeAt(0) - 33); if (g.length === 5) flush(5); }
+  if (g.length) flush(g.length);
+  return Uint8Array.from(out);
+}
 /** Text items of a PDF with their positions, grouped into table rows. Works for text PDFs (most net-banking downloads); scanned or font-encoded PDFs are refused with a clear message. */
 function pdfTable(buf: Uint8Array): string[][] {
   const bin = new TextDecoder("latin1").decode(buf);
   const items: { x: number; y: number; t: string; pg: number }[] = []; let pg = 0;
   for (const m of bin.matchAll(/stream\r?\n/g)) {
     const start = m.index! + m[0].length, end = bin.indexOf("endstream", start); if (end < 0) continue;
-    let data: Uint8Array; try { data = unzlibSync(buf.slice(start, end)); } catch { data = buf.slice(start, end); } // compressed, else plain
+    let raw: Uint8Array = buf.slice(start, end); if (/ASCII85Decode/.test(bin.slice(Math.max(0, start - 300), start))) { try { raw = ascii85(raw); } catch {} }
+    let data: Uint8Array; try { data = unzlibSync(raw); } catch { data = raw; } // compressed, else plain
     const c = strFromU8(data, true); if (!/BT/.test(c)) continue; pg++;
     for (const bt of c.matchAll(/BT([\s\S]*?)ET/g)) {
       let x = 0, y = 0;
