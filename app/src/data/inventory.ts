@@ -2,7 +2,7 @@ import { sortAbc } from "../mock/types";
 /** Store records: printers, spools, accessories/parts, packing, movements, jobs, QC, packing records, tasks, bin, clients. */
 import type { Signal } from "@preact/signals";
 import { computed, effect, signal } from "@preact/signals";
-import { persisted, today, uid } from "./store";
+import { persisted, today, uid, ymd } from "./store";
 import { B2B_TYPES } from "../mock/types";
 import type { Binned, Job, Movement, PackItem, PackRecord, Printer, QcEntry, Spool, Task } from "../mock/types";
 
@@ -47,7 +47,7 @@ export const tasksSig = list<Task>("tasks", []);
 export const binSig = persisted<Binned[]>("bin", []);
 /** The Bin keeps a deletion for 7 days, then it is gone for good (blueprint 18). */
 export const BIN_DAYS = 7;
-{ const cut = new Date(Date.now() - BIN_DAYS * 864e5).toISOString().slice(0, 10); if (binSig.value.some((b) => b.deletedAt < cut)) binSig.value = binSig.value.filter((b) => b.deletedAt >= cut); }
+{ const cut = ymd(new Date(Date.now() - BIN_DAYS * 864e5)); if (binSig.value.some((b) => b.deletedAt < cut)) binSig.value = binSig.value.filter((b) => b.deletedAt >= cut); }
 export type Client = { id: string; name: string; kind: string; phone: string; email?: string; city: string; address?: string; gstin: string; medium: string; notes?: string; active?: boolean; state?: string };
 export const clientsSig = list<Client>("clients", []);
 /** A client with a GSTIN is a business: their orders default to B2B, typed by the client's business kind. */

@@ -40,7 +40,7 @@ export const shortDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateSt
 
 export function duplicateOrder(o: Order): Order {
   const max = nextOrderBase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd(new Date());
   const copy: Order = {
     ...o, id: crypto.randomUUID(), no: `EM-${max + 1}`, stage: o.type === "inhouse" ? "production" : "quotation",
     created: today, due: today, items: o.items.map((i) => ({ ...i })), blocked: undefined, invoiced: false,
@@ -62,7 +62,7 @@ import { me } from "./auth";
 import { setLogger, historySig } from "./ledger";
 import { rate } from "./rates";
 
-const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+const now = nowStamp;
 export function log(action: string, target: string, kind: LogKind = "order") {
   logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
@@ -130,7 +130,7 @@ export function addBatch(o: Order, name: string, units: number) {
 
 export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string; delivery?: Order["delivery"]; supports?: boolean; material?: string; colour?: string; purpose?: string; size?: Order["size"]; b2b?: string; pay?: Order["pay"] }): Order {
   const max = nextOrderBase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd(new Date());
   const o: Order = { id: crypto.randomUUID(), no: `EM-${max + 1}`, type: d.type, customer: d.type === "inhouse" ? "Studio Nexify" : d.customer || "New client",
     medium: d.type === "inhouse" ? "Internal" : d.medium, stage: d.type === "inhouse" ? "production" : "quotation", created: today, due: d.due || today,
     delivery: d.delivery, supports: d.supports, size: d.type === "inhouse" ? undefined : d.size ?? (d.type === "bulk" ? "bulk" : "small"), b2b: d.size === "b2b" ? d.b2b : undefined, pay: d.pay ?? "alpha",
@@ -144,7 +144,7 @@ export function batchAction(b: Batch, what: "invoice") {
     import("./invoicing").then(({ newDraft, lookupParty, blankParty }) => newDraft({ billTo: lookupParty({ name: b.customer }) ?? { ...blankParty(), name: b.customer }, orderNo: b.orderNo, batch: b.name, lines: [{ desc: b.name, hsn: "491199", qty: b.done || b.units, rate: price }] })); log("Drafted dispatch invoice", `${b.orderNo} · ${b.name}`); }
 }
 
-import { purgeSample } from "./store";
+import { purgeSample, ymd, nowStamp } from "./store";
 purgeSample();
 registerBin("Order", ordersSig);
 export * from "./mode";
@@ -239,7 +239,7 @@ export function orderPace(o: Order, batches = batchesSig.value) {
   const left = orderProgress(o, batches).pending;
   if (!left) return { rate, finish: null, late: 0 };
   if (rate <= 0) return { rate: 0, finish: null, late: Infinity };
-  const finish = new Date(Date.now() + (left / rate) * 864e5).toISOString().slice(0, 10);
+  const finish = ymd(new Date(Date.now() + (left / rate) * 864e5));
   const late = Math.round((Date.parse(finish) - Date.parse(o.due)) / 864e5);
   return { rate, finish, late };
 }

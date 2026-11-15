@@ -147,7 +147,7 @@ Limits, stated plainly:
 | 6. Real forms | The order checklist "Record" buttons open forms (approval, PO number, QC entry, packing record that draws stock, courier + tracking number + freight, payment into an account, invoice draft). Random PO/tracking numbers, "Mark printed" and the hard-coded 50-unit batch are gone; batches and dispatch are asked. | UI: QC, approval, payment saved; empty tracking refused |
 | 7. Invoice type | `Invoice.type` (Client / Bulk / B2B / In-house): set from the order, chosen on blank invoices (required to issue), shown as a Register column and filter, copied to credit notes. Old invoices fall back to their order's type. | issue test |
 
-Floor sheet printer logs: see §11. Not done: `fixKnownInvoices`, the UTC date bug and the invoice-date crash are untouched.
+Floor sheet printer logs: see §11. Not done: `fixKnownInvoices`.
 
 ## 11. Floor sheet printer logs (third pass)
 
@@ -158,3 +158,10 @@ Completing a print on the Floor sheet (and the older order-panel "Print done") n
 - multi-printer runs ("A + B") log each printer; **undoing a run reverses all of it**.
 
 Test (function level): 10 pieces, 2 wasted, 3 h on a printer at 100 h → printer 103 h, jobs done 2.4 h + failed 0.6 h, failure 20 %, order cost ₹189 (filament ₹90 + machine ₹75 + power ₹24); undo → back to 100 h, no jobs, no consumption. Not tested by clicking the new "Print time" field on screen. Runs logged with "already printed" (no Start) have no printer or time and still log nothing to a printer.
+
+## 12. Date bug and invoice-date crash (fourth pass)
+
+- **Dates now use India's local calendar day**, not UTC (`today()`, time stamps, order/quote/shipment dates, Dashboard week chart, quote validity, Bin expiry, forecast dates). Test with the clock at 01:30 IST on 1 Apr 2027: today = `2027-04-01`, next invoice `C-001` (before: `2027-03-31`, `B-019`).
+- **"Last month" window** is now 1–31 Oct (was 30 Sep–30 Oct). **Mauny month arrows** skipped a month in IST (November → September); now November → October → September.
+- **Invoice date crash fixed.** A date with no series (before 1 Apr 2025, a half-typed year, or cleared) no longer throws: the number shows "—", the draft says "Date: invoices are numbered from 1 Apr 2025 … pick a valid date", and Review stays disabled. A draft saved with such a date reopens normally after reload (UI test, no errors).
+- Pure date-string arithmetic (MSME 45 days, day-book arrows) was already time-zone safe and is unchanged. Heartbeat still uses UTC on purpose.

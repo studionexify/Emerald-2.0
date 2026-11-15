@@ -1,3 +1,4 @@
+import { today as todayStr, addDays } from "../data/store";
 import { vMoney, vOrders } from "../data";
 import { useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
@@ -15,9 +16,9 @@ export default function Dashboard() {
   const costed = paid.filter((o) => orderCost(o) > 0), margin = costed.length ? Math.round((1 - costed.reduce((s, o) => s + orderCost(o), 0) / costed.reduce((s, o) => s + orderTotal(o), 0)) * 100) : null;
   const al = attn(vOrders(), spoolsSig.value, packSig.value, batchesSig.value);
   const fm = financeSummary(windowFor("mtd", "2026-27"), vOrders());
-  const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: vMoney().filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
+  const week = Array.from({ length: 7 }, (_, i) => { const d = addDays(todayStr(), i - 6); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: vMoney().filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
   const money = can("mauny");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   const late = open.filter((o) => o.due && o.due < today);
   const machines = printersSig.value.filter((p) => p.active !== false);
   const busy = machines.filter((p) => p.status === "printing");

@@ -7,6 +7,7 @@ import {
   applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, spHex, toBin, today, uid,
   type PackItem, type Spool,
 } from "../data";
+import { nowStamp } from "../data/store";
 
 type Cat = "filament" | "packing" | "accessory" | "part";
 const CATS: Cat[] = ["filament", "packing", "accessory", "part"];
@@ -20,7 +21,7 @@ export type Audit = { id: string; no: string; cat: Cat; status: "open" | "done";
 
 export const auditsSig = persisted<Audit[]>("audits", []);
 const who = () => me.value?.name ?? "You";
-const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+const stamp = nowStamp;
 const num = (e: Event) => Number((e.target as HTMLInputElement).value) || 0;
 const val = (e: Event) => (e.target as HTMLInputElement).value;
 const g = (n: number) => `${Math.round(n).toLocaleString("en-IN")} g`;

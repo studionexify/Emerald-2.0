@@ -8,7 +8,7 @@
 import { computed } from "@preact/signals";
 import { fingerprint, persisted, today, uid } from "./store";
 import { bizSig, type Biz } from "./biz";
-import { INV_TYPE_LABEL, invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type InvType, type Invoice, type Party, type SellerSnap } from "./ledger";
+import { hasSeries, INV_TYPE_LABEL, invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type InvType, type Invoice, type Party, type SellerSnap } from "./ledger";
 import { clientsSig, segmentOf, type Client } from "./inventory";
 import { ordersSig } from "./index";
 
@@ -147,6 +147,7 @@ export function problems(d: Invoice): string[] {
     if (!(l.qty > 0)) out.push(`Item ${k + 1}: quantity must be more than 0`);
     if (!(l.rate > 0)) out.push(`Item ${k + 1}: unit price must be more than 0`);
   });
+  if (!hasSeries(d.date)) out.push("Date: invoices are numbered from 1 Apr 2025 (FY 2025-26) — pick a valid date");
   const latest = seriesLatest("invoice", d.date);
   if (latest && d.date < latest) out.push(`Date: the last invoice in this series is dated ${latest}; a new one cannot be dated earlier`);
   if (d.date > today()) out.push("Date: an invoice cannot be dated in the future");
@@ -158,6 +159,7 @@ export function issueDraft(d: Invoice, keepOldDetails = true): Invoice {
   const p = problems(d); if (p.length) throw new Error(p.join("\n"));
   const seller = keepOldDetails && d.seller ? d.seller : sellerNow();
   const no = nextNo("invoice", d.date);
+  if (no === "—") throw new Error("Pick a valid invoice date.");
   if (invoicesSig.value.some((i) => i.no === no)) throw new Error(`${no} already exists — reload and try again.`);
   const clean = (x: Party): Party => ({ ...x, gstin: x.gstin.trim().toUpperCase(), name: x.name.trim() });
   const inv = derive({ ...d, no, seller, status: "issued", billTo: clean(d.billTo!), shipToParty: d.sameShip ? undefined : clean(d.shipToParty!), lines: d.lines.map((l) => ({ ...l, desc: l.desc.trim() })) });

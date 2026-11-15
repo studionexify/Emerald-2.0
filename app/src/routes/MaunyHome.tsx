@@ -8,7 +8,7 @@ import { MAUNY_TABS } from "../nav";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaImg } from "../ui/media";
 import { addMoney, can, inr, invoicesSig, isExternal, log, moduleOf, orderTotal, ordersSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
-import { persisted } from "../data/store";
+import { persisted, addMonths } from "../data/store";
 import { booksModeSig, canSwitchMode, MODE_LABEL, modeAccounts } from "../data/mode";
 
 /* Mauny entry: a money-tracker home. Log an entry in seconds (type → amount → category → wallet),
@@ -140,7 +140,7 @@ export function MaunyHome() {
     setMsg(`Saved ${inr(a)} · ${type === "transfer" ? "transfer" : curCat?.label}${against ? ` · against ${against}` : ""}${type === "out" && forWhat ? ` · ${forWhat === "inhouse" ? "In-house" : forWhat === "other" ? "Other" : forWhat}` : ""}`); setAmt(""); setNote(""); setMonth(ym(date));
     setTimeout(() => setMsg(""), 2500);
   };
-  const shift = (n: number) => { const d = new Date(month + "-01T00:00:00"); d.setMonth(d.getMonth() + n); setMonth(d.toISOString().slice(0, 7)); };
+  const shift = (n: number) => setMonth(addMonths(month, n));
   const rows = vMoney().filter((m) => ym(m.date) === month && (wallet === "all" || m.account === wallet));
   const real = rows.filter((m) => !m.kind.startsWith("transfer"));
   const inflow = real.filter((m) => m.amount > 0).reduce((s, m) => s + m.amount, 0), outflow = -real.filter((m) => m.amount < 0).reduce((s, m) => s + m.amount, 0);

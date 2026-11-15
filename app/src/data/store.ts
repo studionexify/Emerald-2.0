@@ -102,8 +102,15 @@ export function resetAll() {
   location.reload();
 }
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
-export const today = () => new Date().toISOString().slice(0, 10);
-export const nowStamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+/* Dates are the studio's own calendar day (the device's local time, India), never UTC: between midnight and 05:30 IST, UTC is still "yesterday". */
+const p2 = (n: number) => String(n).padStart(2, "0");
+export const ymd = (d: Date) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+export const today = () => ymd(new Date());
+export const nowStamp = () => { const d = new Date(); return `${ymd(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+/** Calendar-day arithmetic on "YYYY-MM-DD" strings (no time zone involved). */
+export const addDays = (date: string, n: number) => new Date(Date.parse(date) + n * 864e5).toISOString().slice(0, 10);
+/** "YYYY-MM" shifted by whole months. */
+export const addMonths = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number), t = y * 12 + (m - 1) + n; return `${Math.floor(t / 12)}-${p2((t % 12) + 1)}`; };
 
 /** Sample rows from the original mock data all have short ids like "o1", "ba2" or "m12"; real and user-made records never do. */
 export const isSample = (kind: string, id: string) => !KEEP.has(kind) && /^[a-z]{1,3}\d{1,3}$/.test(id);

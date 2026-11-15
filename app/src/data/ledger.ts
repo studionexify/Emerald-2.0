@@ -1,6 +1,6 @@
 /** Money, documents and books: records + the pure rules computed over them (Blueprint v2 §Finance, Books, GST, Mauny, Goals, Attention). */
 import { computed } from "@preact/signals";
-import { persisted, uid, today, nowStamp } from "./store";
+import { persisted, uid, today, nowStamp, addMonths, ymd } from "./store";
 import { rate } from "./rates";
 import { itemsSig, jobsSig, qcSig, machineStats, printersSig } from "./inventory";
 import type { Order, Stage } from "../mock/types";
@@ -84,15 +84,17 @@ export function invDue(i: Invoice) {
 }
 
 /** Financial-year letter: Apr 2025–Mar 2026 = A, Apr 2026–Mar 2027 = B (the studio's existing series). */
+/** Series exist from FY 2025-26 (letter A). Anything else (a mistyped year, an incomplete date) has no series. */
+export const hasSeries = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && (() => { const i = Number(fyOf(d).slice(0, 4)) - 2025; return i >= 0 && i <= 25; })();
 export function fyLetter(d: string) {
-  const i = Number(fyOf(d).slice(0, 4)) - 2025;
-  if (i < 0 || i > 25) throw new Error(`No series letter for the financial year of ${d}`);
-  return String.fromCharCode(65 + i);
+  if (!hasSeries(d)) throw new Error(`No invoice series for ${d || "this date"}`);
+  return String.fromCharCode(65 + Number(fyOf(d).slice(0, 4)) - 2025);
 }
 export const seriesPrefix = (kind: "invoice" | "credit", date = today()) => (kind === "credit" ? `CN-${fyLetter(date)}-` : `${fyLetter(date)}-`);
 const seqOf = (no: string, prefix: string) => (no.startsWith(prefix) && /^\d+$/.test(no.slice(prefix.length)) ? Number(no.slice(prefix.length)) : 0);
 /** Invoices: A-001… per FY, gapless, cancelled numbers kept. Quotes: Q-B-08-001…, restarting each month. */
 export function nextNo(kind: "invoice" | "credit" | "quote", date = today()) {
+  if (!hasSeries(date)) return "—"; // callers that issue check problems() first; screens just show a dash
   if (kind === "quote") {
     const prefix = `Q-${fyLetter(date)}-${date.slice(5, 7)}-`;
     return prefix + String(Math.max(0, ...quotesSig.value.map((q) => seqOf(q.no, prefix))) + 1).padStart(3, "0");
@@ -106,6 +108,7 @@ let seriesFloor: () => Record<string, number> = () => ({});
 export const setSeriesFloor = (f: typeof seriesFloor) => (seriesFloor = f);
 /** A new invoice may not be dated before the latest one in its series (B-017 cannot predate B-016). */
 export function seriesLatest(kind: "invoice" | "credit", date = today()) {
+  if (!hasSeries(date)) return "";
   const prefix = seriesPrefix(kind, date);
   return invoicesSig.value.filter((i) => seqOf(i.no, prefix)).reduce((m, i) => (i.date > m ? i.date : m), "");
 }
@@ -275,7 +278,7 @@ export function financeSummary(win: [string, string], orders: Order[]) {
 export function windowFor(p: string, fy: string): [string, string] {
   const t = today(), [y, m] = t.split("-").map(Number);
   if (p === "mtd") return [`${t.slice(0, 7)}-01`, t];
-  if (p === "last") { const d = new Date(y, m - 2, 1); const e = new Date(y, m - 1, 0); return [d.toISOString().slice(0, 10), e.toISOString().slice(0, 10)]; }
+  if (p === "last") { const k = addMonths(`${y}-${String(m).padStart(2, "0")}`, -1); return [`${k}-01`, ymd(new Date(+k.slice(0, 4), +k.slice(5), 0))]; }
   if (p === "qtd") { const qs = Math.floor(((m + 8) % 12) / 3) * 3 + 4; const sm = qs > 12 ? qs - 12 : qs; const sy = sm > m ? y - 1 : y; return [`${sy}-${String(sm).padStart(2, "0")}-01`, t]; }
   return fyWindow(fy);
 }
