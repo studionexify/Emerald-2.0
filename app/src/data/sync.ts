@@ -10,7 +10,7 @@ import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import { sessionSig, usersSig, type Role } from "./auth";
 import { storeMedia, uploadPending } from "./media";
 import { billsSig, photosSig } from "./ledger";
-import { allRecords, applyRemote, fingerprint, localGet, localSet, setSyncSink, syncedKinds, type Change } from "./store";
+import { allRecords, applyRemote, isSample, fingerprint, localGet, localSet, setSyncSink, syncedKinds, type Change } from "./store";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -76,6 +76,8 @@ async function catchUp() {
     const { data, error } = await (await client()).from("records").select("kind,id,data,deleted,updated_at").eq("org", org).gt("updated_at", last).order("updated_at").range(from, from + 999);
     if (error) throw error;
     const rows = (data ?? []) as Row[];
+    // Leftover demo rows (ids like s1, c4, o7) are removed from the cloud too, so no device ever shows them.
+    const junk = rows.filter((r) => !r.deleted && isSample(r.kind, r.id)); if (junk.length) enqueue(junk.map((r) => ({ kind: r.kind, id: r.id, data: null, deleted: true })));
     // Our own unsent edits win over older server copies.
     const fresh = rows.filter((r) => !outbox.has(r.kind + "/" + r.id)).map(toChange);
     applyRemote(fresh); fresh.forEach(markKnown);

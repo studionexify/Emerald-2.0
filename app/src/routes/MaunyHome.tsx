@@ -1,5 +1,5 @@
 import { sortAbc } from "../mock/types";
-import { balanceOf, billsSig, daysBetween, fyOf, fyWindow, statementSig, vExpenses, vMoney, vOrders } from "../data";
+import { invDue, balanceOf, billsSig, daysBetween, fyOf, fyWindow, statementSig, vExpenses, vMoney, vOrders } from "../data";
 import { useEffect, useState } from "preact/hooks";
 import { Icon, isPhone, Page } from "../ui";
 import { gstMonths } from "../data/books";
@@ -7,7 +7,7 @@ import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaImg } from "../ui/media";
-import { addMoney, can, inr, invoicesSig, invTax, isExternal, log, moduleOf, orderTotal, ordersSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
+import { addMoney, can, inr, invoicesSig, isExternal, log, moduleOf, orderTotal, ordersSig, today, transfer, updateInvoice, type MoneyKind } from "../data";
 import { persisted } from "../data/store";
 import { booksModeSig, canSwitchMode, MODE_LABEL, modeAccounts } from "../data/mode";
 
@@ -117,7 +117,7 @@ export function MaunyHome() {
   const linkable = type === "in" && !!curCat && (curCat.kind === "receipt" || curCat.kind === "advance");
   const paidSoFar = (ref: string) => vMoney().filter((m) => m.ref === ref && m.amount > 0).reduce((s, m) => s + m.amount, 0);
   const dues = [
-    ...invoicesSig.value.filter((i) => i.kind === "invoice" && i.status === "issued" && !i.paidOn).map((i) => ({ ref: i.no, who: i.customer, due: invTax(i).total - paidSoFar(i.no), kind: "Invoice" as const })),
+    ...invoicesSig.value.filter((i) => invDue(i) > 0).map((i) => ({ ref: i.no, who: i.customer, due: invDue(i), kind: "Invoice" as const })),
     ...vOrders().filter((o) => o.type !== "inhouse" && !o.paid && o.stage !== "archived" && !invoicesSig.value.some((i) => i.orderNo === o.no)).map((o) => ({ ref: o.no, who: o.customer, due: orderTotal(o) - paidSoFar(o.no), kind: "Order" as const })),
   ].filter((x) => x.due > 0);
   const pick = (ref: string) => { setAgainst(ref); const d = dues.find((x) => x.ref === ref); if (d) { if (!amt) setAmt(String(Math.round(d.due))); if (!note) setNote(d.who); } };

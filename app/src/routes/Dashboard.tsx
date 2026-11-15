@@ -12,7 +12,7 @@ export default function Dashboard() {
   const open = vOrders().filter((o) => o.stage !== "archived");
   const paid = open.filter((o) => o.type !== "inhouse");
   const pipeline = paid.reduce((s, o) => s + orderTotal(o), 0);
-  const margin = Math.round((1 - paid.reduce((s, o) => s + orderCost(o), 0) / pipeline) * 100);
+  const costed = paid.filter((o) => orderCost(o) > 0), margin = costed.length ? Math.round((1 - costed.reduce((s, o) => s + orderCost(o), 0) / costed.reduce((s, o) => s + orderTotal(o), 0)) * 100) : null;
   const al = attn(vOrders(), spoolsSig.value, packSig.value, batchesSig.value);
   const fm = financeSummary(windowFor("mtd", "2026-27"), vOrders());
   const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return { l: new Date(d).toLocaleDateString("en-IN", { weekday: "narrow" }), v: vMoney().filter((m) => m.date === d && !m.kind.startsWith("transfer")).reduce((s, m) => s + m.amount, 0) }; });
@@ -34,7 +34,7 @@ export default function Dashboard() {
   return (
     <Page title="Hi, Studio Nexify" sub={new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-        <Tile href="/work/orders" icon="box" label="Open orders" value={open.length} caption={money ? `${inr(pipeline)} in the pipeline · ${margin}% margin` : `${open.length - paid.length} in-house`} />
+        <Tile href="/work/orders" icon="box" label="Open orders" value={open.length} caption={money ? `${inr(pipeline)} in the pipeline${margin === null ? "" : ` · ${margin}% margin`}` : `${open.length - paid.length} in-house`} />
         <Tile href="/work/production" icon="printer" label="Printing now" value={busy.length} caption={`${machines.length - busy.length - down} idle · ${down} down · ${machines.length} machines`} live={busy.length > 0} />
         <Tile href="/work/orders" icon="alert" label="Past due" value={late.length} caption={late.length ? `Oldest ${shortDate([...late].sort((a, b) => a.due.localeCompare(b.due))[0].due)}` : "Everything on time"} />
         {money

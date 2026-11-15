@@ -10,6 +10,7 @@ export type InvLine = { desc: string; hsn: string; qty: number; rate: number };
 export type Invoice = {
   id: string; kind: "invoice" | "credit"; no: string; date: string; customer: string; gstin?: string; address?: string;
   orderNo?: string; batch?: string; lines: InvLine[]; gstRate: number; interstate: boolean;
+  /** Internal only: which kind of order this invoice is for. */ type?: InvType;
   status: "issued" | "cancelled"; paidOn?: string; paidAccount?: string; against?: string; note?: string;
   shipTo?: string; contact?: string; pos?: string; shipping?: number;
   /** Structured parties (new invoices). Old invoices keep the flat fields above. */
@@ -17,10 +18,12 @@ export type Invoice = {
   /** Company details, terms and signatory frozen on the invoice: later settings changes never alter it. */
   seller?: SellerSnap;
 };
+export type InvType = "client" | "bulk" | "b2b" | "inhouse";
+export const INV_TYPE_LABEL: Record<InvType, string> = { client: "Client", bulk: "Bulk", b2b: "B2B", inhouse: "In-house" };
 export type Party = { name: string; address: string; state: string; contact: string; email: string; gstin: string };
 export type SellerSnap = { biz: import("./biz").Biz; ver: string };
 export type Quote = { id: string; no: string; date: string; customer: string; orderNo?: string; lines: InvLine[]; gstRate: number; valid: string; outcome: "open" | "approved" | "lost" | "unrecorded"; address?: string; tech?: string; pay?: "alpha" | "beta" };
-export type Expense = { id: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string; pay?: "alpha" | "beta" };
+export type Expense = { id: string; /** Mauny entry this expense came from */ moneyId?: string; /** order it was spent on */ orderNo?: string; date: string; head: string; vendor: string; amount: number; tax: number; billId?: string; paid: boolean; account?: string; msme?: "Micro" | "Small" | ""; dueDate?: string; pay?: "alpha" | "beta" };
 export type Bill = { id: string; vendor: string; gstin?: string; no: string; date: string; subtotal: number; tax: number; total: number; cat: string; status: "needs_review" | "logged" | "failed" | "rejected"; note: string; file?: string; fy?: string; lines?: { desc: string; amount: number; qty?: number; unit?: string }[]; stockApplied?: string; pay?: "alpha" | "beta" };
 export type Account = { id: string; name: string; opening: number; mode?: "alpha" | "beta" };
 export type MoneyKind = "receipt" | "expense" | "transfer_out" | "transfer_in" | "capital_in" | "drawings" | "loan_taken" | "loan_repayment" | "asset_purchase" | "other_income" | "advance" | "tax_payment";
@@ -70,6 +73,16 @@ export function invTax(i: Invoice) {
   return { taxable: k * taxable, cgst: k * (i.interstate ? 0 : half), sgst: k * (i.interstate ? 0 : half), igst: k * (i.interstate ? gst : 0), shipping: k * ship, roundOff: k * r2(total - exact), total: k * total };
 }
 
+/** Taxable value already credited against an invoice by credit notes. */
+export const creditedOn = (no: string) => invoicesSig.value.filter((c) => c.kind === "credit" && c.status === "issued" && c.against === no).reduce((s, c) => s + invTax({ ...c, kind: "invoice" }).taxable, 0);
+/** What the customer still owes on an invoice: total less credit notes (GST included, pro rata) and receipts booked against it. */
+export function invDue(i: Invoice) {
+  if (i.kind !== "invoice" || i.status !== "issued" || i.paidOn) return 0;
+  const t = invTax(i), credit = t.taxable ? (creditedOn(i.no) / t.taxable) * t.total : 0;
+  const paid = moneySig.value.filter((m) => m.ref === i.no && m.kind === "receipt" && m.amount > 0).reduce((s, m) => s + m.amount, 0);
+  return Math.max(0, r2(t.total - credit - paid));
+}
+
 /** Financial-year letter: Apr 2025–Mar 2026 = A, Apr 2026–Mar 2027 = B (the studio's existing series). */
 export function fyLetter(d: string) {
   const i = Number(fyOf(d).slice(0, 4)) - 2025;
@@ -109,29 +122,28 @@ export function raiseInvoice(d: { customer: string; gstin?: string; orderNo?: st
   invoicesSig.value = [...invoicesSig.value, inv]; logFn("Raised invoice", `${inv.no} · ${inv.customer}`, "money"); return inv;
 }
 export function updateInvoice(i: Invoice, p: Partial<Invoice>, what = "Edited invoice") { invoicesSig.value = invoicesSig.value.map((x) => (x.id === i.id ? { ...x, ...p } : x)); logFn(what, i.no, "money"); }
-export const cancelInvoice = (i: Invoice) => updateInvoice(i, { status: "cancelled" }, "Cancelled invoice (number kept)");
+/** Cancelling takes back any payment booked against the invoice, so cash and "To collect" stay true. The number stays used. */
+export function cancelInvoice(i: Invoice) {
+  moneySig.value = moneySig.value.filter((m) => !(m.ref === i.no && m.kind === "receipt"));
+  updateInvoice(i, { status: "cancelled", paidOn: undefined, paidAccount: undefined }, "Cancelled invoice (number kept)");
+}
 export function creditNote(i: Invoice, amount: number, note: string) {
-  const cn: Invoice = { id: uid(), kind: "credit", no: nextNo("credit"), date: today(), customer: i.customer, gstin: i.gstin, orderNo: i.orderNo, lines: [{ desc: `Credit against ${i.no}: ${note}`, hsn: i.lines[0]?.hsn ?? "", qty: 1, rate: amount }], gstRate: i.gstRate, interstate: i.interstate, status: "issued", against: i.no, note };
+  const room = r2(invTax(i).taxable - creditedOn(i.no));
+  if (!(amount > 0) || amount > room + 0.005) throw new Error(`A credit note can be for at most ₹${room} (the taxable value not yet credited).`);
+  if (!note.trim()) throw new Error("Give the reason for the credit note.");
+  const cn: Invoice = { id: uid(), kind: "credit", no: nextNo("credit"), date: today(), customer: i.customer, gstin: i.gstin, orderNo: i.orderNo, lines: [{ desc: `Credit against ${i.no}: ${note}`, hsn: i.lines[0]?.hsn ?? "", qty: 1, rate: amount }], gstRate: i.gstRate, interstate: i.interstate, status: "issued", against: i.no, note, type: i.type, billTo: i.billTo, seller: i.seller, shipping: undefined };
   invoicesSig.value = [...invoicesSig.value, cn]; logFn("Credit note", `${cn.no} against ${i.no}`, "money"); return cn;
 }
 /** Mark paid also books a Mauny receipt; mark unpaid removes it. */
 export function markPaid(i: Invoice, account: string, on = today()) {
   updateInvoice(i, { paidOn: on, paidAccount: account }, "Marked invoice paid");
-  moneySig.value = [...moneySig.value, { id: uid(), date: on, account, kind: "receipt", amount: invTax(i).total, note: i.customer, ref: i.no, source: "invoice_desk" }];
+  const due = invDue({ ...i, paidOn: undefined });
+  if (due > 0) moneySig.value = [...moneySig.value, { id: uid(), date: on, account, kind: "receipt", amount: due, note: i.customer, ref: i.no, source: "invoice_desk" }];
 }
 export function markUnpaid(i: Invoice) {
   updateInvoice(i, { paidOn: undefined, paidAccount: undefined }, "Marked invoice unpaid");
-  moneySig.value = moneySig.value.filter((m) => !(m.ref === i.no && m.source === "invoice_desk"));
+  moneySig.value = moneySig.value.filter((m) => !(m.ref === i.no && m.kind === "receipt"));
 }
-/** Renumber unpaid, uncancelled invoices of a series in date order (used to close an accidental gap). */
-export function resequence(fy: string) {
-  const prefix = seriesPrefix("invoice", `${fy.slice(0, 4)}-04-01`);
-  const list = invoicesSig.value.filter((i) => seqOf(i.no, prefix)).sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
-  const map = new Map(list.map((i, k) => [i.id, prefix + String(k + 1).padStart(3, "0")]));
-  invoicesSig.value = invoicesSig.value.map((i) => (map.has(i.id) ? { ...i, no: map.get(i.id)! } : i));
-  logFn("Resequenced invoice series", prefix, "money");
-}
-
 /* ---------------------------------------------------------------- purchases / expenses */
 export function billChecks(b: Bill): { block: string[]; warn: string[] } {
   const block: string[] = [], warn: string[] = [];
@@ -178,6 +190,8 @@ export function addExpense(e: Omit<Expense, "id">) {
 /* ---------------------------------------------------------------- Mauny */
 export function addMoney(e: Omit<MoneyEntry, "id">) {
   const x = { ...e, id: uid() }; moneySig.value = [...moneySig.value, x];
+  // Money out that is an expense is also an expense record, so Finance, Books, GST and Tally see it. Tagged to an order, it counts in that order's cost.
+  if (e.kind === "expense" && e.amount < 0) expensesSig.value = [...expensesSig.value, { id: uid(), date: e.date, head: e.cat || "Other", vendor: e.note || e.cat || "Expense", amount: -e.amount, tax: 0, paid: true, account: e.account, moneyId: x.id, orderNo: e.ref && /^EM-/.test(e.ref) ? e.ref : undefined }];
   if (e.kind === "asset_purchase") assetsSig.value = [...assetsSig.value, { id: uid(), name: e.note, machine: "—", block: "Plant & machinery", blockRate: 15, cost: -e.amount, date: e.date }];
   if (e.kind === "loan_taken") loansSig.value = [...loansSig.value, { id: uid(), lender: e.note, principal: e.amount, rate: 12, date: e.date, repaid: 0 }];
   logFn(`Mauny · ${e.kind.replace("_", " ")}`, `${e.note} ${e.amount}`, "money"); return x;
@@ -195,41 +209,50 @@ export function daySummary(acc: string, d: string) {
 }
 
 /* ---------------------------------------------------------------- statements */
-const hashStr = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return String(h); };
-export function parseStatementCsv(text: string, account: string) {
+export type StmtRow = { date: string; text: string; amount: number; balance?: number };
+/** Add parsed statement rows. Identical rows in one file (two ₹500 UPI payments the same day) are kept; re-importing the same file skips them. */
+export function addStatementRows(rows: StmtRow[], account: string) {
   const out: StatementLine[] = []; const seen = new Set(statementSig.value.map((l) => l.hash));
-  let dup = 0;
-  for (const raw of text.split(/\r?\n/).slice(1)) {
-    const c = raw.split(",").map((x) => x.replace(/^"|"$/g, "").trim()); if (c.length < 3) continue;
-    const [date, text2, ...rest] = c; const dr = Number(rest[0] || 0), cr = Number(rest[1] || 0);
-    const amount = rest.length > 1 ? cr - dr : Number(rest[0]); if (!date || !isFinite(amount) || !amount) continue;
-    const hash = hashStr(account + date + text2 + amount); if (seen.has(hash)) { dup++; continue; } seen.add(hash);
-    out.push({ id: uid(), account, date: normDate(date), text: text2, amount, state: "review", hash });
+  const ord = new Map<string, number>(); let dup = 0;
+  for (const r of rows) {
+    const base = `${account}|${r.date}|${r.text}|${r.amount}|${r.balance ?? ""}`, n = (ord.get(base) ?? 0) + 1; ord.set(base, n);
+    const hash = `${base}#${n}`;
+    if (seen.has(hash)) { dup++; continue; } seen.add(hash);
+    out.push({ id: uid(), account, date: r.date, text: r.text, amount: r.amount, state: "review", hash });
   }
-  statementSig.value = [...out, ...statementSig.value]; logFn("Imported statement", `${out.length} lines · ${dup} duplicates skipped`, "money");
+  statementSig.value = [...out, ...statementSig.value]; logFn("Imported statement", `${out.length} lines · ${dup} already imported`, "money");
   return { added: out.length, dup };
 }
-const normDate = (d: string) => (/^\d{4}-/.test(d) ? d : (([a, b, c]) => `${c.length === 2 ? "20" + c : c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`)(d.split(/[/.-]/)));
-/** Suggest a match: unpaid invoice by exact amount, or net of 1%/2% TDS; expense by amount; else name tokens. */
-export function suggest(l: StatementLine): string {
+type Match = { label: string; inv?: Invoice; part?: boolean; exp?: Expense; tds?: number };
+/** Suggest a match: unpaid invoice by what is still due (or net of 1%/2%/10% TDS), then customer name; or an unpaid expense by amount. */
+export function matchLine(l: StatementLine): Match {
   if (l.amount > 0) {
-    for (const i of invoicesSig.value.filter((i) => i.kind === "invoice" && !i.paidOn && i.status === "issued")) {
-      const t = invTax(i).total;
-      if (Math.abs(t - l.amount) < 1) return `Receipt · ${i.no}`;
-      for (const tds of [1, 2]) if (Math.abs(t - invTax(i).taxable * tds / 100 - l.amount) < 2) return `Receipt · ${i.no} (net of ${tds}% TDS)`;
-      if (l.text.toUpperCase().includes(i.customer.split(" ")[0].toUpperCase())) return `Part receipt · ${i.no}?`;
+    const open = invoicesSig.value.filter((i) => invDue(i) > 0);
+    for (const i of open) {
+      const d = invDue(i);
+      if (Math.abs(d - l.amount) < 1) return { label: `Receipt · ${i.no}`, inv: i };
+      for (const tds of [1, 2, 10]) if (Math.abs(d - invTax(i).taxable * tds / 100 - l.amount) < 2) return { label: `Receipt · ${i.no} (net of ${tds}% TDS)`, inv: i, tds };
     }
-    return "Other income / advance";
+    const T = l.text.toUpperCase();
+    for (const i of open) { const w = i.customer.split(/\s+/).find((x) => x.length > 2); if (w && T.includes(w.toUpperCase())) return { label: `Part receipt · ${i.no}?`, inv: i, part: true }; }
+    return { label: "Other income / advance" };
   }
   const e = expensesSig.value.find((e) => !e.paid && Math.abs(e.amount + l.amount) < 1);
-  return e ? `Pays expense · ${e.vendor}` : "New expense";
+  return e ? { label: `Pays expense · ${e.vendor}`, exp: e } : { label: "New expense" };
 }
+export const suggest = (l: StatementLine) => matchLine(l).label;
 export function confirmLine(l: StatementLine) {
-  const s = suggest(l); const m = s.match(/(B\/\d\d-\d\d\/\d{4})/);
-  const inv = m && invoicesSig.value.find((i) => i.no === m[1]);
-  if (inv && !s.startsWith("Part")) markPaid(inv, l.account, l.date);
-  else addMoney({ date: l.date, account: l.account, kind: l.amount > 0 ? (s.startsWith("Part") ? "receipt" : "other_income") : "expense", amount: l.amount, note: l.text, source: "statement" });
-  statementSig.value = statementSig.value.map((x) => (x.id === l.id ? { ...x, state: "confirmed", match: s } : x));
+  const m = matchLine(l);
+  if (m.inv && !m.part) {
+    // The money that actually arrived is booked against the invoice; a TDS shortfall is the customer's tax credit, so the invoice is settled.
+    moneySig.value = [...moneySig.value, { id: uid(), date: l.date, account: l.account, kind: "receipt", amount: l.amount, note: m.inv.customer + (m.tds ? ` (net of ${m.tds}% TDS)` : ""), ref: m.inv.no, source: "statement" }];
+    updateInvoice(m.inv, { paidOn: l.date, paidAccount: l.account }, "Marked invoice paid (statement)");
+  } else if (m.inv) addMoney({ date: l.date, account: l.account, kind: "receipt", amount: l.amount, note: l.text, ref: m.inv.no, source: "statement" });
+  else if (m.exp) {
+    expensesSig.value = expensesSig.value.map((x) => (x.id === m.exp!.id ? { ...x, paid: true, account: l.account } : x));
+    moneySig.value = [...moneySig.value, { id: uid(), date: l.date, account: l.account, kind: "expense", amount: l.amount, note: m.exp.vendor, ref: m.exp.id, source: "statement" }];
+  } else addMoney({ date: l.date, account: l.account, kind: l.amount > 0 ? "other_income" : "expense", amount: l.amount, note: l.text, source: "statement" });
+  statementSig.value = statementSig.value.map((x) => (x.id === l.id ? { ...x, state: "confirmed", match: m.label } : x));
 }
 export const rejectLine = (l: StatementLine) => (statementSig.value = statementSig.value.map((x) => (x.id === l.id ? { ...x, state: "rejected" } : x)));
 
@@ -241,8 +264,8 @@ export function financeSummary(win: [string, string], orders: Order[]) {
   const collected = inv.filter((i) => i.paidOn && i.kind === "invoice").reduce((s, i) => s + invTax(i).total, 0);
   const closedNoInv = orders.filter((o) => o.stage === "archived" && !linked.has(o.no) && inWin(o.due, win)).reduce((s, o) => s + orderValue(o), 0);
   const credits = inv.filter((i) => i.kind === "credit").reduce((s, i) => s + invTax(i).total, 0);
-  const outstanding = inv.filter((i) => !i.paidOn && i.kind === "invoice").reduce((s, i) => s + invTax(i).total, 0);
-  const outstandingAll = invoicesSig.value.filter((i) => !i.paidOn && i.kind === "invoice").reduce((s, i) => s + invTax(i).total, 0);
+  const outstanding = inv.reduce((s, i) => s + invDue(i), 0);
+  const outstandingAll = invoicesSig.value.reduce((s, i) => s + invDue(i), 0);
   const exp = expensesSig.value.filter((e) => inWin(e.date, win));
   const spent = exp.reduce((s, e) => s + e.amount, 0);
   const pipeline = orders.filter((o) => o.stage !== "archived").reduce((s, o) => s + orderValue(o), 0);
@@ -271,7 +294,7 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   const t = today(), terms = rate("terms");
   const linked = new Set(invoicesSig.value.filter((i) => i.status === "issued").map((i) => i.orderNo));
   const money: Alert[] = [];
-  invoicesSig.value.filter((i) => i.kind === "invoice" && i.status === "issued" && !i.paidOn).forEach((i) => { const age = daysBetween(i.date, t);
+  invoicesSig.value.filter((i) => invDue(i) > 0).forEach((i) => { const age = daysBetween(i.date, t);
     money.push({ t: age > 75 ? "danger" : age > terms ? "warn" : "info", text: `${i.no} · ${i.customer} — unpaid ${age} days`, href: "/work/invoice" }); });
   orders.filter((o) => o.stage === "archived" && orderValue(o) && !linked.has(o.no)).forEach((o) => money.push({ t: "danger", text: `${o.no} closed out but never invoiced`, href: "/work/invoice" }));
   orders.filter((o) => o.stage === "archived" && orderValue(o) && o.items.reduce((s, i) => s + i.qty * i.cost, 0) > orderValue(o)).forEach((o) => money.push({ t: "danger", text: `${o.no} closed at a loss`, href: "/work/archive" }));
@@ -305,4 +328,4 @@ export function attention(orders: Order[], spools: { material: string; colour: s
 }
 
 export const nowS = nowStamp;
-export const unpaidTotal = computed(() => invoicesSig.value.filter((i) => !i.paidOn && i.kind === "invoice" && i.status === "issued").reduce((s, i) => s + invTax(i).total, 0));
+export const unpaidTotal = computed(() => invoicesSig.value.reduce((s, i) => s + invDue(i), 0));

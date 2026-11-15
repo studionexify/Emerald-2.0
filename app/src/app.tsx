@@ -40,6 +40,7 @@ const routes: [string, any][] = [
   ["/workshop/movements", L(ws, "Movements")],
   ["/workshop/audit", L(() => import("./routes/Audit"), "StockAudit")],
   ["/workshop/consumption", L(ws, "ConsumptionLog")],
+  ["/workshop/prices", L(ws, "Prices")],
   ["/calculator/settings", L(calc, "PricingSettings")],
   ["/settings/integrations", L(g, "Integrations")],
   ["/settings/rates", L(g, "Rates")],

@@ -5,7 +5,7 @@ import { signal } from "@preact/signals";
 import { navigate } from "../../router";
 import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { Menu, MetaRow } from "../../ui/disclose";
-import { toBin, teamNames, inr, orderCost, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, spoolGross, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
+import { toBin, teamNames, inr, orderCost, orderCostParts, orderMargin, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, spoolGross, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
 import { ConsumeForm, OrderDetail, WorkShell , useOpenOrder } from "./shared";
 
@@ -288,11 +288,11 @@ export function Archive() {
           { key: "o", label: "Order", render: (o) => `${o.no} · ${o.customer}` },
           { key: "t", label: "Type", render: (o) => TYPE_LABEL[o.type] },
           { key: "r", label: "Revenue", align: "right", render: (o) => (o.type === "inhouse" ? "—" : inr(orderTotal(o))) },
-          { key: "m1", label: "Material", align: "right", render: (o) => inr(orderCost(o) * 0.45), hideTablet: true },
-          { key: "m2", label: "Machine", align: "right", render: (o) => inr(orderCost(o) * 0.3), hideTablet: true },
-          { key: "m3", label: "Pack + freight", align: "right", render: (o) => inr(orderCost(o) * 0.25), hideTablet: true },
+          { key: "m1", label: "Material", align: "right", render: (o) => inr(orderCostParts(o).material), hideTablet: true },
+          { key: "m2", label: "Machine", align: "right", render: (o) => inr(orderCostParts(o).machine), hideTablet: true },
+          { key: "m3", label: "Pack + freight", align: "right", render: (o) => inr(orderCostParts(o).pack + orderCostParts(o).other), hideTablet: true },
           { key: "k", label: "Cost", align: "right", render: (o) => inr(orderCost(o)) },
-          { key: "m", label: "Margin", align: "right", render: (o) => (o.type === "inhouse" ? "—" : `${Math.round((1 - orderCost(o) / orderTotal(o)) * 100)}%`) },
+          { key: "m", label: "Margin", align: "right", render: (o) => (o.type === "inhouse" ? "—" : orderMargin(o) === null ? "—" : `${orderMargin(o)}%`) },
         ]} />
       </Card>
       <Card><div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"><Fact label="Estimated cost" value={inr(3400)} /><Fact label="Actual cost" value={inr(4120)} /><Fact label="Drift" value="+21%" /><Fact label="Median cycle" value="8 days" /></div></Card>

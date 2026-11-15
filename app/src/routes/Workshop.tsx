@@ -664,3 +664,45 @@ export function ConsumptionLog() {
     </Shell>
   );
 }
+
+/* ======================================================= Prices — the one place every price is entered */
+import { RATE_DEFS, ratesSig, setRate } from "../data";
+export function Prices() {
+  const groups = [...new Set(RATE_DEFS.map((r) => r.group))];
+  const m = filMasterSig.value;
+  const baseKey = (n: string) => ["pla", "petg", "tpu", "abs"].find((k) => k === n.trim().toLowerCase());
+  const setMat = (name: string, costKg: number) => { filMasterSig.value = { ...m, materials: m.materials.map((x) => (x.name === name ? { ...x, costKg } : x)) }; const k = baseKey(name); if (k) setRate(k, costKg); };
+  const setCost = (sig: Signal<PackItem[]>, id: string, cost: number) => (sig.value = sig.value.map((x) => (x.id === id ? { ...x, cost } : x)));
+  const cell = "h-8 w-28 px-2 rounded-lg border border-line bg-c0 text-[13px] num text-right";
+  const row = (name: string, sub: string, v: number, on: (n: number) => void, unit: string) => (
+    <div key={name} class="flex items-center gap-3 py-1.5 border-t border-line first:border-0 min-w-0">
+      <span class="flex-1 min-w-0"><span class="block text-[13px] font-semibold truncate">{name}</span><span class="block t-meta truncate">{sub}</span></span>
+      <label class="flex items-center gap-1.5 text-[12px] text-c3">₹<input class={cell} type="number" inputMode="decimal" min="0" value={v || ""} onInput={(e) => on(num(e))} aria-label={`${name} price`} /> {unit}</label>
+    </div>
+  );
+  return (
+    <Shell sub="Enter every price here once. Order costs, margins, quotations, stock value and the cost of each print are calculated from these.">
+      <div class="grid gap-3 md:grid-cols-2 items-start">
+        <Card>
+          <div class="text-[15px] font-bold mb-1">Filament by material</div>
+          <p class="t-meta mb-2">Used for any print where the spool has no price of its own. A spool's own ₹/kg (set on the spool) always wins.</p>
+          {m.materials.length ? m.materials.map((x) => row(x.name, `${masterUse("material", x.name)} spools in stock`, x.costKg || (baseKey(x.name) ? ratesSig.value[baseKey(x.name)!] : 0), (n) => setMat(x.name, n), "/kg")) : <p class="t-meta">Materials appear here as spools are added.</p>}
+        </Card>
+        {groups.map((g) => (
+          <Card key={g}>
+            <div class="text-[15px] font-bold mb-1">{g}</div>
+            {RATE_DEFS.filter((r) => r.group === g && !["pla", "petg", "tpu", "abs"].includes(r.key)).map((r) => row(r.label, "", ratesSig.value[r.key], (n) => setRate(r.key, n), r.unit.replace("₹", "")))}
+          </Card>
+        ))}
+        <Card>
+          <div class="text-[15px] font-bold mb-1">Packing materials</div>
+          {packSig.value.filter((p) => p.active !== false).length ? packSig.value.filter((p) => p.active !== false).map((p) => row(p.name, `${p.qty} ${p.unit} in stock`, p.cost, (n) => setCost(packSig, p.id, n), `/${p.unit}`)) : <p class="t-meta">No packing items yet.</p>}
+        </Card>
+        <Card>
+          <div class="text-[15px] font-bold mb-1">Accessories & parts</div>
+          {itemsSig.value.filter((p) => p.active !== false).length ? itemsSig.value.filter((p) => p.active !== false).map((p) => row(p.name, `${p.qty} ${p.unit} in stock`, p.cost, (n) => setCost(itemsSig, p.id, n), `/${p.unit}`)) : <p class="t-meta">No parts yet.</p>}
+        </Card>
+      </div>
+    </Shell>
+  );
+}

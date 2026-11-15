@@ -10,7 +10,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
 import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
-import { startRun, finishRun, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, addBatch, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, satisfy, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
+import { startRun, finishRun, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
 
@@ -38,6 +38,7 @@ export function TypeChips({ value, onChange }: { value: TypeFilter; onChange: (v
 
 export const stageLabel = (o: Order) => STAGE_LABEL[o.stage];
 
+import { AddBatchSheet, BatchTrackingSheet, RecordSheet } from "./RecordForms";
 export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void; inset?: boolean }) {
   return (
     <button onClick={() => onOpen(o)} class="w-full min-w-0 text-left rounded-2xl bg-c0 border border-line hover:border-c2 px-2.5 py-2 cursor-pointer text-[13px]">
@@ -55,7 +56,7 @@ export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void;
 /** Inline order detail (no overlay; forward moves honour the stage gate). Render via the page's `detail` prop. */
 /** `onStage` keeps stage clicks inside the calling tab instead of opening the shared stage page. */
 export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order; onClose: () => void; onOpen: (o: Order) => void; onStage?: (st: Stage) => void }) {
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(""); const [rec, setRec] = useState<string | null>(null), [addB, setAddB] = useState(false);
   const next = nextOf(order), prev = prevOf(order);
   const sug = SUGGESTED[order.type];
   const mine = batchesSig.value.filter((b) => b.orderNo === order.no);
@@ -97,6 +98,8 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
   return (
     <div>
       <DetailHead title={<>{order.no} <span class="text-c3 font-medium">· {order.customer}</span></>} onClose={() => { setMsg(""); onClose(); }} />
+      {rec && <RecordSheet order={order} field={rec} onClose={() => setRec(null)} onDone={(n) => onOpen(n)} />}
+      {addB && <AddBatchSheet order={order} onClose={() => setAddB(false)} onDone={() => onOpen({ ...order })} />}
       <div class="t-meta -mt-2 mb-2">Due {shortDate(order.due)}{seg !== "inhouse" && total ? ` · ${inr(total)}` : ""}</div>
       <div class="flex items-center gap-2 mb-2">
         <span class="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-full bg-c1 text-[12px] font-semibold whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full" style={{ background: H.prod }} />{STAGE_LABEL[order.stage]}</span>
@@ -140,11 +143,11 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
         {prev && <Button variant="outline" onClick={() => go(prev)}>← Back to {STAGE_LABEL[prev]}</Button>}
         <label class="flex items-center gap-2 text-[12px] mb-2"><span class="text-c3">Jump to</span><select class={`${sel} flex-1`} value={order.stage} onChange={(e) => go((e.target as HTMLSelectElement).value as Stage)}>{STAGE_ORDER.map((st) => <option key={st} value={st}>{STAGE_LABEL[st]}{sug.includes(st) ? "" : " (off path)"}</option>)}</select></label>
         <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Checklist · {ckDone}/{ck.length}</summary>
-          <ul class="flex flex-col">{ck.map((c) => <li key={c.label} class="flex items-center justify-between gap-2 py-1 border-t border-line first:border-0"><Status tone={c.done ? "done" : "idle"}>{c.label}</Status>{!c.done && <button class="underline cursor-pointer" onClick={() => onOpen(satisfy(order, c.field))}>{c.action}</button>}</li>)}</ul>
+          <ul class="flex flex-col">{ck.map((c) => <li key={c.label} class="flex items-center justify-between gap-2 py-1 border-t border-line first:border-0"><Status tone={c.done ? "done" : "idle"}>{c.label}</Status>{!c.done && <button class="underline cursor-pointer" onClick={() => setRec(c.field as string)}>{c.action}</button>}</li>)}</ul>
         </details>
         <details class="text-xs"><summary class="cursor-pointer font-semibold py-1">Batches · {mine.length}</summary>
           <ul class="flex flex-col gap-2 py-1">{mine.map((b) => <BatchRow key={b.id} b={b} after={() => onOpen({ ...order })} />)}{!mine.length && <li class="text-c3">No batches — any order can be split.</li>}</ul>
-          <button class="underline cursor-pointer" onClick={() => { addBatch(order); onOpen({ ...order }); }}>+ Add batch</button>
+          <button class="underline cursor-pointer" onClick={() => setAddB(true)}>+ Add batch</button>
         </details>
         {order.stage === "production" && lowAcc.length > 0 && <p class="text-xs mt-1 rounded-lg bg-c1 p-2"><b>Low stock:</b> {lowAcc.map((a) => a.name).join(", ")}</p>}
       </Fold>
@@ -159,7 +162,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
           {Array.from({ length: Math.max(0, 4 - photos.length) }, (_, k) => <figure key={`ph${k}`} class="text-[10px] text-c3"><Thumb alt="Photo" class="w-full aspect-square" onAdd={(f) => shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); })} /><figcaption>{["QC", "Packing", "Shipping", "Other"][photos.length + k] ?? "Photo"}</figcaption></figure>)}</div>
       </Fold>
 
-      <Fold id={F("internal")} hue={H.internal} title="Internal" meta={total ? `${inr(used)} used · ${Math.round((1 - used / total) * 100)}% margin` : `${inr(used)} used`}>
+      <Fold id={F("internal")} hue={H.internal} title="Internal" meta={total && used > 0 ? `${inr(used)} used · ${Math.round((1 - used / total) * 100)}% margin` : used > 0 ? `${inr(used)} used` : "Nothing recorded yet"}>
         {canSwitchMode() && order.type !== "inhouse" && <label class="flex items-center gap-2 text-[12px] mb-2"><span class="text-c3 w-24">Payment mode</span>
           <select class={`${sel} flex-1`} value={order.pay ?? "alpha"} onChange={(e) => { const m = (e.target as HTMLSelectElement).value as "alpha" | "beta"; ordersSig.value = ordersSig.value.map((x) => (x.id === order.id ? { ...x, pay: m } : x)); log("Payment mode", `${order.no} → ${PAY_LABEL[m]}`); onOpen({ ...order, pay: m }); }}>
             {(["alpha", "beta"] as const).map((m) => <option key={m} value={m}>{PAY_LABEL[m]}</option>)}</select></label>}
@@ -347,7 +350,8 @@ export function ConsumeForm({ orderNo, batches = [] }: { orderNo?: string; batch
 }
 
 export function BatchRow({ b, after }: { b: Batch; after?: () => void }) {
-  const act = (w: "print" | "invoice" | "tracking") => { batchAction(b, w); after?.(); };
+  const [trk, setTrk] = useState(false);
+  const act = (w: "invoice") => { batchAction(b, w); after?.(); };
   return (
     <li class="bg-c1 rounded-xl p-2.5 text-sm">
       <div class="flex justify-between items-center gap-2">
@@ -358,9 +362,8 @@ export function BatchRow({ b, after }: { b: Batch; after?: () => void }) {
       </div>
       <div class="text-xs text-c3">{b.done}/{b.units} units{b.invoiceNo ? ` · ${b.invoiceNo}` : ""}{b.tracking ? ` · ${b.tracking}` : ""}</div>
       <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs">
-        <button class="underline cursor-pointer" onClick={() => act("print")}>Mark printed</button>
         <button class="underline cursor-pointer" onClick={() => act("invoice")}>{b.invoiceNo ? "Re-invoice" : "Raise invoice"}</button>
-        <button class="underline cursor-pointer" onClick={() => act("tracking")}>{b.tracking ? "Update tracking" : "Add tracking"}</button>
+        <button class="underline cursor-pointer" onClick={() => setTrk(true)}>{b.tracking ? "Update tracking" : "Add tracking"}</button>{trk && <BatchTrackingSheet batch={b} onClose={() => setTrk(false)} onDone={() => after?.()} />}
       </div>
     </li>
   );

@@ -3,6 +3,7 @@ import { effect } from "@preact/signals";
 import { persisted as P } from "./store";
 import type { Batch, BatchStage, ConKind, Consumption, Log, LogKind, Order, OrderType, Stage } from "../mock/types";
 import { STAGE_LABEL, STAGE_ORDER } from "./flows";
+import { expensesSig } from "./ledger";
 
 export * from "../mock/types";
 
@@ -13,7 +14,7 @@ export const batchesSig = P<Batch[]>("batches", []);
 export const logsSig = P<Log[]>("logs", []);
 export const consSig = P<Consumption[]>("consumption", []);
 spoolUseSrc.value = consSig;
-import { spoolUseSrc, spoolsSig, packSig, jobsSig, isSpoolItem, nextSpoolNo } from "./inventory";
+import { spoolUseSrc, spoolsSig, packSig, itemsSig, jobsSig, isSpoolItem, nextSpoolNo, filMasterSig } from "./inventory";
 export * from "./inventory";
 
 export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key], n: i + 1 }));
@@ -21,7 +22,17 @@ export const STAGES = STAGE_ORDER.map((key, i) => ({ key, label: STAGE_LABEL[key
 export const TYPE_LABEL: Record<OrderType, string> = { inhouse: "In-house", client: "Client", bulk: "Bulk" };
 
 export const orderTotal = (o: Order) => o.items.reduce((s, i) => s + i.qty * i.price, 0);
-export const orderCost = (o: Order) => o.items.reduce((s, i) => s + i.qty * i.cost, 0);
+/** What the order really cost: everything consumed on it (filament, scrap, machine, power, labour, packing, parts, freight) at the Store prices,
+ *  plus expenses booked against it. Until something is recorded, the planned cost typed on the lines (e.g. from Nexcal); never a guess. */
+export const orderCostParts = (o: Order) => {
+  const p = { material: 0, machine: 0, pack: 0, other: 0 };
+  for (const c of consSig.value) if (c.orderNo === o.no) { if (c.kind === "filament" || c.kind === "scrap") p.material += c.cost; else if (c.kind === "machine" || c.kind === "power" || c.kind === "labour") p.machine += c.cost; else if (c.kind === "packing" || c.kind === "freight") p.pack += c.cost; else p.other += c.cost; }
+  for (const e of expensesSig.value) if (e.orderNo === o.no) p.other += e.amount - e.tax;
+  return p;
+};
+export const orderCost = (o: Order) => { const p = orderCostParts(o), rec = p.material + p.machine + p.pack + p.other; return rec > 0 ? rec : o.items.reduce((s, i) => s + i.qty * i.cost, 0); };
+/** Margin %, or null while no cost is known. */
+export const orderMargin = (o: Order) => { const t = orderTotal(o), c = orderCost(o); return t > 0 && c > 0 ? Math.round((1 - c / t) * 100) : null; };
 export const orderUnits = (o: Order) => o.items.reduce((s, i) => s + i.qty, 0);
 
 export const inr = (n: number) => (n < 0 ? "−" : "") + "₹" + Math.abs(Math.round(n)).toLocaleString("en-IN");
@@ -75,13 +86,6 @@ const putBatch = (b: Batch) => (batchesSig.value = batchesSig.value.map((x) => (
 
 export function patchOrder(o: Order, p: Partial<Order>): Order { const n = { ...o, ...p }; putOrder(n); return n; }
 
-/** Satisfy one gate check (mock: a real build opens that stage's form). */
-export function satisfy(o: Order, field: keyof Order): Order {
-  const val = field === "po" ? `PO/${Math.floor(Math.random() * 9000 + 1000)}` : field === "tracking" ? `TRK${Math.floor(Math.random() * 1e8)}` : true;
-  const n = { ...o, [field]: val } as Order;
-  putOrder(n); log(`Recorded ${String(field)}`, o.no); return n;
-}
-
 /** Move to any stage — no gates. */
 export function moveTo(o: Order, to: Stage, reason = ""): Order {
   const n = { ...o, stage: to };
@@ -93,18 +97,25 @@ export function moveTo(o: Order, to: Stage, reason = ""): Order {
 export function batchSet(b: Batch, p: Partial<Batch>, what: string) { putBatch({ ...b, ...p }); log(what, `${b.orderNo} · ${b.name}`); }
 export const batchTo = (b: Batch, to: BatchStage) => batchSet(b, { stage: to }, `Batch → ${to}`);
 
-const perG = (item: string) => rate(/PETG/.test(item) ? "petg" : /TPU/.test(item) ? "tpu" : /ABS/.test(item) ? "abs" : "pla") / 1000;
-const RATE: Record<ConKind, (item: string) => number> = { filament: perG, scrap: perG, packing: () => 0, accessory: () => 0, part: () => 0, machine: () => rate("machine"), power: () => rate("power"), labour: () => rate("labour"), freight: () => 1 };
+/** ₹ per gram of filament: that spool's own price, else the material's price in Store → Prices, else the rate table. */
+const perG = (item: string, spoolId?: string) => {
+  const sp = spoolsSig.value.find((s) => (spoolId && s.id === spoolId) || isSpoolItem(item, s.spoolNo));
+  if (sp?.costKg) return sp.costKg / 1000;
+  const mat = /PETG|TPU|ABS|ASA|PLA/i.exec(item)?.[0] ?? sp?.material ?? "PLA", m = filMasterSig.value.materials.find((x) => x.name.toLowerCase() === mat.toLowerCase());
+  return (m?.costKg || rate(/PETG/i.test(mat) ? "petg" : /TPU/i.test(mat) ? "tpu" : /ABS/i.test(mat) ? "abs" : "pla")) / 1000;
+};
+const RATE: Record<ConKind, (item: string, spoolId?: string) => number> = { filament: perG, scrap: perG, packing: () => 0, accessory: () => 0, part: () => 0, machine: () => rate("machine"), power: () => rate("power"), labour: () => rate("labour"), freight: () => 1 };
 export const UNIT: Record<ConKind, string> = { filament: "g", packing: "pcs", accessory: "pcs", part: "pcs", machine: "h", power: "h", labour: "h", freight: "₹", scrap: "g" };
 
 /** Record any consumption; decrements stock where it applies and writes a log row. */
 export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string; /** print-run usage: counted against this spool, sync-safe */ spoolId?: string }) {
-  let cost = d.qty * RATE[d.kind](d.item);
+  let cost = d.qty * RATE[d.kind](d.item, d.spoolId);
   if (d.kind === "filament" && !d.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(d.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
   if (d.kind === "packing") {
     const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;
     packSig.value = packSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p));
   }
+  if (d.kind === "accessory" || d.kind === "part") { const it = itemsSig.value.find((p) => p.name === d.item); if (it) { cost = it.cost * d.qty; itemsSig.value = itemsSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p)); } }
   const e: Consumption = { id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", unit: UNIT[d.kind], cost: Math.round(cost), ...d };
   consSig.value = [e, ...consSig.value];
   log(`Consumed ${d.qty} ${e.unit} ${d.item}`, d.orderNo ?? "Store", "consumption");
@@ -112,9 +123,9 @@ export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?:
 }
 export const orderConsumption = (no: string) => consSig.value.filter((c) => c.orderNo === no);
 
-export function addBatch(o: Order) {
-  const n = batchesSig.value.filter((b) => b.orderNo === o.no).length + 1;
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: `Batch ${n}`, units: 50, done: 0, stage: "production" }];
+export function addBatch(o: Order, name: string, units: number) {
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name, units, done: 0, stage: "production" }];
+  log("Added batch", `${o.no} · ${units}× ${name}`);
 }
 
 export function createOrder(d: { type: OrderType; customer: string; item: string; qty: number; price: number; medium: string; due: string; delivery?: Order["delivery"]; supports?: boolean; material?: string; colour?: string; purpose?: string; size?: Order["size"]; b2b?: string; pay?: Order["pay"] }): Order {
@@ -123,16 +134,14 @@ export function createOrder(d: { type: OrderType; customer: string; item: string
   const o: Order = { id: crypto.randomUUID(), no: `EM-${max + 1}`, type: d.type, customer: d.type === "inhouse" ? "Studio Nexify" : d.customer || "New client",
     medium: d.type === "inhouse" ? "Internal" : d.medium, stage: d.type === "inhouse" ? "production" : "quotation", created: today, due: d.due || today,
     delivery: d.delivery, supports: d.supports, size: d.type === "inhouse" ? undefined : d.size ?? (d.type === "bulk" ? "bulk" : "small"), b2b: d.size === "b2b" ? d.b2b : undefined, pay: d.pay ?? "alpha",
-    items: [{ name: d.item || "Item", material: d.material || "PLA", colour: d.colour || "Black", qty: d.qty || 1, purpose: d.type === "inhouse" ? d.purpose || "Jig / tool" : undefined, price: d.type === "inhouse" ? 0 : d.price, cost: Math.round((d.price || 100) * 0.3) }] };
+    items: [{ name: d.item || "Item", material: d.material || "PLA", colour: d.colour || "Black", qty: d.qty || 1, purpose: d.type === "inhouse" ? d.purpose || "Jig / tool" : undefined, price: d.type === "inhouse" ? 0 : d.price, cost: 0 }] };
   ordersSig.value = [o, ...ordersSig.value]; log("Created order", `${o.no} · ${o.customer}`); return o;
 }
 
-export function batchAction(b: Batch, what: "print" | "invoice" | "tracking") {
-  if (what === "print") batchSet(b, { done: b.units }, "Batch printed");
+export function batchAction(b: Batch, what: "invoice") {
   // A dispatch invoice starts as a draft: the owner checks it and issues it, which takes the number.
   if (what === "invoice") { const o = ordersSig.value.find((x) => x.no === b.orderNo); const price = o?.items.find((i) => i.name === b.name)?.price ?? o?.items[0]?.price ?? 0;
     import("./invoicing").then(({ newDraft, lookupParty, blankParty }) => newDraft({ billTo: lookupParty({ name: b.customer }) ?? { ...blankParty(), name: b.customer }, orderNo: b.orderNo, batch: b.name, lines: [{ desc: b.name, hsn: "491199", qty: b.done || b.units, rate: price }] })); log("Drafted dispatch invoice", `${b.orderNo} · ${b.name}`); }
-  if (what === "tracking") batchSet(b, { tracking: `TRK${Math.floor(Math.random() * 1e8)}` }, "Added tracking");
 }
 
 import { purgeSample } from "./store";

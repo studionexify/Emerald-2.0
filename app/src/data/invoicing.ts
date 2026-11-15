@@ -8,8 +8,8 @@
 import { computed } from "@preact/signals";
 import { fingerprint, persisted, today, uid } from "./store";
 import { bizSig, type Biz } from "./biz";
-import { invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type Invoice, type Party, type SellerSnap } from "./ledger";
-import { clientsSig, type Client } from "./inventory";
+import { INV_TYPE_LABEL, invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type InvType, type Invoice, type Party, type SellerSnap } from "./ledger";
+import { clientsSig, segmentOf, type Client } from "./inventory";
 import { ordersSig } from "./index";
 
 /* ---------------------------------------------------------------- states (GST state codes) */
@@ -90,14 +90,22 @@ export function rememberParty(p: Party) {
   else clientsSig.value = [...clientsSig.value, { id: uid(), kind: p.gstin ? "Business" : "Individual", city: "", medium: "", active: true, ...patch } as Client];
 }
 
+/* ---------------------------------------------------------------- invoice type (internal) */
+/** Which kind of order an invoice is for: from the linked order (In-house / B2B / Bulk / Client), else whatever was chosen. Never printed. */
+export function typeOfOrder(no?: string): InvType | undefined {
+  const o = no ? ordersSig.value.find((x) => x.no === no) : undefined; if (!o) return undefined;
+  const seg = segmentOf(o); return seg === "inhouse" ? "inhouse" : o.size === "b2b" || o.b2b ? "b2b" : seg === "bulk" ? "bulk" : "client";
+}
+export const typeLabel = (i: { type?: InvType; orderNo?: string }) => { const t = i.type ?? typeOfOrder(i.orderNo); return t ? INV_TYPE_LABEL[t] : "—"; };
+
 /* ---------------------------------------------------------------- drafts */
 /** Invoices not yet issued. Kept apart from the register so they never count in sales, GST or the number series. */
 export const draftsSig = persisted<Invoice[]>("invoiceDrafts", []);
-export function newDraft(d: { billTo?: Party; lines?: InvLine[]; orderNo?: string; batch?: string } = {}): Invoice {
+export function newDraft(d: { billTo?: Party; lines?: InvLine[]; orderNo?: string; batch?: string; type?: InvType } = {}): Invoice {
   const billTo = d.billTo ?? blankParty();
   const inv: Invoice = {
     id: uid(), kind: "invoice", no: "Draft", date: today(), customer: billTo.name, lines: d.lines ?? [{ desc: "", hsn: hsnSig.value[0]?.code ?? "", qty: 1, rate: 0 }],
-    gstRate: invoiceBiz.value.gstRate ?? 18, interstate: false, status: "issued", billTo, shipToParty: blankParty(), sameShip: true, orderNo: d.orderNo, batch: d.batch, seller: sellerNow(),
+    gstRate: invoiceBiz.value.gstRate ?? 18, interstate: false, status: "issued", billTo, shipToParty: blankParty(), sameShip: true, orderNo: d.orderNo, batch: d.batch, type: d.type ?? typeOfOrder(d.orderNo), seller: sellerNow(),
   };
   draftsSig.value = [inv, ...draftsSig.value];
   return derive(inv);
@@ -121,6 +129,7 @@ export function derive(d: Invoice): Invoice {
 /** Everything that must be right before a number is taken. Empty = ready to issue. */
 export function problems(d: Invoice): string[] {
   const out: string[] = [], b = d.billTo ?? blankParty();
+  if (!d.type) out.push("Invoice type is missing (internal: Client, Bulk, B2B or In-house)");
   if (!b.name.trim()) out.push("Bill to: name is missing");
   if (!b.address.trim()) out.push("Bill to: address is missing");
   if (!b.state) out.push("Bill to: state is missing (decides CGST+SGST or IGST)");

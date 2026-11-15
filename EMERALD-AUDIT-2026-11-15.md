@@ -132,3 +132,19 @@ Limits, stated plainly:
 **Not exercised — treat as unreviewed:** Floor sheet start/finish through the screen; saving a spool, movements, parts, packing stock and Stock audit; Nexcal / NexRes calculators and pricing settings; To-do; Bin restore; Settings, users and roles screens; Excel invoice-book import and Emerald-1 import; quotations and documents; credit-note and transporter-copy PDFs; Print / Year-end pack / Tally XML (output not opened in Tally); **cloud sign-in and sync (read, not run)**; anything with real data.
 
 **Checked and fine:** no console errors or overflow on 44 routes × 2 sizes; role gating by path; invoice arithmetic (CGST/SGST split, IGST, round-off) on the test invoices; draft numbers not consumed; issued invoices freeze seller details; service worker / chunk-reload handling; `tsc`, build and size budget.
+
+---
+
+## 10. Fixed after your answers (second pass)
+
+| Your answer | What changed | Verified |
+|---|---|---|
+| 1. Delete | Sample rows (`s1…s6` and all other demo ids) are now deleted from the **cloud** as well as every device on the next sync; dead `mock/data.ts` and `mock/extra.ts` removed. | code path only (cloud not run) |
+| 2. Mauny connected to Emerald | Every Mauny money-out *expense* now also creates an expense record (Finance, Books, GST, Tally see it) and, if tagged to an `EM-` order, counts in that order's cost. Statement "Confirm" marks the invoice paid (or the expense paid) and books the real amount received. | function test: ₹18,000 rent → Finance "Spent" ₹18,000 |
+| 3. To collect | New `invDue()`: invoice total − credit notes − receipts. Used by To collect, Finance outstanding, Books debtors, attention, statement matching. Credit notes can't exceed the uncredited value and need a reason. Cancelling an invoice takes its payment back out of the books and un-ticks "invoiced" on the order; Mark unpaid removes any receipt for it. | ₹11,800 invoice, ₹4,000 credit → To collect ₹7,080; cancel after paying → cash back to 0 |
+| 4. Statements any kind | CSV/TSV/TXT (any delimiter, quoted fields), Excel `.xlsx`, and text PDFs. Columns found by header name; Indian numbers, `(500)`, `Dr/Cr`, many date styles. Twin transactions kept; re-import skipped. `.xls`, scanned PDFs and photos get a clear message. | CSV, `;`-text, signed CSV, generated PDF tested; real bank PDFs/XLSX not available to me |
+| 5. Prices in Store | New **Store → Prices** tab: filament ₹/kg per material, machine/power/labour, packing and part prices, margins. Costs now come from these (a spool's own price first). The 30 % guess is gone: order cost = recorded consumption + order expenses (else planned line cost); margin shows "—" until something is recorded; Archive splits use real figures. | cost test: new order → cost 0, margin "—" |
+| 6. Real forms | The order checklist "Record" buttons open forms (approval, PO number, QC entry, packing record that draws stock, courier + tracking number + freight, payment into an account, invoice draft). Random PO/tracking numbers, "Mark printed" and the hard-coded 50-unit batch are gone; batches and dispatch are asked. | UI: QC, approval, payment saved; empty tracking refused |
+| 7. Invoice type | `Invoice.type` (Client / Bulk / B2B / In-house): set from the order, chosen on blank invoices (required to issue), shown as a Register column and filter, copied to credit notes. Old invoices fall back to their order's type. | issue test |
+
+Not done: the Floor sheet still does not write printer hours, job rows or machine/power cost (§4); `fixKnownInvoices`, the UTC date bug and the invoice-date crash are untouched.
