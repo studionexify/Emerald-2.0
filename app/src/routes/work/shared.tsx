@@ -9,7 +9,7 @@ import { LinkedTasks } from "../Todo";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { WORK_TABS } from "../../nav";
-import { Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
+import { ask, askText, Pick, Button, DetailHead, Fold, Icon, Page, Status } from "../../ui";
 import { startRun, finishRun, runHours, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
@@ -66,16 +66,16 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
   /** Re-slice rule: moving back needs a reason; every move lands in stage history. */
   /** Forward moves pass the stage gate; an owner/manager may override with a reason, which is logged. */
   const gate = gateReason(order, batchesSig.value);
-  const go = (to: Stage) => {
+  const go = async (to: Stage) => {
     if (to === order.stage) return;
     const back = STAGE_ORDER.indexOf(to) < STAGE_ORDER.indexOf(order.stage);
     let reason = "";
-    if (back) { reason = prompt(`Reason for sending ${order.no} back to ${STAGE_LABEL[to]}?`) ?? ""; if (!reason.trim()) return; }
+    if (back) { reason = (await askText(`Reason for sending ${order.no} back to ${STAGE_LABEL[to]}?`)) ?? ""; if (!reason.trim()) return; }
     const passing = STAGE_ORDER.slice(STAGE_ORDER.indexOf(order.stage), STAGE_ORDER.indexOf(to)).filter((s) => s === order.stage || SUGGESTED[order.type].includes(s));
     const block = back ? null : passing.map((s) => gateReason({ ...order, stage: s }, batchesSig.value)).find(Boolean) ?? null;
     if (block) {
       if (!can("work") || !["owner", "partner", "manager"].includes(me.value?.role ?? "")) { setMsg(block); return; }
-      reason = prompt(`${block}\n\nOverride and move anyway? Give a reason:`) ?? ""; if (!reason.trim()) { setMsg(block); return; }
+      reason = (await askText(`${block}\n\nOverride and move anyway? Give a reason:`, { ok: "Override" })) ?? ""; if (!reason.trim()) { setMsg(block); return; }
       reason = `override: ${reason}`;
     }
     onOpen(moveTo(order, to, reason));
@@ -322,7 +322,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
           <span class="block t-meta truncate">{[r.by, g ? `${g} g` : "", r.reason ? `failed: ${r.reason}` : ""].filter(Boolean).join(" · ") || "—"}</span></span>
         <span class="whitespace-nowrap"><span class="text-grn">{r.done} good</span> · <span class="text-red">{r.failed ?? 0} failed</span></span>
         {(r.failed ?? 0) > 0 && <button type="button" class="h-7 px-2 rounded-md bg-c1 text-[11px] font-semibold cursor-pointer !min-h-0" onClick={() => { startRun(order, item.name, r.failed!, r.printer || printers[0]?.name || "Printer", runSpools(r)); onOpen({ ...order }); }} title="Start a new run for just the failed pieces, same printer and spools">Reprint {r.failed}</button>}
-        <button type="button" class="underline t-meta cursor-pointer !min-h-0" onClick={() => { if (confirm(`Undo this run? ${r.done} good / ${r.failed ?? 0} failed come off the line${g ? ` and ${g} g go back on the spool` : ""}. It goes back on the plate so you can log it again.`)) onOpen(undoRun(order, r.id)); }}>Undo</button>
+        <button type="button" class="underline t-meta cursor-pointer !min-h-0" onClick={async () => { if (await ask(`Undo this run? ${r.done} good / ${r.failed ?? 0} failed come off the line${g ? ` and ${g} g go back on the spool` : ""}. It goes back on the plate so you can log it again.`, { ok: "Undo run", danger: true })) onOpen(undoRun(order, r.id)); }}>Undo</button>
       </li>; })}</ul>
     </details>}
   </div>;

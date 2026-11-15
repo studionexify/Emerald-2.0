@@ -81,11 +81,13 @@ const tabs = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("eme
 if (tabs) tabs.onmessage = (e) => applyRemote(e.data as Change[]);
 
 /* Writes are coalesced: many edits in a burst become one save per key, flushed after 250 ms or when the tab hides. */
+/** True when the browser refused to save (storage full or blocked): changes are only in memory until fixed. */
+export const storageFailed = signal(false);
 const dirty = new Map<string, unknown>();
 let timer: ReturnType<typeof setTimeout> | 0 = 0;
 function flush() {
   timer = 0;
-  dirty.forEach((v, k) => { try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); } catch {} });
+  dirty.forEach((v, k) => { try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); storageFailed.value = false; } catch { storageFailed.value = true; } });
   dirty.clear();
 }
 function queueSave(key: string, val: unknown) {

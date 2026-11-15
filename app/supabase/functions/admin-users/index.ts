@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const DOMAIN = "emerald.app";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
-const ROLES = ["owner", "manager", "operator", "accountant", "ca"];
+const ROLES = ["owner", "partner", "manager", "operator", "accountant", "ca"];
 const USER_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 
 Deno.serve(async (req) => {

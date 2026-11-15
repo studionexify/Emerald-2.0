@@ -169,3 +169,27 @@ Test (function level): 10 pieces, 2 wasted, 3 h on a printer at 100 h → printe
 ## 13. `fixKnownInvoices` (fifth pass)
 
 It is now a **one-time migration**: it runs once (only when invoices exist), applies the B-015 (₹42,000 → ₹43,000), B-017 (CGST + SGST) and missing-address corrections, writes one log line naming each change, records `known-invoice-fixes-1` in a synced "migrations" list, and never runs again — on any device. Test: first open applied both fixes and logged once; after resetting B-015 to ₹42,000 and reopening, it stayed ₹42,000. If those two invoices were already corrected in your live data, the run changes nothing and just switches itself off. Caveat: if a device opens Invoice before cloud data has arrived, it could mark the migration done without finding B-015/B-017; in that case fix them by hand once.
+
+## 14. Everything else that was pending (sixth pass)
+
+Verified at function level (headless browser, IST) unless marked; screenshots `screenshots/audit/daybook-labels.png`, `gst-desk-filing.png`, `prompt-dialog.png`.
+
+- **Day book labels.** Columns are now "Money out (Cr)" and "Money in (Dr)"; the form fields say "Money out ₹" / "Money in ₹". [UI]
+- **GST desk.** GSTR-1 and GSTR-3B are marked filed separately; "Lock month" is enabled only when both are done; the table and the Mauny card show partial status ("GSTR-1 filed, 3B in n d"). Net payable now carries unused ITC forward month to month ("ITC brought forward" shown). ITC counts only bills with a vendor GSTIN (others are flagged "Bills without vendor GSTIN"). Purchases from a vendor GSTIN outside Gujarat (state code ≠ 24) are IGST, not CGST+SGST (test: 0 / 0 / 180). [FN + UI]
+- **Locked months.** Issuing an invoice dated in a filed-and-locked GST month is refused with a clear message. [FN]
+- **Name-only client merge.** Two "Rahul Shah" in different states are now two clients (GSTIN decides when both have one; otherwise name + non-clashing state). Autofill picks the matching state. [FN]
+- **Walk-in bills.** Address is required only for GST customers or bills of ₹50,000 and above; state is still required. [FN]
+- **Duplicate invoice numbers** (two devices issuing offline) now raise an Attention item telling the owner to cancel one and re-issue. Prevention across devices still needs a server-side counter — not built. [CODE]
+- **Storage full / blocked.** A red banner appears when the browser refuses to save, instead of failing silently. [CODE]
+- **New order** can no longer be saved empty: customer, item, quantity and unit price are checked; the dead "GSTIN" box on Bulk orders was removed. [CODE]
+- **Native prompt/confirm/alert** (14 places) replaced with the in-app dialog (new `askText` for typed answers; password field masked). [UI]
+- **Loans.** A loan-repayment entry now reduces the loan it was paid against (lender in the note, else the oldest open loan) so interest stops on the repaid part. [FN]
+- **Tally XML.** Salaries, rent and other non-goods expenses are Payment vouchers; filament/packing/courier stay Purchase vouchers with an Input GST line. Not imported into a real Tally. [FN]
+- **CSV exports** prefix text starting with = + - @ so Excel cannot run it as a formula. [FN]
+- **Partner role in the cloud.** `admin-users` accepts `partner`; new migration `supabase/migrations/0004_partner_role.sql` widens the DB check. **The migration and function are not deployed yet — run/deploy them.** [CODE]
+
+Not changed, on purpose or not possible here:
+- Floor "already printed" plates still log nothing to a printer — there is no printer to attribute them to.
+- Org-wide row access (every signed-in member can read/write every record; roles are enforced in the UI only) is a database-policy redesign, not a quick fix.
+- Cross-device invoice number counter, cloud sync, real bank XLSX/PDF files, Tally import: untested.
+- Not reviewed: To-do, Bin restore, Settings/users, Excel invoice-book and E1 import.

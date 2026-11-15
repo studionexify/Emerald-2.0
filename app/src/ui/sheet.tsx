@@ -89,12 +89,19 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
 }
 
 /* ── Confirmation: promise-based replacement for window.confirm. Sheet on phone, centred card on larger screens. ── */
-type Ask = { msg: string; ok: string; danger?: boolean; done: (v: boolean) => void };
+type Ask = { msg: string; ok: string; danger?: boolean; done: (v: boolean) => void; input?: { secret?: boolean } };
+const answer = signal("");
 const asking = signal<Ask | null>(null);
 export function ask(msg: string, opts: { ok?: string; danger?: boolean } = {}): Promise<boolean> {
   return new Promise((done) => (asking.value = { msg, ok: opts.ok ?? "Confirm", danger: opts.danger, done }));
 }
+/** Promise-based replacement for window.prompt: resolves to the typed text, or null when cancelled. */
+export function askText(msg: string, opts: { ok?: string; value?: string; secret?: boolean } = {}): Promise<string | null> {
+  answer.value = opts.value ?? "";
+  return new Promise((res) => (asking.value = { msg, ok: opts.ok ?? "OK", input: { secret: opts.secret }, done: (v) => res(v ? answer.value : null) }));
+}
 const settle = (v: boolean) => { asking.value?.done(v); asking.value = null; };
+const field = (a: Ask) => a.input ? <input autofocus class="mt-2 w-full h-10 rounded-lg border border-line bg-c0 px-3 text-[14px]" {...({ type: a.input.secret ? "password" : "text" } as object)} value={answer.value} onInput={(e) => { answer.value = (e.target as HTMLInputElement).value; }} onKeyDown={(e) => e.key === "Enter" && settle(true)} /> : null;
 
 export function AskHost() {
   const a = asking.value;
@@ -102,15 +109,15 @@ export function AskHost() {
   const btns = (
     <>
       <button onClick={() => settle(false)} class="h-12 md:h-9 px-4 rounded-lg border border-line bg-c0 text-c4 text-[15px] md:text-[13px] font-semibold cursor-pointer">Cancel</button>
-      <button autofocus onClick={() => settle(true)} class="h-12 md:h-9 px-4 rounded-lg bg-c4 text-c0 text-[15px] md:text-[13px] font-semibold cursor-pointer">{a.ok}</button>
+      <button autofocus={!a.input} onClick={() => settle(true)} class="h-12 md:h-9 px-4 rounded-lg bg-c4 text-c0 text-[15px] md:text-[13px] font-semibold cursor-pointer">{a.ok}</button>
     </>
   );
-  if (isPhone.value) return <Sheet onClose={() => settle(false)} footer={btns}><p class="text-[15px] leading-snug pt-2 pb-2">{a.msg}</p></Sheet>;
+  if (isPhone.value) return <Sheet onClose={() => settle(false)} footer={btns}><p class="text-[15px] leading-snug pt-2 pb-2">{a.msg}</p>{field(a)}</Sheet>;
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4" onKeyDown={(e) => e.key === "Escape" && settle(false)}>
       <div class="absolute inset-0 bg-black/30 sheet-fade" onClick={() => settle(false)} aria-hidden="true" />
       <div role="alertdialog" aria-modal="true" class="relative w-full max-w-sm bg-c0 rounded-2xl shadow-2xl p-5 flex flex-col gap-4">
-        <p class="text-[14px] leading-snug">{a.msg}</p>
+        <div><p class="text-[14px] leading-snug">{a.msg}</p>{field(a)}</div>
         <div class="flex justify-end gap-2">{btns}</div>
       </div>
     </div>

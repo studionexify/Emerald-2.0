@@ -3,7 +3,7 @@ import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
 import { signal } from "@preact/signals";
 import { navigate } from "../../router";
-import { ask, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
+import { ask, askText, Pick, Button, Card, CardTitle, Chip, Fact, Field, inputCls, Progress, Section, Stat, Status, Table , Disclosure } from "../../ui";
 import { Menu, MetaRow } from "../../ui/disclose";
 import { toBin, teamNames, inr, orderCost, orderCostParts, orderMargin, orderTotal, orderUnits, shortDate, TYPE_LABEL, jobsSig, qcSig, packRecSig, packSig, printersSig, spoolsSig, consume, jobSpool, spoolLabel, spoolGross, log, me, today, uid, type Job, type QcEntry, type PackRecord, type Order, machineStats } from "../../data";
 import { Actions, PaneSection, useRecord, type FDef } from "../../ui/record";
@@ -88,7 +88,7 @@ export function Production() {
   const jobs = jobsSig.value.filter((j) => f === "all" || j.status === f);
   return (
     <WorkShell stage="production" title="Production" sub="Build sheet at approval · one job per line item · tap a job to run it" detail={r.detail}
-      actions={<><Button variant="outline" onClick={() => { const p = prompt("Which printer is blocked, and why? (e.g. A1-02 — nozzle clog)"); if (p) log("Logged block", p, "order"); }}>Log block</Button><Button icon="plus" onClick={() => r.add()}>New job</Button></>}
+      actions={<><Button variant="outline" onClick={async () => { const p = await askText("Which printer is blocked, and why? (e.g. A1-02 — nozzle clog)"); if (p?.trim()) log("Logged block", p, "order"); }}>Log block</Button><Button icon="plus" onClick={() => r.add()}>New job</Button></>}
       toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "queued", "printing", "done", "failed"]} label={(s) => s === "all" ? "All jobs" : s} /></div>}>
       <Section title="Job queue" note={`${jobs.length} jobs`}>
         <Card class="!py-1">

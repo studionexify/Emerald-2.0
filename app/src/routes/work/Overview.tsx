@@ -1,7 +1,7 @@
 import { Thumb } from "../../ui/media";
 import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
-import { Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
+import { ask, Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
@@ -51,7 +51,7 @@ function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: O
           <button class={it} onClick={() => { setOn(false); onEdit(o); }}><Icon name="edit" size={14} />Edit order</button>
           <button class={it} onClick={() => { setOn(false); onOpen(duplicateOrder(o)); }}><Icon name="copy" size={14} />Duplicate</button>
           {c?.phone && <a class={it} href={`https://wa.me/${c.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"><Icon name="out" size={14} />WhatsApp client</a>}
-          <button class={`${it} text-warn`} onClick={() => { setOn(false); if (confirm(`Delete order for ${o.customer}? It goes to the Bin.`)) { toBin("Order", o, `${o.customer} · ${o.no}`, me.value?.name ?? "you"); log("Deleted order", o.no); } }}><Icon name="bin" size={14} />Delete order</button>
+          <button class={`${it} text-warn`} onClick={async () => { setOn(false); if (await ask(`Delete order for ${o.customer}? It goes to the Bin.`, { ok: "Delete order", danger: true })) { toBin("Order", o, `${o.customer} · ${o.no}`, me.value?.name ?? "you"); log("Deleted order", o.no); } }}><Icon name="bin" size={14} />Delete order</button>
         </div>
       )}
     </div>

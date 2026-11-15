@@ -4,6 +4,7 @@ import { Frame } from "./frame/Frame";
 import { Empty, Page } from "./ui";
 import { cloudEnabled, syncState } from "./data/sync";
 import { signal } from "@preact/signals";
+import { storageFailed } from "./data/store";
 
 /* Never leave a blank screen: if the cloud check hangs (bad network), show sign-in after 5 s. */
 const slowCheck = signal(false);
@@ -89,7 +90,7 @@ export function App() {
   if (isExternal() && !path.value.startsWith("/mauny/gst") && path.value !== "/settings") { navigate("/mauny/gst"); return null; }
   const C = path.value === "/search" ? SearchPage : table.get(path.value) ?? NotFound;
   const ok = path.value === "/search" || path.value === "/settings" || can(moduleOf(path.value));
-  return <Frame>{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
+  return <Frame>{storageFailed.value && <div role="alert" class="bg-red-bg text-red text-sm px-3 py-2">This browser could not save your latest changes (storage full or blocked). Do not close this tab — export a backup, free space, or sign in so the cloud keeps them.</div>}{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
 }
 
 /* Fetch a page's code the moment a finger/pointer lands on its link, ahead of the click. */

@@ -8,7 +8,7 @@
 import { computed } from "@preact/signals";
 import { fingerprint, persisted, today, uid } from "./store";
 import { bizSig, type Biz } from "./biz";
-import { hasSeries, INV_TYPE_LABEL, invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type InvType, type Invoice, type Party, type SellerSnap } from "./ledger";
+import { hasSeries, INV_TYPE_LABEL, invoicesSig, invTax, logFn, monthLocked, nextNo, seriesLatest, setSeriesFloor, type InvLine, type InvType, type Invoice, type Party, type SellerSnap } from "./ledger";
 import { clientsSig, segmentOf, type Client } from "./inventory";
 import { ordersSig } from "./index";
 
@@ -67,11 +67,19 @@ export const canInvoice = (role?: string) => role === "owner" || role === "partn
 export const blankParty = (): Party => ({ name: "", address: "", state: "", contact: "", email: "", gstin: "" });
 const norm = (s?: string) => (s ?? "").trim().toLowerCase();
 /** Everything known about a party, from the client list and from earlier invoices. Matched by GSTIN first, then by name. */
-export function lookupParty(q: { name?: string; gstin?: string }): Party | null {
+/** Same person/company? GSTIN decides when both have one; otherwise the name must match and the states must not clash (two "Rahul Shah" in different states are different clients). */
+const sameParty = (a: { name?: string; gstin?: string; state?: string }, b: { name?: string; gstin?: string; state?: string }) => {
+  const ga = norm(a.gstin), gb = norm(b.gstin);
+  if (ga && gb) return ga === gb;
+  if (!norm(a.name) || norm(a.name) !== norm(b.name)) return false;
+  const sa = norm(a.state || (ga ? stateOfGstin(ga.toUpperCase()) : "")), sb = norm(b.state || (gb ? stateOfGstin(gb.toUpperCase()) : ""));
+  return !(sa && sb && sa !== sb);
+};
+export function lookupParty(q: { name?: string; gstin?: string; state?: string }): Party | null {
   const g = norm(q.gstin), n = norm(q.name);
   if (!g && !n) return null;
-  const c = clientsSig.value.find((x) => g && norm(x.gstin) === g) ?? (n ? clientsSig.value.find((x) => norm(x.name) === n) : undefined);
-  const inv = [...invoicesSig.value].reverse().map((i) => i.billTo).find((p) => p && ((g && norm(p.gstin) === g) || (n && norm(p.name) === n)));
+  const c = clientsSig.value.find((x) => g && norm(x.gstin) === g) ?? (n ? clientsSig.value.find((x) => sameParty(q, x)) : undefined);
+  const inv = [...invoicesSig.value].reverse().map((i) => i.billTo).find((p) => p && ((g && norm(p.gstin) === g) || (n && sameParty(q, p))));
   if (!c && !inv) return null;
   const pick = (a?: string, b?: string) => (a && a.trim() ? a : b ?? "");
   const gstin = pick(c?.gstin, inv?.gstin);
@@ -83,8 +91,8 @@ export function lookupParty(q: { name?: string; gstin?: string }): Party | null 
 /** Saves what was typed for a party, so next time it fills itself in. Values the user changed replace the old ones. */
 export function rememberParty(p: Party) {
   if (!p.name.trim()) return;
-  const g = norm(p.gstin), n = norm(p.name);
-  const c = clientsSig.value.find((x) => g && norm(x.gstin) === g) ?? clientsSig.value.find((x) => norm(x.name) === n);
+  const g = norm(p.gstin);
+  const c = clientsSig.value.find((x) => g && norm(x.gstin) === g) ?? clientsSig.value.find((x) => sameParty(p, x));
   const patch: Partial<Client> = { name: p.name.trim(), address: p.address || c?.address, phone: p.contact || c?.phone || "", email: p.email || c?.email, gstin: p.gstin || c?.gstin || "", state: p.state || c?.state };
   if (c) clientsSig.value = clientsSig.value.map((x) => (x.id === c.id ? { ...x, ...patch } : x));
   else clientsSig.value = [...clientsSig.value, { id: uid(), kind: p.gstin ? "Business" : "Individual", city: "", medium: "", active: true, ...patch } as Client];
@@ -131,7 +139,8 @@ export function problems(d: Invoice): string[] {
   const out: string[] = [], b = d.billTo ?? blankParty();
   if (!d.type) out.push("Invoice type is missing (internal: Client, Bulk, B2B or In-house)");
   if (!b.name.trim()) out.push("Bill to: name is missing");
-  if (!b.address.trim()) out.push("Bill to: address is missing");
+  // A walk-in (no GSTIN) bill under ₹50,000 needs only the state; address is required for GST customers and big bills.
+  if (!b.address.trim() && (b.gstin.trim() || invTax(d).total >= 50000)) out.push("Bill to: address is missing (needed for GST customers and bills of ₹50,000 or more)");
   if (!b.state) out.push("Bill to: state is missing (decides CGST+SGST or IGST)");
   for (const [who, p] of [["Bill to", b], ["Ship to", d.sameShip ? null : d.shipToParty]] as const) {
     if (!p) continue;
@@ -158,6 +167,7 @@ export function problems(d: Invoice): string[] {
 export function issueDraft(d: Invoice, keepOldDetails = true): Invoice {
   const p = problems(d); if (p.length) throw new Error(p.join("\n"));
   const seller = keepOldDetails && d.seller ? d.seller : sellerNow();
+  if (monthLocked(d.date)) throw new Error(`GST for ${d.date.slice(0, 7)} is filed and locked. Unlock that month in the GST desk first, or use a later date.`);
   const no = nextNo("invoice", d.date);
   if (no === "—") throw new Error("Pick a valid invoice date.");
   if (invoicesSig.value.some((i) => i.no === no)) throw new Error(`${no} already exists — reload and try again.`);

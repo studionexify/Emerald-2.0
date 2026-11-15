@@ -3,7 +3,7 @@ import { clientsSig, ordersSig } from "../../data";
 import { sortAbc } from "../../mock/types";
 import { vOrders } from "../../data";
 import { useState } from "preact/hooks";
-import { Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
+import { askText, Button, Card, DetailHead, Field, Icon, inputCls, isPhone, Status, Table } from "../../ui";
 import { MetaRow } from "../../ui/disclose";
 import { Initials, StagePill, StageStrip } from "../../ui/stage-strip";
 import { b2bFor } from "../../data/inventory";
@@ -32,7 +32,7 @@ export default function Orders() {
     </div>
   );
   return (
-    <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy" onClick={() => { const no = prompt(`Copy which order? (${vOrders().slice(0, 6).map((o) => o.no).join(", ")})`, vOrders()[0]?.no); const src = vOrders().find((o) => o.no === no?.trim()); if (src) { setCreating(false); setOpen(duplicateOrder(src)); } }}>From template</Button><Button icon="plus" onClick={() => { setOpen(null); setCreating(true); }}>New order</Button></>}
+    <WorkShell title="Orders" sub="Quotation to archive, every order type" actions={<><Button variant="outline" icon="copy" onClick={async () => { const no = await askText(`Copy which order? (${vOrders().slice(0, 6).map((o) => o.no).join(", ")})`, { value: vOrders()[0]?.no }); const src = vOrders().find((o) => o.no === no?.trim()); if (src) { setCreating(false); setOpen(duplicateOrder(src)); } }}>From template</Button><Button icon="plus" onClick={() => { setOpen(null); setCreating(true); }}>New order</Button></>}
       detail={creating ? <NewOrder onDone={(o) => { setCreating(false); if (o) setOpen(o); }} /> : cur && <OrderDetail order={cur} onClose={() => setOpen(null)} onOpen={setOpen} />}
       toolbar={<div class="flex flex-wrap gap-2 items-center w-full">
         <TypeChips value={f} onChange={setF} />
@@ -116,6 +116,7 @@ function customerMemory(name: string) {
 function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
   const [t, setT] = useState<OrderType>("client");
   const [d, setD] = useState({ customer: "", item: "", qty: 1, price: 0, medium: "Instagram", due: "", purpose: "Jig / tool", size: "small" as OrderSize, b2b: B2B_TYPES[0], pay: "alpha" as "alpha" | "beta" });
+  const [err, setErr] = useState("");
   const f = (k: keyof typeof d) => ({ value: d[k], class: inputCls, onInput: (e: Event) => { const v = (e.target as HTMLInputElement).value; setD({ ...d, [k]: typeof d[k] === "number" ? Number(v) || 0 : v }); } });
   return (
     <div>
@@ -134,10 +135,14 @@ function NewOrder({ onDone }: { onDone: (o: Order | null) => void }) {
         {t !== "inhouse" && canSwitchMode() && <Field label="Payment mode"><select class={inputCls} value={d.pay} onChange={(e) => setD({ ...d, pay: (e.target as HTMLSelectElement).value as "alpha" | "beta" })}><option value="alpha">{PAY_LABEL.alpha}</option><option value="beta">{PAY_LABEL.beta}</option></select></Field>}
         {t !== "inhouse" && d.size === "b2b" && <Field label="B2B type"><select class={inputCls} value={d.b2b} onChange={(e) => setD({ ...d, b2b: (e.target as HTMLSelectElement).value })}>{B2B_TYPES.map((x) => <option key={x}>{x}</option>)}</select></Field>}
         {t !== "inhouse" && <Field label="Came via"><select class={inputCls} value={d.medium} onChange={(e) => setD({ ...d, medium: (e.target as HTMLSelectElement).value })}>{sortAbc(["Instagram", "WhatsApp", "Website", "Referral", "Word of mouth", "Exhibition", "Phone", "Email"]).map((m) => <option key={m}>{m}</option>)}</select></Field>}
-        {t === "bulk" && <Field label="GSTIN"><input class={inputCls} placeholder="24…" /></Field>}
         {t !== "inhouse" && <Field label="Due"><input type="date" {...f("due")} /></Field>}
       </div>
-      <Button class="mt-3" onClick={() => onDone(createOrder({ type: t, ...d }))}>{t === "inhouse" ? "Start in Production" : "Create quotation"}</Button>
+      {err && <p class="mt-2 text-sm text-warn" role="alert">{err}</p>}
+      <Button class="mt-3" onClick={() => {
+        const miss = [t !== "inhouse" && !d.customer.trim() && "customer", !d.item.trim() && "item", !(d.qty > 0) && "quantity", t !== "inhouse" && !(d.price > 0) && "unit price"].filter(Boolean);
+        if (miss.length) { setErr(`Fill in: ${miss.join(", ")}.`); return; }
+        onDone(createOrder({ type: t, ...d }));
+      }}>{t === "inhouse" ? "Start in Production" : "Create quotation"}</Button>
     </div>
   );
 }

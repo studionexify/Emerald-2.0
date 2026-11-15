@@ -1,7 +1,7 @@
 /** Nexcal · FDM — the studio's pricing calculator, ported from Emerald 1 (same engine, same numbers). */
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { CALC_TABS } from "../nav";
-import { Button, Card, CardTitle, Field, Icon, inputCls, Page, Sheet, SubTabs, Waterfall } from "../ui";
+import { ask, Button, Card, CardTitle, Field, Icon, inputCls, Page, Sheet, SubTabs, Waterfall } from "../ui";
 import { navigate } from "../router";
 import { createOrder, inr } from "../data";
 import { nexcalSig, NEXCAL_DEFAULTS, type NexcalSettings } from "../data/pricing";
@@ -174,7 +174,7 @@ function Advanced() {
             <Row label="Electrical ₹/hr" value={dec(pr.electricalCostPerHr)} /><Row strong label="Print time rate" value={`${dec(pr.printTimeRate)}/hr`} />
           </div>
         </>}
-        <Button class="mt-4" variant="outline" onClick={() => { if (confirm("Reset all Nexcal settings to the Excel defaults?")) nexcalSig.value = { ...NEXCAL_DEFAULTS }; }}>Reset to Excel defaults</Button>
+        <Button class="mt-4" variant="outline" onClick={async () => { if (await ask("Reset all Nexcal settings to the Excel defaults?", { ok: "Reset", danger: true })) nexcalSig.value = { ...NEXCAL_DEFAULTS }; }}>Reset to Excel defaults</Button>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { clientsSig } from "../data/inventory";
 import { adminUsers, cloudEnabled, cloudSignOut, fullSync, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
-import { ask, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
+import { ask, askText, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
 import { Actions, Inspect, useRecord, type FDef } from "../ui/record";
 import { itemsSig, tasksSig, binSig, restoreBin, purgeBin, canRestore, teamNames, today, uid, log, type Task, type Log, type Binned, attention, batchesSig, can, changePassword, logsSig, MATRIX, me, packSig, resetAll, resetPassword, ROLE_LABEL, saveUser, shortDate, spoolsSig, usersSig, type Role, type User } from "../data";
 
@@ -193,7 +193,7 @@ function Accounts() {
           { key: "u", label: "Username", render: (m) => m.email },
           { key: "r", label: "Access", render: (m) => <select class={inputCls} value={m.role} disabled={busy || m.id === me.value?.id} onChange={(e) => run({ action: "update", user_id: m.id, role: (e.target as HTMLSelectElement).value }, `Role updated for ${m.email}`)}>{Object.keys(MATRIX).map((r) => <option key={r} value={r}>{ROLE_LABEL[r as Role]}</option>)}</select> },
           { key: "a", label: "", render: (m) => <div class="flex gap-2 justify-end">
-            <Button variant="ghost" disabled={busy} onClick={() => { const p = prompt(`New password for ${m.email} (8+ characters)`); if (p) run({ action: "reset_password", user_id: m.id, password: p }, `Password reset for ${m.email}`); }}>Reset password</Button>
+            <Button variant="ghost" disabled={busy} onClick={async () => { const p = await askText(`New password for ${m.email} (8+ characters)`, { secret: true, ok: "Reset" }); if (p) run({ action: "reset_password", user_id: m.id, password: p }, `Password reset for ${m.email}`); }}>Reset password</Button>
             {m.id !== me.value?.id && <Button variant="ghost" disabled={busy} onClick={() => run({ action: "update", user_id: m.id, active: !m.active }, `${m.email} ${m.active ? "disabled" : "enabled"}`)}>{m.active ? "Disable" : "Enable"}</Button>}
           </div> },
         ]} />
@@ -285,7 +285,7 @@ export function Users() {
             { key: "l", label: "Login", render: (m) => <Status tone={m.login ? "done" : "idle"}>{m.login ? "Yes" : "No"}</Status> },
             { key: "e", label: "Email", render: (m) => m.email || "—", hideTablet: true },
             { key: "s", label: "Status", render: (m) => <Status tone={m.active ? "done" : "idle"}>{m.active ? "Active" : "Retired"}</Status> },
-            { key: "x", label: "", align: "right", render: (m) => owner && <span class="inline-flex justify-end gap-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); alert("Password reset to the default; ask them to change it."); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
+            { key: "x", label: "", align: "right", render: (m) => owner && <span class="inline-flex justify-end gap-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}><Button variant="ghost" onClick={() => setEdit(m)}>Edit</Button><Button variant="ghost" onClick={() => { resetPassword(m.id); ask("Password reset to the default; ask them to change it.", { ok: "OK" }); }}>Reset password</Button><Button variant="ghost" onClick={() => saveUser({ ...m, active: !m.active })}>{m.active ? "Retire" : "Restore"}</Button></span> },
           ]} />
         </Card>
       </Section>

@@ -168,10 +168,10 @@ export function MaunyHome() {
   const gPrev = gstOn ? gstMonths(fyOf(pk + "-01")).find((x) => x.k === pk) : undefined;
   /* A return is due even when nothing happened (a nil return), so the countdown always shows until it is marked filed. */
   const due1 = `${nowMonth}-11`, due3b = `${nowMonth}-20`, left1 = daysBetween(t0, due1), left3b = daysBetween(t0, due3b);
-  const gstState = !gPrev ? "" : gPrev.filed.locked ? "Filed" : left3b < 0 ? `Overdue ${-left3b} d` : left1 >= 0 ? `GSTR-1 in ${left1} d` : `GSTR-3B in ${left3b} d`;
-  const gstTone = gstState.startsWith("Overdue") ? RED : gstState === "Filed" ? GREEN : undefined;
+  const gstState = !gPrev ? "" : gPrev.filed.locked || (gPrev.filed.r1 && gPrev.filed.r3b) ? "Filed" : gPrev.filed.r1 ? (left3b < 0 ? `3B overdue ${-left3b} d` : `GSTR-3B in ${left3b} d`) : left3b < 0 ? `Overdue ${-left3b} d` : left1 >= 0 ? `GSTR-1 in ${left1} d` : `GSTR-3B in ${left3b} d`;
+  const gstTone = /overdue/i.test(gstState) ? RED : gstState === "Filed" ? GREEN : undefined;
   const dd = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  const net = (m: { cgst: number; sgst: number; igst: number; itc: number }) => m.cgst + m.sgst + m.igst - m.itc;
+  const net = (m: { cgst: number; sgst: number; igst: number; itc: number; carry?: number }) => m.cgst + m.sgst + m.igst - m.itc - (m.carry ?? 0);
   const fy = fyOf(t0), fyEnd = daysBetween(t0, fyWindow(fy)[1]);
   const openForm = (k: "out" | "in" | "transfer") => { setType(k); setCat(catsSig.value.find((c) => c.dir === (k === "in" ? "in" : "out"))?.k ?? ""); setEditCats(false); setEditing(null); setFormOpen(true);
     setTimeout(() => { const el = document.getElementById("mauny-amount"); el?.focus(); el?.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60); };
