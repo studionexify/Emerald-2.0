@@ -22,11 +22,11 @@ Limits, stated plainly:
 
 | # | Finding | Tag | Where |
 |---|---|---|---|
-| 1 | **Records with short ids are deleted on every load.** `purgeSample()` treats any id matching `^[a-z]{1,3}\d{1,3}$` (`s1`, `c12`, `o7`) as sample data, removes it and syncs the deletion; `applyRemote` also refuses to load them. Test: a spool `s1` and client `c1` were gone after reload. Your own `spool-recovery-report.md` lists in-stock spools `s1,s2,s3,s5,s6` (bought 2026-10-12) — **if those are real, the app cannot show them**. Real E1-import ids (`SP-…`, UUIDs) are safe; only short ids are hit. | FN | `data/store.ts:109-117`, `data/index.ts:139` |
+| 1 | **A fragile rule deletes any record whose id looks like `s1`, `c12`, `o7`.** `purgeSample()` removes every record with an id matching `^[a-z]{1,3}\d{1,3}$` on each load and syncs the deletion; `applyRemote` also refuses to load them. Test: a spool `s1` and client `c1` vanished after reload. **Today it is aimed at the old demo rows** — spools `s1…s6` (PLA Black Bambu, PETG White, PLA Gold …, bought 2026-10-12) are defined in `mock/data.ts:47-52`, so the five "in stock, no label" spools in `spool-recovery-report.md` are **sample rows, not real spools**. Because devices refuse to load them, nothing ever deletes them from the cloud, so they sit in the database and in that report. **Risk:** any real record that gets a short id (I saw only spool ids in your report: `SP-…` and UUIDs are safe; the shapes of Emerald-1 client/order/machine ids were not checked) would silently disappear. | FN | `data/store.ts:109-117`, `data/index.ts:139`, `mock/data.ts:47-52` |
 | 2 | **Expenses entered on Mauny's Entry screen never reach Books.** They are only written to the cash ledger. After a ₹18,000 "Rent" entry: cash out −18,000, Finance "Spent" 0, Books P&L indirect expenses 0. Dashboard profit, P&L, GST ITC and the Tally export all miss them. Only the Finance → "Add expense" form and bill confirmation create expense records. | FN | `routes/MaunyHome.tsx` save → `ledger.ts:179 addMoney` (no `Expense`) |
 | 3 | **Bank-statement "Confirm" never marks the invoice paid.** It looks for the old number format `B/12-34/2025`; today's numbers are `B-019`. Result: the line is booked as *Other income* and the invoice stays unpaid — revenue counted twice. | FN | `ledger.ts:228` |
 | 4 | **Statement CSV parsing is wrong for Indian bank files.** `"1,25,000.00"` is read as `1`; two identical same-day UPI payments are collapsed as duplicates and one is dropped. Columns are fixed to `date, narration, debit, credit`. The file picker also accepts `.pdf/.xlsx` but only CSV works (the "server reads it" path does not exist). | FN + UI | `ledger.ts:198-210`, `routes/Mauny.tsx:316` |
-| 5 | **Cancelling a paid invoice keeps the money receipt.** Cash balance still includes it; the order stays "invoiced". | FN | `ledger.ts:112` |
+| 5 | **Cancelling a paid invoice keeps the money receipt.** Cash balance still includes it; the order stays "invoiced". The Cancel button is shown on paid invoices (any issued invoice in an unlocked GST month), so this is reachable. | FN + CODE | `ledger.ts:112`, `InvoicePage.tsx:262-263` |
 | 6 | **"Mark unpaid" does not remove a receipt made from Mauny Entry** (it only removes `source: invoice_desk`). Mark paid again → two receipts, cash double counted. | FN | `ledger.ts:122-125`, `MaunyHome.tsx` (`source: "mauny_entry"`) |
 | 7 | **Credit notes do not reduce what the customer owes.** ₹11,800 invoice + full credit note → outstanding still ₹11,800, debtors still ₹11,800. | FN | `ledger.ts:113`, `books.ts` debtors |
 | 8 | **Dates use UTC, not India time.** Between 00:00 and 05:30 IST the app thinks it is yesterday. At 01:30 IST on 1 Apr 2027 it proposed the *old* financial-year series (`B-019`, should be `C-001`). "Last month" report window is also one day off in IST (30 Sep–30 Oct instead of 1–31 Oct). | FN | `data/store.ts:105`, `ledger.ts:252` |
@@ -58,7 +58,7 @@ Limits, stated plainly:
 - **Day book columns are inverted**: money out shows under *Debit*, money in under *Credit*. Cash-book convention is the opposite; your CA will notice. [UI] `Mauny.tsx:83`
 - **Three different "earned" numbers**: Dashboard (earned − spent), Finance ("Earned" = collected incl. GST + closed unbilled orders), Mauny (cash inflow). In the demo: Dashboard "Earned · month" ₹2,301, Finance "Earned" (FY to date, includes GST) ₹15,517, Mauny November inflow ₹38,880 — no labels explain the difference. [UI]
 - **GST desk**: "Mark filed & lock" sets GSTR-1 and GSTR-3B together (cannot record 1 filed, 3B pending); no due dates (the new card shows 11th/20th for monthly filers); "Net payable" adds up months with no ITC carry-forward; ITC counts every logged bill, with or without a vendor GSTIN; purchases from other states are split CGST/SGST instead of IGST (Karnataka vendor test: 90 + 90 + 0). [FN + CODE] `books.ts:11`, `routes/Mauny.tsx:409`
-- Part payments are accepted on Mauny Entry, but the register, debtors and "To collect" use the full invoice amount; TDS is only used in statement matching, not in payment. [CODE]
+- Part payments are accepted on Mauny Entry and the new **To collect** card nets them, but the invoice register, Finance "Outstanding" and Books debtors use the full invoice amount — those numbers will differ. TDS is only used in statement matching, not when recording a payment. [CODE]
 - Loans: interest is charged for a full year on any open balance; repayments do not reduce the loan (only `loan_taken` is handled). Balance sheet has a "suspense" plug. [CODE] `books.ts:31`, `ledger.ts:179-183`
 - Tally XML: purchase vouchers carry no GST ledgers; every expense (salaries, rent) is exported as a *Purchase* voucher. [CODE] `books.ts:102`
 - Every expense must be given a "For" (order / in-house / other) before saving; a quick entry takes an extra tap each time. [UI]
@@ -68,6 +68,7 @@ Limits, stated plainly:
 
 - **Printer logs are not fed by the Floor sheet.** A plate run (start → finish) left printer lifetime hours unchanged (100 → 100), created no job rows, so the printer's failure %, "next service in … h" and the failure-rate alert never move; only filament is recorded (no machine hours, no electricity). Only the older Production-page jobs update machine/power cost. [FN] `data/floor.ts:302-329`, `routes/work/Stages.tsx:32`, `data/inventory.ts` `machineStats`
 - **Order cost is fiction.** New orders get `cost = price × 30 %`; the Archive page then splits it 45/30/25 % into Material/Machine/Pack. Test: 50 × ₹100 order has cost ₹1,500 while real consumption was ₹75. Dashboard shows "70 % margin" and the order panel "100 % margin" when nothing is recorded. [FN + UI] `data/index.ts:126`, `routes/work/Stages.tsx:291-293`
+- **"New order" saves with nothing filled in**: an empty form created `EM-2111 · New client · Item · ₹0` (due today, so it also shows as a missed date). The form has two different "type" controls (In-house/Client/Bulk and Order type Small/Bulk/B2B). [UI] `data/index.ts:120-127`
 - Floor sheet takes filament from the **fullest spool of that colour**, not the spool loaded on the printer, so per-spool grams drift from the numbered spools on the shelf. [CODE] `data/floor.ts:14`
 - Filament cost in consumption uses the material price table, not that spool's own `₹/kg`. [CODE] `data/index.ts:97`
 - Bill → stock assumes 1 kg spools: 400 g becomes one 1000 g spool; 1.5 kg becomes 2 spools. [CODE] `data/index.ts:66`
@@ -93,6 +94,7 @@ Limits, stated plainly:
 
 - **Order panel squeezes the list** (desktop 1440): KPI strip shows `₹2,68…`, the *Due* column is cut off with no scroll. [UI] `screenshots/audit/ui-order-panel-clipped.png`
 - **Phone**: no "+ New" quick-create (hidden below `md`); an invoice register row takes ~190 px so one invoice per screen; the floating bar ("Invoice settings / New invoice") covers rows; Invoice sits under the Production tab. [UI]
+- Invoice PDF prints a full "Ship to" block (name, address, GSTIN) even when "same as Bill to" is ticked. Cosmetic. [UI/PDF]
 - Invoice date outside the series shows number `-001` and a disabled Review button with the reason off-screen. [UI]
 - Store with a few thousand spools renders every card (3,100+ controls on one page); fine at your size, slow if the library grows. [UI]
 - Finance chart titled "Earned vs spent · April-first", no axis values. [UI]
@@ -101,18 +103,19 @@ Limits, stated plainly:
 
 **Mauny redesign** (`routes/MaunyHome.tsx`, `nav.ts`, `routes/Mauny.tsx`):
 - **Top: 4 large cards** — Cash & bank now (with wallets), To collect, To pay, This month.
-- **Second row: the jobs Mauny exists for** — Bank statements to review, GST return (this month's return with due-in/overdue days; 3B payable and month-so-far), Purchase bills to review, Year-end & ITR (days left in FY → Books / Tally / Year-end pack).
+- **Second row: the jobs Mauny exists for** — Bank statements to review, GST return (**last month's** return — GSTR-1 by the 11th, GSTR-3B by the 20th, monthly filer — with a due/overdue countdown that also shows for a nil return, and an *estimated* payable/credit; turns "Filed" when the GST desk locks the month), Purchase bills to review, Year-end & ITR (days left in FY → Books / Tally / Year-end pack).
 - **Quick actions**: + Expense, + Income, Transfer, Upload statement.
 - **Below**: the entry form and the month's transactions, unchanged. On phone the form opens from the buttons instead of filling the first screen. "New → Money entry" still focuses the amount box.
 - Tabs: "Entry" → **Overview**, "Settings" → **Statements & wallets**.
+- Columns follow the space available (container queries), so with a transaction detail panel open at 1280 or 1440 the cards drop to 2 columns instead of squeezing; amounts never wrap. Checked at 1440, 1280, tablet 820, phone 390, light and dark.
 - Kept: Alpha/Beta wallet filtering, per-role tab gating (accountant sees GST/Year-end cards; manager gets "No access"; CA is redirected to the GST desk — all checked), all 9 views reachable.
-- Screenshots: `screenshots/audit/mauny-before-*.png`, `mauny-after-*.png`.
+- Screenshots: `screenshots/audit/mauny-before-*.png`, `mauny-after-*.png` (incl. dark and detail-open).
 
 **Deliberately not changed** — these are accounting or data-policy decisions, so I list them for you to choose rather than guess.
 
 ## 8. Decisions I need from you
 
-1. **Short-id purge (#1):** are `s1…s6` real spools? If yes, remove the rule or limit it to ids with the demo prefix; if no, it can stay.
+1. **Short-id purge (#1):** confirm `s1…s6` are leftover sample rows (they match `mock/data.ts`) so they can be deleted from the database; and decide whether to replace the pattern rule with an explicit `demo-` prefix so a real record can never be caught.
 2. **Mauny expenses (#2):** should every Mauny expense also become an expense record (so P&L/GST see it), or stay cash-only?
 3. **Cancelled paid invoice (#5) / credit note (#7):** reverse the receipt automatically, or ask? Should a credit note reduce "To collect"?
 4. **Statements (#3, #4):** which bank files do you actually get (CSV, XLSX, PDF)? I will build the parser to that format.
@@ -120,6 +123,12 @@ Limits, stated plainly:
 6. **Fake "Record"/random tracking (§5):** remove them, or turn each into a real form (tracking number + courier, QC entry, packing entry)?
 7. **Invoice type:** add the field? Values: Client / Bulk / B2B / In-house?
 
-## 9. Checked and fine
+## 9. What was and was not exercised
 
-No console errors or overflow on 44 routes × 2 sizes; role gating by path; GST arithmetic (CGST/SGST split, round-off, interstate) on the test invoices; draft numbers not consumed; issued invoices freeze seller details; Alpha/Beta view; service worker / chunk-reload handling; `tsc`, build and size budget.
+**Exercised in the UI:** all 44 routes (desktop + phone: console errors, overflow); Mauny page at 5 sizes and 4 roles; invoice **end to end** (blank invoice → pick saved client → fields fill from the client → review → issue → PDF downloaded and read: number `B-019`, bill-to, place of supply Maharashtra, IGST 18 % = ₹360, round-off, amount in words, bank block all correct); the bad-date crash; New order; order panel; Floor sheet opens; Add spool form opens; New menu; Alpha/Beta; role gating by path.
+
+**Exercised by calling the app's functions only (no click path run):** issue → pay → cancel, credit note, statement import and match, bill confirm, order numbering, plate start/finish, client remembering, GST window maths.
+
+**Not exercised — treat as unreviewed:** Floor sheet start/finish through the screen; saving a spool, movements, parts, packing stock and Stock audit; Nexcal / NexRes calculators and pricing settings; To-do; Bin restore; Settings, users and roles screens; Excel invoice-book import and Emerald-1 import; quotations and documents; credit-note and transporter-copy PDFs; Print / Year-end pack / Tally XML (output not opened in Tally); **cloud sign-in and sync (read, not run)**; anything with real data.
+
+**Checked and fine:** no console errors or overflow on 44 routes × 2 sizes; role gating by path; invoice arithmetic (CGST/SGST split, IGST, round-off) on the test invoices; draft numbers not consumed; issued invoices freeze seller details; service worker / chunk-reload handling; `tsc`, build and size budget.
