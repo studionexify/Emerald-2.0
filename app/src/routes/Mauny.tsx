@@ -311,7 +311,7 @@ export function Accounts() {
   const onFile = (fl: FileList | null) => { const file = fl?.[0]; if (!file) return; if (!/\.csv$/i.test(file.name)) { setMsg("PDF/XLSX statements (incl. password-protected) are read by the server — upload CSV for now."); return; }
     file.text().then((t) => { const r = parseStatementCsv(t, acc); setMsg(`${r.added} lines imported · ${r.dup} duplicates skipped`); }); };
   return (
-    <Shell title="Mauny settings" sub="CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense."
+    <Shell title="Statements & wallets" sub="CSV columns: date, narration, debit, credit (or a signed amount). Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense."
       actions={<><Button variant="outline" onClick={() => { const name = prompt("Account name"); if (name) accountsSig.value = [...accountsSig.value, { id: uid(), name, opening: Number(prompt("Opening balance ₹") || 0) }]; }}>Add account</Button>
         <label class="inline-flex items-center justify-center h-9 md:h-10 px-4 rounded-full bg-c4 text-c0 text-sm font-medium cursor-pointer">Upload CSV statement<input id="mauny-statement" type="file" accept=".csv,.pdf,.xlsx" class="sr-only" onChange={(e) => onFile((e.target as HTMLInputElement).files)} /></label></>}
       toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={modeAccounts().map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>

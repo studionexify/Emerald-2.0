@@ -1,7 +1,8 @@
 import { sortAbc } from "../mock/types";
-import { vMoney, vOrders } from "../data";
+import { balanceOf, billsSig, daysBetween, fyOf, fyWindow, statementSig, vExpenses, vMoney, vOrders } from "../data";
 import { useEffect, useState } from "preact/hooks";
-import { Icon, Page } from "../ui";
+import { Icon, isPhone, Page } from "../ui";
+import { gstMonths } from "../data/books";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { shrinkImage, storeMedia } from "../data";
@@ -59,6 +60,31 @@ const GREEN = "#5E8F6C", RED = "#B06A5E";
 const ym = (d: string) => d.slice(0, 7);
 const monthName = (m: string) => new Date(m + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
+type CardLine = [string, string];
+/** A large summary card: one number the owner needs, a couple of supporting lines, and a link to the full screen. */
+function BigCard({ href, icon, label, value, tone, lines, more }: { href: string; icon: string; label: string; value: string; tone?: string; lines: CardLine[]; more?: string }) {
+  return (
+    <a href={href} class="group rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-2 min-w-0 hover:border-c2 transition-colors">
+      <span class="flex items-center gap-2 text-[12px] font-semibold text-c3 min-w-0"><Icon name={icon} size={15} /><span class="truncate">{label}</span></span>
+      <span class="num text-[26px] md:text-[32px] leading-none font-bold truncate" style={tone ? { color: tone } : undefined}>{value}</span>
+      <span class="flex flex-col gap-0.5 mt-auto">
+        {lines.map(([k, v]) => <span key={k} class="flex items-center justify-between gap-2 text-[12px] text-c3 min-w-0"><span class="truncate">{k}</span>{v && <b class="num font-semibold text-c4 whitespace-nowrap">{v}</b>}</span>)}
+        {more && <span class="t-meta">{more}</span>}
+      </span>
+    </a>
+  );
+}
+/** The jobs Mauny exists for (statements, GST, bills, year-end): smaller than the money cards, still one tap from the work. */
+function MiniCard({ href, icon, label, value, sub, tone }: { href: string; icon: string; label: string; value: string; sub: string; tone?: string }) {
+  return (
+    <a href={href} class="rounded-[var(--radius-card)] bg-c0 border border-line p-3.5 flex flex-col gap-1 min-w-0 hover:border-c2 transition-colors">
+      <span class="flex items-center gap-2 text-[12px] font-semibold text-c3 min-w-0"><Icon name={icon} size={14} /><span class="truncate">{label}</span></span>
+      <span class="num text-[17px] font-bold truncate" style={tone ? { color: tone } : undefined}>{value}</span>
+      <span class="t-meta line-clamp-2">{sub}</span>
+    </a>
+  );
+}
+
 export function MaunyHome() {
   useEffect(() => () => { inspectSig.value = null; }, []);
   const accs = sortAbc(modeAccounts(), (a) => a.name);
@@ -73,6 +99,7 @@ export function MaunyHome() {
   const [month, setMonth] = useState(ym(today()));
   const [wallet, setWallet] = useState("all");
   const full = can("mauny", "full");
+  const [formOpen, setFormOpen] = useState(false);
   const [editCats, setEditCats] = useState(false);
   const [editing, setEditing] = useState<Cat | null>(null);
   const [against, setAgainst] = useState("");
@@ -120,13 +147,59 @@ export function MaunyHome() {
   const byCat = Object.entries(real.filter((m) => m.amount < 0).reduce<Record<string, number>>((o, m) => { const c = catOf(m).k; o[c] = (o[c] ?? 0) - m.amount; return o; }, {})).sort((a, b) => b[1] - a[1]);
   const days = [...new Set(rows.map((m) => m.date))].sort().reverse();
   const seg = (k: typeof type, l: string, hue: string) => <button key={k} onClick={() => { setType(k); setCat(catsSig.value.find((c) => c.dir === (k === "in" ? "in" : "out"))?.k ?? ""); setEditCats(false); setEditing(null); }} aria-pressed={type === k} class={`flex-1 h-9 rounded-lg text-[13px] font-bold cursor-pointer !min-h-0 ${type === k ? "bg-c0 shadow-sm" : "text-c3"}`} style={type === k ? { color: hue } : undefined}>{l}</button>;
+
+  /* ---- Overview cards: what needs the owner's eye first. Everything derived, nothing stored. ---- */
+  const t0 = today(), nowMonth = ym(t0);
+  const cashNow = accs.reduce((s, a) => s + balanceOf(a.id), 0);
+  const thisRows = vMoney().filter((m) => ym(m.date) === nowMonth && !m.kind.startsWith("transfer"));
+  const inNow = thisRows.filter((m) => m.amount > 0).reduce((s, m) => s + m.amount, 0), outNow = -thisRows.filter((m) => m.amount < 0).reduce((s, m) => s + m.amount, 0);
+  const invDues = dues.filter((x) => x.kind === "Invoice");
+  const toCollect = invDues.reduce((s, x) => s + x.due, 0);
+  const oldest = Math.max(0, ...invoicesSig.value.filter((i) => i.kind === "invoice" && i.status === "issued" && !i.paidOn).map((i) => daysBetween(i.date, t0)));
+  const unpaidExp = vExpenses().filter((e) => !e.paid);
+  const toPay = unpaidExp.reduce((s, e) => s + e.amount, 0);
+  const lateExp = unpaidExp.filter((e) => { const dl = e.msme ? new Date(Date.parse(e.date) + 45 * 864e5).toISOString().slice(0, 10) : e.dueDate; return !!dl && t0 > dl; }).length;
+  const wid = new Set(accs.map((a) => a.id));
+  const stmtReview = statementSig.value.filter((l) => l.state === "review" && wid.has(l.account)).length;
+  const billsReview = billsSig.value.filter((b) => b.status === "needs_review").length;
+  /* GST: the return being filed now is last month's (GSTR-1 by the 11th, GSTR-3B by the 20th, monthly filer). */
+  const [ty, tm] = t0.split("-").map(Number), pk = `${tm === 1 ? ty - 1 : ty}-${String(tm === 1 ? 12 : tm - 1).padStart(2, "0")}`;
+  const gstOn = can("gst");
+  const gPrev = gstOn ? gstMonths(fyOf(pk + "-01")).find((x) => x.k === pk) : undefined, gNow = gstOn ? gstMonths(fyOf(t0)).find((x) => x.k === nowMonth) : undefined;
+  const due3b = `${nowMonth}-20`, left3b = daysBetween(t0, due3b);
+  const gstState = !gPrev ? "" : gPrev.filed.locked ? "Filed" : !gPrev.inv.length && !gPrev.purch.length ? "No activity" : left3b < 0 ? `Overdue ${-left3b} d` : `Due in ${left3b} d`;
+  const gstTone = gstState.startsWith("Overdue") ? RED : gstState === "Filed" || gstState === "No activity" ? GREEN : undefined;
+  const net = (m: { cgst: number; sgst: number; igst: number; itc: number }) => m.cgst + m.sgst + m.igst - m.itc;
+  const fy = fyOf(t0), fyEnd = daysBetween(t0, fyWindow(fy)[1]);
+  const openForm = (k: "out" | "in" | "transfer") => { setType(k); setCat(catsSig.value.find((c) => c.dir === (k === "in" ? "in" : "out"))?.k ?? ""); setEditCats(false); setEditing(null); setFormOpen(true);
+    setTimeout(() => { const el = document.getElementById("mauny-amount"); el?.focus(); el?.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60); };
   const hue = type === "in" ? GREEN : type === "out" ? RED : "#6B8DB5";
   const inp = "h-10 px-3 rounded-lg border border-line bg-c1 text-[14px] w-full min-w-0 outline-none focus:border-c3";
   return (
     <Page title="Mauny" tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))} detail={inspectSig.value ? <Peeked /> : null}>
+      <section aria-label="Money at a glance" class="flex flex-col gap-3">
+        <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <BigCard href="/mauny/daybook" icon="wallet" label="Cash & bank now" value={inr(cashNow)} tone={cashNow < 0 ? RED : undefined} lines={accs.slice(0, 3).map((a) => [a.name, inr(balanceOf(a.id))])} more={accs.length > 3 ? `+${accs.length - 3} more wallets` : ""} />
+          <BigCard href="/work/invoice" icon="receipt" label="To collect" value={inr(toCollect)} tone={oldest > 75 ? RED : undefined} lines={[[`${invDues.length} unpaid invoice${invDues.length === 1 ? "" : "s"}`, ""], oldest ? [`Oldest ${oldest} days`, ""] : ["All settled", ""]]} />
+          <BigCard href="/mauny/finance" icon="cash" label="To pay" value={inr(toPay)} tone={lateExp ? RED : undefined} lines={[[`${unpaidExp.length} unpaid bill${unpaidExp.length === 1 ? "" : "s"}`, ""], lateExp ? [`${lateExp} overdue`, ""] : ["None overdue", ""]]} />
+          <BigCard href="/mauny/finance" icon="trend" label="This month" value={`${inNow - outNow >= 0 ? "+" : "−"}${inr(Math.abs(inNow - outNow))}`} tone={inNow - outNow >= 0 ? GREEN : RED} lines={[["In", inr(inNow)], ["Out", inr(outNow)]]} />
+        </div>
+        <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <MiniCard href="/mauny/accounts" icon="doc" label="Bank statements" value={stmtReview ? `${stmtReview} to review` : "All reviewed"} sub="Upload a CSV · match to invoices" tone={stmtReview ? undefined : GREEN} />
+          {gstOn && gPrev && gNow && <MiniCard href="/mauny/gst" icon="stamp" label={`GST · ${gPrev.label} return`} value={gstState} sub={`3B payable ${inr(net(gPrev))} · ${monthName(nowMonth).split(" ")[0]} so far ${inr(net(gNow))}`} tone={gstTone} />}
+          <MiniCard href="/mauny/purchases" icon="box" label="Purchase bills" value={billsReview ? `${billsReview} to review` : "All logged"} sub="Bills become expenses and stock" tone={billsReview ? undefined : GREEN} />
+          {can("books") && <MiniCard href="/mauny/books" icon="grid" label={`Year-end & ITR · FY ${fy}`} value={`${fyEnd} days left`} sub="Books · Tally XML · Year-end pack" />}
+        </div>
+        {full && <div class="flex flex-wrap items-center gap-2">
+          <button onClick={() => openForm("out")} class="h-10 px-4 rounded-full text-[13px] font-bold text-white cursor-pointer" style={{ background: RED }}>+ Expense</button>
+          <button onClick={() => openForm("in")} class="h-10 px-4 rounded-full text-[13px] font-bold text-white cursor-pointer" style={{ background: GREEN }}>+ Income</button>
+          <button onClick={() => openForm("transfer")} class="h-10 px-4 rounded-full text-[13px] font-bold border border-line bg-c0 cursor-pointer">Transfer</button>
+          <a href="/mauny/accounts" class="h-10 px-4 rounded-full text-[13px] font-bold border border-line bg-c0 inline-flex items-center">Upload statement</a>
+        </div>}
+      </section>
       <div class="grid gap-4 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] items-start">
-        {full && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 lg:sticky lg:top-0">
-          <div class="text-[15px] font-bold">New entry</div>
+        {full && (!isPhone.value || formOpen) && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 lg:sticky lg:top-0">
+          <div class="flex items-center justify-between"><span class="text-[15px] font-bold">New entry</span>{isPhone.value && <button onClick={() => setFormOpen(false)} class="text-[12px] font-semibold underline cursor-pointer !min-h-0">Hide</button>}</div>
           <div class="flex gap-1 p-1 rounded-xl bg-c1">{seg("out", "Expense", RED)}{seg("in", "Income", GREEN)}{seg("transfer", "Transfer", "#6B8DB5")}</div>
           <label class="flex items-center gap-2 h-16 px-4 rounded-xl border-2" style={{ borderColor: hue }}>
             <span class="text-[26px] font-bold" style={{ color: hue }}>₹</span>
