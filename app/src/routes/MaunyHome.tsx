@@ -66,7 +66,7 @@ function BigCard({ href, icon, label, value, tone, lines, more }: { href: string
   return (
     <a href={href} class="group rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-2 min-w-0 hover:border-c2 transition-colors">
       <span class="flex items-center gap-2 text-[12px] font-semibold text-c3 min-w-0"><Icon name={icon} size={15} /><span class="truncate">{label}</span></span>
-      <span class="num text-[26px] md:text-[32px] leading-none font-bold truncate" style={tone ? { color: tone } : undefined}>{value}</span>
+      <span class="num text-[26px] @3xl:text-[32px] leading-none font-bold whitespace-nowrap" style={tone ? { color: tone } : undefined}>{value}</span>
       <span class="flex flex-col gap-0.5 mt-auto">
         {lines.map(([k, v]) => <span key={k} class="flex items-center justify-between gap-2 text-[12px] text-c3 min-w-0"><span class="truncate">{k}</span>{v && <b class="num font-semibold text-c4 whitespace-nowrap">{v}</b>}</span>)}
         {more && <span class="t-meta">{more}</span>}
@@ -79,7 +79,7 @@ function MiniCard({ href, icon, label, value, sub, tone }: { href: string; icon:
   return (
     <a href={href} class="rounded-[var(--radius-card)] bg-c0 border border-line p-3.5 flex flex-col gap-1 min-w-0 hover:border-c2 transition-colors">
       <span class="flex items-center gap-2 text-[12px] font-semibold text-c3 min-w-0"><Icon name={icon} size={14} /><span class="truncate">{label}</span></span>
-      <span class="num text-[17px] font-bold truncate" style={tone ? { color: tone } : undefined}>{value}</span>
+      <span class="num text-[17px] font-bold" style={tone ? { color: tone } : undefined}>{value}</span>
       <span class="t-meta line-clamp-2">{sub}</span>
     </a>
   );
@@ -165,10 +165,12 @@ export function MaunyHome() {
   /* GST: the return being filed now is last month's (GSTR-1 by the 11th, GSTR-3B by the 20th, monthly filer). */
   const [ty, tm] = t0.split("-").map(Number), pk = `${tm === 1 ? ty - 1 : ty}-${String(tm === 1 ? 12 : tm - 1).padStart(2, "0")}`;
   const gstOn = can("gst");
-  const gPrev = gstOn ? gstMonths(fyOf(pk + "-01")).find((x) => x.k === pk) : undefined, gNow = gstOn ? gstMonths(fyOf(t0)).find((x) => x.k === nowMonth) : undefined;
-  const due3b = `${nowMonth}-20`, left3b = daysBetween(t0, due3b);
-  const gstState = !gPrev ? "" : gPrev.filed.locked ? "Filed" : !gPrev.inv.length && !gPrev.purch.length ? "No activity" : left3b < 0 ? `Overdue ${-left3b} d` : `Due in ${left3b} d`;
-  const gstTone = gstState.startsWith("Overdue") ? RED : gstState === "Filed" || gstState === "No activity" ? GREEN : undefined;
+  const gPrev = gstOn ? gstMonths(fyOf(pk + "-01")).find((x) => x.k === pk) : undefined;
+  /* A return is due even when nothing happened (a nil return), so the countdown always shows until it is marked filed. */
+  const due1 = `${nowMonth}-11`, due3b = `${nowMonth}-20`, left1 = daysBetween(t0, due1), left3b = daysBetween(t0, due3b);
+  const gstState = !gPrev ? "" : gPrev.filed.locked ? "Filed" : left3b < 0 ? `Overdue ${-left3b} d` : left1 >= 0 ? `GSTR-1 in ${left1} d` : `GSTR-3B in ${left3b} d`;
+  const gstTone = gstState.startsWith("Overdue") ? RED : gstState === "Filed" ? GREEN : undefined;
+  const dd = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const net = (m: { cgst: number; sgst: number; igst: number; itc: number }) => m.cgst + m.sgst + m.igst - m.itc;
   const fy = fyOf(t0), fyEnd = daysBetween(t0, fyWindow(fy)[1]);
   const openForm = (k: "out" | "in" | "transfer") => { setType(k); setCat(catsSig.value.find((c) => c.dir === (k === "in" ? "in" : "out"))?.k ?? ""); setEditCats(false); setEditing(null); setFormOpen(true);
@@ -177,16 +179,17 @@ export function MaunyHome() {
   const inp = "h-10 px-3 rounded-lg border border-line bg-c1 text-[14px] w-full min-w-0 outline-none focus:border-c3";
   return (
     <Page title="Mauny" tabs={isExternal() ? undefined : MAUNY_TABS.filter((t) => can(moduleOf(t.href)))} detail={inspectSig.value ? <Peeked /> : null}>
+      <div class="@container flex flex-col gap-4">
       <section aria-label="Money at a glance" class="flex flex-col gap-3">
-        <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
           <BigCard href="/mauny/daybook" icon="wallet" label="Cash & bank now" value={inr(cashNow)} tone={cashNow < 0 ? RED : undefined} lines={accs.slice(0, 3).map((a) => [a.name, inr(balanceOf(a.id))])} more={accs.length > 3 ? `+${accs.length - 3} more wallets` : ""} />
           <BigCard href="/work/invoice" icon="receipt" label="To collect" value={inr(toCollect)} tone={oldest > 75 ? RED : undefined} lines={[[`${invDues.length} unpaid invoice${invDues.length === 1 ? "" : "s"}`, ""], oldest ? [`Oldest ${oldest} days`, ""] : ["All settled", ""]]} />
           <BigCard href="/mauny/finance" icon="cash" label="To pay" value={inr(toPay)} tone={lateExp ? RED : undefined} lines={[[`${unpaidExp.length} unpaid bill${unpaidExp.length === 1 ? "" : "s"}`, ""], lateExp ? [`${lateExp} overdue`, ""] : ["None overdue", ""]]} />
           <BigCard href="/mauny/finance" icon="trend" label="This month" value={`${inNow - outNow >= 0 ? "+" : "−"}${inr(Math.abs(inNow - outNow))}`} tone={inNow - outNow >= 0 ? GREEN : RED} lines={[["In", inr(inNow)], ["Out", inr(outNow)]]} />
         </div>
-        <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
           <MiniCard href="/mauny/accounts" icon="doc" label="Bank statements" value={stmtReview ? `${stmtReview} to review` : "All reviewed"} sub="Upload a CSV · match to invoices" tone={stmtReview ? undefined : GREEN} />
-          {gstOn && gPrev && gNow && <MiniCard href="/mauny/gst" icon="stamp" label={`GST · ${gPrev.label} return`} value={gstState} sub={`3B payable ${inr(net(gPrev))} · ${monthName(nowMonth).split(" ")[0]} so far ${inr(net(gNow))}`} tone={gstTone} />}
+          {gstOn && gPrev && <MiniCard href="/mauny/gst" icon="stamp" label={`GST · ${gPrev.label} return`} value={gstState} sub={`GSTR-1 ${dd(due1)} · 3B ${dd(due3b)} · ${!gPrev.inv.length && !gPrev.purch.length ? "nil return" : `est. ${net(gPrev) >= 0 ? "payable" : "credit"} ${inr(Math.abs(net(gPrev)))}`}`} tone={gstTone} />}
           <MiniCard href="/mauny/purchases" icon="box" label="Purchase bills" value={billsReview ? `${billsReview} to review` : "All logged"} sub="Bills become expenses and stock" tone={billsReview ? undefined : GREEN} />
           {can("books") && <MiniCard href="/mauny/books" icon="grid" label={`Year-end & ITR · FY ${fy}`} value={`${fyEnd} days left`} sub="Books · Tally XML · Year-end pack" />}
         </div>
@@ -197,8 +200,8 @@ export function MaunyHome() {
           <a href="/mauny/accounts" class="h-10 px-4 rounded-full text-[13px] font-bold border border-line bg-c0 inline-flex items-center">Upload statement</a>
         </div>}
       </section>
-      <div class="grid gap-4 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] items-start">
-        {full && (!isPhone.value || formOpen) && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 lg:sticky lg:top-0">
+      <div class="grid gap-4 @4xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] items-start">
+        {full && (!isPhone.value || formOpen) && <div class="rounded-[var(--radius-card)] bg-c0 border border-line p-4 flex flex-col gap-3 @4xl:sticky @4xl:top-0">
           <div class="flex items-center justify-between"><span class="text-[15px] font-bold">New entry</span>{isPhone.value && <button onClick={() => setFormOpen(false)} class="text-[12px] font-semibold underline cursor-pointer !min-h-0">Hide</button>}</div>
           <div class="flex gap-1 p-1 rounded-xl bg-c1">{seg("out", "Expense", RED)}{seg("in", "Income", GREEN)}{seg("transfer", "Transfer", "#6B8DB5")}</div>
           <label class="flex items-center gap-2 h-16 px-4 rounded-xl border-2" style={{ borderColor: hue }}>
@@ -308,6 +311,7 @@ export function MaunyHome() {
             );
           })}
         </div>
+      </div>
       </div>
     </Page>
   );
