@@ -197,6 +197,12 @@ export function addMoney(e: Omit<MoneyEntry, "id">) {
   if (e.kind === "expense" && e.amount < 0) expensesSig.value = [...expensesSig.value, { id: uid(), date: e.date, head: e.cat || "Other", vendor: e.note || e.cat || "Expense", amount: -e.amount, tax: 0, paid: true, account: e.account, moneyId: x.id, orderNo: e.ref && /^EM-/.test(e.ref) ? e.ref : undefined }];
   if (e.kind === "asset_purchase") assetsSig.value = [...assetsSig.value, { id: uid(), name: e.note, machine: "—", block: "Plant & machinery", blockRate: 15, cost: -e.amount, date: e.date }];
   if (e.kind === "loan_taken") loansSig.value = [...loansSig.value, { id: uid(), lender: e.note, principal: e.amount, rate: 12, date: e.date, repaid: 0 }];
+  if (e.kind === "loan_repayment" && e.amount < 0) { // repayment reduces the loan it was paid against (lender named in the note, else the oldest open loan)
+    let left = -e.amount; const open = loansSig.value.filter((l) => l.principal > l.repaid), nm = (e.note || "").toLowerCase();
+    const order = [...open.filter((l) => l.lender && nm.includes(l.lender.toLowerCase())), ...open.filter((l) => !(l.lender && nm.includes(l.lender.toLowerCase())))];
+    const paid = new Map<string, number>(); for (const l of order) { if (left <= 0) break; const t = Math.min(left, l.principal - l.repaid); paid.set(l.id, t); left -= t; }
+    loansSig.value = loansSig.value.map((l) => (paid.has(l.id) ? { ...l, repaid: l.repaid + paid.get(l.id)! } : l));
+  }
   logFn(`Mauny · ${e.kind.replace("_", " ")}`, `${e.note} ${e.amount}`, "money"); return x;
 }
 export function transfer(from: string, to: string, amount: number, date = today()) {
@@ -317,6 +323,9 @@ export function attention(orders: Order[], spools: { material: string; colour: s
   const flow: Alert[] = [];
   orders.filter((o) => o.stage !== "archived" && o.due < t).forEach((o) => flow.push({ t: "danger", text: `${o.no} missed target date (${o.due})`, href: "/work/orders" }));
   orders.filter((o) => o.stage !== "archived" && daysBetween(o.created, t) > 21).forEach((o) => flow.push({ t: "warn", text: `${o.no} open more than three weeks`, href: "/work/orders" }));
+  // Two devices issuing offline can take the same number; the books must not carry both unnoticed.
+  const seen = new Map<string, number>(); invoicesSig.value.forEach((i) => seen.set(i.no, (seen.get(i.no) ?? 0) + 1));
+  [...seen].filter(([, n]) => n > 1).forEach(([no]) => flow.push({ t: "warn", text: `Invoice number ${no} exists twice (issued on two devices) — cancel one and re-issue it under a new number`, href: "/work/invoice" }));
   orders.filter((o) => o.blocked).forEach((o) => flow.push({ t: "warn", text: `${o.no} on hold — ${o.blocked}`, href: "/work/orders" }));
   orders.filter((o) => o.stage === "shipping" && !o.tracking).forEach((o) => flow.push({ t: "warn", text: `${o.no} shipping — tracking missing`, href: "/work/shipping" }));
   shipmentsSig.value.filter((s) => s.eta < t && daysBetween(s.eta, t) < 30 && !s.tracking).forEach((s) => flow.push({ t: "warn", text: `${s.orderNo} shipment past delivery date`, href: "/work/shipping" }));

@@ -3,12 +3,15 @@ import { invDue, billsSig, balanceOf, orderValue, gstSig, invoicesSig, expensesS
 import type { Order } from "../mock/types";
 import { today } from "./store";
 import { consSig } from "./index";
+/** A purchase bill is inter-state (IGST) when the vendor's GSTIN state code is not ours (24 = Gujarat). Credit is only claimable with a vendor GSTIN. */
+const interBill = (b: { gstin?: string }) => /^\d{2}/.test(b.gstin ?? "") && !(b.gstin ?? "").startsWith("24");
+export const itcOf = (b: { gstin?: string; tax: number }) => ((b.gstin ?? "").trim().length >= 15 ? b.tax : 0);
 /* ---------------------------------------------------------------- Books */
 export const depreciation = (a: Asset, fy: string) => { const [s] = fyWindow(fy); const half = a.date >= `${Number(fy.slice(0, 4))}-10-03` && a.date <= fyWindow(fy)[1]; const wdvStart = a.date < s ? a.cost * Math.pow(1 - a.blockRate / 100, Math.max(0, Number(fy.slice(0, 4)) - Number(fyOf(a.date).slice(0, 4)))) : a.cost; const dep = r2(wdvStart * a.blockRate / 100 * (half ? 0.5 : 1)); return { open: r2(wdvStart), dep, wdv: r2(wdvStart - dep) }; };
 export function books(fy: string) {
   const win = fyWindow(fy);
   const sales = invoicesSig.value.filter((i) => inWin(i.date, win)).map((i) => ({ ...invTax(i), id: i.id, no: i.no, date: i.date, party: i.customer, status: i.status, kind: i.kind }));
-  const purchase = billsSig.value.filter((b) => b.status === "logged" && inWin(b.date, win)).map((b) => ({ id: b.id, no: b.no, date: b.date, party: b.vendor, taxable: b.subtotal, cgst: r2(b.tax / 2), sgst: r2(b.tax / 2), igst: 0, total: b.total }));
+  const purchase = billsSig.value.filter((b) => b.status === "logged" && inWin(b.date, win)).map((b) => ({ id: b.id, no: b.no, date: b.date, party: b.vendor, taxable: b.subtotal, cgst: interBill(b) ? 0 : r2(b.tax / 2), sgst: interBill(b) ? 0 : r2(b.tax / 2), igst: interBill(b) ? b.tax : 0, total: b.total }));
   const t = today();
   const debt = new Map<string, number[]>();
   invoicesSig.value.filter((i) => invDue(i) > 0).forEach((i) => {
@@ -57,14 +60,15 @@ export function parties() {
 /* ---------------------------------------------------------------- GST */
 export function gstMonths(fy: string) {
   const s = Number(fy.slice(0, 4));
+  let carry = 0;
   return Array.from({ length: 12 }, (_, i) => { const mm = ((i + 3) % 12) + 1, yy = mm >= 4 ? s : s + 1; const k = `${yy}-${String(mm).padStart(2, "0")}`;
     const inv = invoicesSig.value.filter((x) => x.date.startsWith(k)); const t = inv.map(invTax);
     const sum = (f: (x: ReturnType<typeof invTax>) => number) => r2(t.reduce((a, x) => a + f(x), 0));
     const purch = billsSig.value.filter((b) => b.status === "logged" && b.date.startsWith(k));
     return { id: k, k, label: new Date(yy, mm - 1, 1).toLocaleString("en-IN", { month: "short", year: "2-digit" }), inv, purch,
       b2b: inv.filter((x) => x.gstin && x.kind === "invoice").length, b2c: inv.filter((x) => !x.gstin && x.kind === "invoice").length, credits: inv.filter((x) => x.kind === "credit").length,
-      taxable: sum((x) => x.taxable), cgst: sum((x) => x.cgst), sgst: sum((x) => x.sgst), igst: sum((x) => x.igst), itc: r2(purch.reduce((a, b) => a + b.tax, 0)),
-      filed: gstSig.value[k] ?? { r1: false, r3b: false, locked: false } }; });
+      taxable: sum((x) => x.taxable), cgst: sum((x) => x.cgst), sgst: sum((x) => x.sgst), igst: sum((x) => x.igst), itc: r2(purch.reduce((a, b) => a + itcOf(b), 0)), noGstin: purch.filter((b) => b.tax > 0 && !itcOf(b)).length, carry: 0, net: 0,
+      filed: gstSig.value[k] ?? { r1: false, r3b: false, locked: false } }; }).map((m) => { const due = r2(m.cgst + m.sgst + m.igst - m.itc - carry); const row = { ...m, carry, net: Math.max(0, due) }; carry = Math.max(0, -due); return row; });
 }
 export function setGst(k: string, p: Partial<GstMonth>) { gstSig.value = { ...gstSig.value, [k]: { ...(gstSig.value[k] ?? { r1: false, r3b: false, locked: false }), ...p } }; logFn("GST month updated", `${k} ${JSON.stringify(p)}`, "money"); }
 
@@ -98,7 +102,8 @@ export function download(name: string, content: string, type = "text/plain") {
   const plain = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
   if (c?.use) c.use("downloads").then((d) => (d ? d.save({ filename: name, data: blob }).catch(() => {}) : plain())); else plain();
 }
-export const csv = (rows: Record<string, unknown>[]) => { if (!rows.length) return ""; const k = Object.keys(rows[0]); const q = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`; return [k.join(","), ...rows.map((r) => k.map((x) => q(r[x])).join(","))].join("\n"); };
+/** Text starting with = + - @ would run as a formula in Excel, so it is prefixed with an apostrophe. */
+export const csv = (rows: Record<string, unknown>[]) => { if (!rows.length) return ""; const k = Object.keys(rows[0]); const q = (v: unknown) => { let t = String(v ?? ""); if (typeof v === "string" && /^[=+\-@\t\r]/.test(t)) t = "'" + t; return `"${t.replace(/"/g, '""')}"`; }; return [k.join(","), ...rows.map((r) => k.map((x) => q(r[x])).join(","))].join("\n"); };
 export function tallyXml(fy: string) {
   const win = fyWindow(fy); const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const v = invoicesSig.value.filter((i) => inWin(i.date, win) && i.status === "issued").map((i) => { const t = invTax(i);
@@ -107,6 +112,10 @@ export function tallyXml(fy: string) {
 <ALLLEDGERENTRIES.LIST><LEDGERNAME>Sales</LEDGERNAME><AMOUNT>${t.taxable}</AMOUNT></ALLLEDGERENTRIES.LIST>
 ${t.igst ? `<ALLLEDGERENTRIES.LIST><LEDGERNAME>IGST</LEDGERNAME><AMOUNT>${t.igst}</AMOUNT></ALLLEDGERENTRIES.LIST>` : `<ALLLEDGERENTRIES.LIST><LEDGERNAME>CGST</LEDGERNAME><AMOUNT>${t.cgst}</AMOUNT></ALLLEDGERENTRIES.LIST><ALLLEDGERENTRIES.LIST><LEDGERNAME>SGST</LEDGERNAME><AMOUNT>${t.sgst}</AMOUNT></ALLLEDGERENTRIES.LIST>`}
 </VOUCHER></TALLYMESSAGE>`; });
-  const p = expensesSig.value.filter((e) => inWin(e.date, win)).map((e) => `<TALLYMESSAGE><VOUCHER VCHTYPE="Purchase" ACTION="Create"><DATE>${e.date.replace(/-/g, "")}</DATE><PARTYLEDGERNAME>${esc(e.vendor)}</PARTYLEDGERNAME><ALLLEDGERENTRIES.LIST><LEDGERNAME>${esc(e.head)}</LEDGERNAME><AMOUNT>${-e.amount}</AMOUNT></ALLLEDGERENTRIES.LIST><ALLLEDGERENTRIES.LIST><LEDGERNAME>${esc(e.vendor)}</LEDGERNAME><AMOUNT>${e.amount}</AMOUNT></ALLLEDGERENTRIES.LIST></VOUCHER></TALLYMESSAGE>`);
+  const PURCH = ["Filament", "Packing", "Courier"];
+  const led = (n: string, amt: number) => `<ALLLEDGERENTRIES.LIST><LEDGERNAME>${esc(n)}</LEDGERNAME><AMOUNT>${amt}</AMOUNT></ALLLEDGERENTRIES.LIST>`;
+  // Goods (filament, packing, courier) are Purchase vouchers with an input-GST line; salaries, rent and the rest are Payment vouchers.
+  const p = expensesSig.value.filter((e) => inWin(e.date, win)).map((e) => { const goods = PURCH.includes(e.head);
+    return `<TALLYMESSAGE><VOUCHER VCHTYPE="${goods ? "Purchase" : "Payment"}" ACTION="Create"><DATE>${e.date.replace(/-/g, "")}</DATE><PARTYLEDGERNAME>${esc(e.vendor)}</PARTYLEDGERNAME>${led(e.head, -r2(e.amount - (goods ? e.tax : 0)))}${goods && e.tax ? led("Input GST", -e.tax) : ""}${led(e.vendor, e.amount)}</VOUCHER></TALLYMESSAGE>`; });
   return `<?xml version="1.0"?>\n<ENVELOPE><HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER><BODY><IMPORTDATA><REQUESTDESC><REPORTNAME>Vouchers</REPORTNAME></REQUESTDESC><REQUESTDATA>\n${[...v, ...p].join("\n")}\n</REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>`;
 }

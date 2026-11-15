@@ -1,9 +1,9 @@
-import { typeLabel, typeOfOrder, blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
+import { typeLabel, typeOfOrder, blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, reserveInvoiceNo, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
 import { sortAbc } from "../../mock/types";
 import {ordersSig} from "../../data";
 import {vOrders} from "../../data";
 import { useEffect, useState } from "preact/hooks";
-import { ask, Pick, Button, Card, CardTitle, Field, Icon, inputCls, Section, Sheet, Status, Table } from "../../ui";
+import { ask, askText, Pick, Button, Card, CardTitle, Field, Icon, inputCls, Section, Sheet, Status, Table } from "../../ui";
 import { Menu } from "../../ui/disclose";
 import { downloadInvoicePdf, FitA4 } from "./pdf";
 import { navigate } from "../../router";
@@ -112,7 +112,7 @@ function DraftForm({ d }: { d: Invoice }) {
 const pdfName = (i: Invoice, copy?: string) => `Tax Invoice - ${i.no}${copy?.startsWith("Duplicate") ? " - Transporter copy" : ""}.pdf`;
 async function savePdf(i: Invoice, copy?: string) {
   try { await downloadInvoicePdf(fromInvoice(i), [i.billTo ? copy ?? COPIES[0] : undefined], pdfName(i, copy)); }
-  catch (e) { alert("Could not create the PDF: " + (e as Error).message); }
+  catch (e) { await ask("Could not create the PDF: " + (e as Error).message, { ok: "OK" }); }
 }
 const goOrder = (no?: string) => { const o = no && vOrders().find((x) => x.no === no); if (!o) return; openOrderSig.value = o.no; navigate(SEGMENT_HREF[segmentOf(o)]); };
 
@@ -127,7 +127,7 @@ function DraftWindow({ d, onClose, onIssued }: { d: Invoice; onClose: () => void
     let keepOld = true;
     if (draftOutdated(d)) keepOld = !(await ask("Invoice settings (company details, terms, bank…) changed after this draft was started. Use the NEW details on this invoice? Cancel keeps the details it was started with.", { ok: "Use new details" }));
     if (!(await ask(`Issue this invoice as ${next}? Once issued it cannot be edited — only cancelled (number kept) or corrected with a credit note.`, { ok: `Issue ${next}` }))) return;
-    let inv: Invoice; try { inv = issueDraft(d, keepOld); } catch (e) { alert((e as Error).message); return; }
+    let inv: Invoice; try { inv = issueDraft(d, keepOld, await reserveInvoiceNo(d.date)); } catch (e) { await ask((e as Error).message, { ok: "OK" }); return; }
     if (inv.batch) batchesSig.value = batchesSig.value.map((b) => (b.orderNo === inv.orderNo && b.name === inv.batch ? { ...b, invoiceNo: inv.no } : b));
     else if (inv.orderNo) { const o = ordersSig.value.find((x) => x.no === inv.orderNo); if (o) patchOrder(o, { invoiced: true }); }
     setBusy(true); await savePdf(inv); setBusy(false);
@@ -261,7 +261,7 @@ function ViewWindow({ cur, onClose, onOpen }: { cur: Invoice; onClose: () => voi
         {allowed && cur.kind === "invoice" && cur.status === "issued" && (
           <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
             <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(num(e))} /></Field>
-            <Button variant="outline" onClick={() => { if (cn) { try { onOpen(creditNote(cur, cn, prompt("Reason for the credit note") ?? "")); setCn(0); } catch (e) { alert((e as Error).message); } } }}>Issue credit note</Button>
+            <Button variant="outline" onClick={async () => { if (!cn) return; const why = await askText("Reason for the credit note"); if (why === null) return; try { onOpen(creditNote(cur, cn, why)); setCn(0); } catch (e) { await ask((e as Error).message, { ok: "OK" }); } }}>Issue credit note</Button>
             {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.${cur.paidOn ? " Its payment is taken back out of the books." : ""}`).then((ok) => { if (!ok) return; cancelInvoice(cur); const o = cur.orderNo ? ordersSig.value.find((x) => x.no === cur.orderNo) : undefined; if (o && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && i.kind === "invoice")) patchOrder(o, { invoiced: false }); })}>Cancel invoice</Button>}
           </div>
         )}

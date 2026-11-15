@@ -8,7 +8,7 @@ import { useEffect, useState } from "preact/hooks";
 import { inspectSig, peek, Peeked } from "../ui/record";
 import { MAUNY_TABS } from "../nav";
 import { Bars, Line } from "../charts";
-import { Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
+import { askText, Icon, Pick, Button, Card, CardTitle, Chip, DetailHead, Empty, Fact, Field, inputCls, Page, Progress, Section, Stat, Status, SubTabs, Table } from "../ui";
 import { fyWindow, inWin, jobsSig, qcSig, historySig, daysBetween, STAGE_ORDER, STAGE_LABEL, TYPE_LABEL, rate, moduleOf } from "../data";
 import { shrinkImage, storeMedia } from "../data";
 import { MediaFile } from "../ui/media";
@@ -80,7 +80,7 @@ export function DayBook() {
                 : <Field label="To account"><select class={inputCls} value={f.to} onChange={(e) => setF({ ...f, to: (e.target as HTMLSelectElement).value })}>{accs.filter((a) => a.id !== acc).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
               <Field label={form === "transfer" ? "From" : "Account"}><select class={inputCls} value={acc} onChange={(e) => setAcc((e.target as HTMLSelectElement).value)}>{accs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
               <div class="col-span-2 md:col-span-1"><Field label="Note / party / invoice no."><input class={inputCls} list="mem-notes" value={f.note} onInput={(e) => { const v = (e.target as HTMLInputElement).value; const last = recall(moneySig.value.filter((m) => form === "in" ? m.amount > 0 : m.amount < 0), { note: v }); setF({ ...f, note: v, ...(last && form !== "transfer" && KINDS.some((k) => k[0] === last.kind && (form === "in" ? k[2] > 0 : k[2] < 0)) ? { kind: last.kind } : {}) }); }} /><datalist id="mem-notes">{pastValues(moneySig.value, "note").map((n) => <option key={n} value={n} />)}</datalist></Field></div>
-              <Field label={form === "out" ? "Debit ₹" : "Credit ₹"}><input class={`${inputCls} num text-right`} type="number" value={f.amount || ""} onInput={(e) => setF({ ...f, amount: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
+              <Field label={form === "out" ? "Money out ₹" : form === "in" ? "Money in ₹" : "Amount ₹"}><input class={`${inputCls} num text-right`} type="number" value={f.amount || ""} onInput={(e) => setF({ ...f, amount: Number((e.target as HTMLInputElement).value) || 0 })} /></Field>
               <div class="flex gap-1.5"><Button onClick={() => { if (!f.amount) return; if (form === "transfer") transfer(acc, f.to, f.amount, day); else addMoney({ date: day, account: acc, kind: f.kind, amount: form === "in" ? f.amount : -f.amount, note: f.note }); setForm(null); setF({ ...f, amount: 0, note: "" }); }}>Save</Button><Button variant="ghost" onClick={() => setForm(null)}>Cancel</Button></div>
             </div>
           ) : (
@@ -108,7 +108,7 @@ function Ledger({ acc, upto }: { acc: string; upto: string }) {
   let last = "";
   return (
     <div class="text-[13px]">
-      <div class={`${cols} h-7 t-meta uppercase tracking-[0.06em]`}><span>Entry</span><span class="hidden md:block">Kind</span><span class="text-right">Debit</span><span class="text-right">Credit</span></div>
+      <div class={`${cols} h-7 t-meta uppercase tracking-[0.06em]`}><span>Entry</span><span class="hidden md:block">Kind</span><span class="text-right">Money out (Cr)</span><span class="text-right">Money in (Dr)</span></div>
       {withBal.map(({ m }) => {
         const div = m.date !== last ? (last = m.date, <div key={`d${m.date}`} class="px-3 h-6 flex items-center bg-c1/50 border-t border-line t-meta font-semibold">{new Date(m.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</div>) : null;
         return [div, (
@@ -319,7 +319,7 @@ export function Accounts() {
   };
   return (
     <Shell title="Statements & wallets" sub="Upload CSV, Excel or PDF from net banking — columns are found by name. Matching: unpaid invoice by exact amount or net of 1%/2% TDS, then customer name, then unpaid expense."
-      actions={<><Button variant="outline" onClick={() => { const name = prompt("Account name"); if (name) accountsSig.value = [...accountsSig.value, { id: uid(), name, opening: Number(prompt("Opening balance ₹") || 0) }]; }}>Add account</Button>
+      actions={<><Button variant="outline" onClick={async () => { const name = (await askText("Account name"))?.trim(); if (!name) return; const op = await askText("Opening balance ₹", { value: "0" }); if (op === null) return; accountsSig.value = [...accountsSig.value, { id: uid(), name, opening: Number(op) || 0 }]; }}>Add account</Button>
         <label class="inline-flex items-center justify-center h-9 md:h-10 px-4 rounded-full bg-c4 text-c0 text-sm font-medium cursor-pointer">Upload statement<input id="mauny-statement" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.pdf" class="sr-only" onChange={(e) => onFile((e.target as HTMLInputElement).files)} /></label></>}
       toolbar={<div class="flex flex-wrap gap-2 items-center"><SubTabs value={acc} onChange={setAcc} items={modeAccounts().map((a) => [a.id, a.name] as [string, string])} /><Pick title="Lines" value={f} on={setF} items={["review", "confirmed", "rejected", "all"]} label={(s) => s} /></div>}>
       {msg && <p class="text-sm font-medium" role="status">{msg}</p>}
@@ -404,7 +404,7 @@ export function Gst() {
       detail={m && (
         <div>
           <DetailHead title={`GST · ${m.label}`} onClose={() => setOpen(null)} />
-          <div class="grid grid-cols-2 gap-2 text-sm mb-3"><Fact label="Taxable" value={inr(m.taxable)} /><Fact label="Output tax" value={inr(m.cgst + m.sgst + m.igst)} /><Fact label="ITC" value={inr(m.itc)} /><Fact label="Net payable" value={inr(m.cgst + m.sgst + m.igst - m.itc)} /></div>
+          <div class="grid grid-cols-2 gap-2 text-sm mb-3"><Fact label="Taxable" value={inr(m.taxable)} /><Fact label="Output tax" value={inr(m.cgst + m.sgst + m.igst)} /><Fact label="ITC" value={inr(m.itc)} /><Fact label="Net payable" value={inr(m.net)} />{m.carry > 0 && <Fact label="ITC brought forward" value={inr(m.carry)} />}{m.noGstin > 0 && <Fact label="Bills without vendor GSTIN (no ITC)" value={String(m.noGstin)} />}</div>
           <SubTabs value={tab} onChange={setTab} items={[["b2b", `B2B (${m.b2b})`], ["b2c", `B2C (${m.b2c})`], ["cn", `Credit notes (${m.credits})`], ["purch", `Purchases (${m.purch.length})`]]} />
           <ul class="text-xs mt-2">
             {(tab === "purch" ? m.purch.map((b) => ({ k: b.id, a: `${b.vendor} · ${b.no}`, b: inr(b.tax), c: inr(b.total) }))
@@ -413,7 +413,7 @@ export function Gst() {
           </ul>
           <div class="flex flex-wrap gap-2 mt-3">
             <Button variant="outline" onClick={() => monthPack(m.k)}>Month pack</Button><Button variant="outline" onClick={() => window.print()}>Print</Button>
-            {full && !m.filed.locked && <Button onClick={() => setGst(m.k, { r1: true, r3b: true, locked: true })}>Mark filed & lock</Button>}
+            {full && !m.filed.locked && <><Button variant={m.filed.r1 ? "ghost" : "outline"} onClick={() => setGst(m.k, { r1: !m.filed.r1 })}>{m.filed.r1 ? "GSTR-1 filed ✓" : "Mark GSTR-1 filed"}</Button><Button variant={m.filed.r3b ? "ghost" : "outline"} onClick={() => setGst(m.k, { r3b: !m.filed.r3b })}>{m.filed.r3b ? "GSTR-3B filed ✓" : "Mark GSTR-3B filed"}</Button><Button disabled={!(m.filed.r1 && m.filed.r3b)} onClick={() => setGst(m.k, { locked: true })}>Lock month</Button></>}
             {full && m.filed.locked && !isExternal() && <Button variant="ghost" onClick={() => setGst(m.k, { locked: false })}>Unlock</Button>}
           </div>
           
@@ -422,7 +422,7 @@ export function Gst() {
       <div class="strip grid grid-cols-3">
         <Stat value={inr(months.reduce((s, x) => s + x.cgst + x.sgst + x.igst, 0))} label="Output GST" />
         <Stat value={inr(months.reduce((s, x) => s + x.itc, 0))} label="Input credit" />
-        <Stat value={inr(months.reduce((s, x) => s + x.cgst + x.sgst + x.igst - x.itc, 0))} label="Net payable" />
+        <Stat value={inr(months.reduce((s, x) => s + x.net, 0))} label="Net payable" />
       </div>
       <Card class="!py-1">
         <Table rows={months} rowKey={(r) => r.k} onRow={(r) => setOpen(r.k)} cols={[
@@ -431,7 +431,7 @@ export function Gst() {
           { key: "o", label: "Output", align: "right", render: (r) => inr(r.cgst + r.sgst + r.igst) },
           { key: "i", label: "ITC", align: "right", render: (r) => inr(r.itc), hideTablet: true },
           { key: "n", label: "Docs", render: (r) => `${r.b2b} B2B · ${r.b2c} B2C · ${r.credits} CN`, hideTablet: true },
-          { key: "f", label: "Status", card: "status", render: (r) => <Status tone={r.filed.locked ? "done" : r.inv.length ? "waiting" : "idle"}>{r.filed.locked ? "Filed · locked" : r.inv.length ? "Open" : "No activity"}</Status> },
+          { key: "f", label: "Status", card: "status", render: (r) => <Status tone={r.filed.locked ? "done" : r.inv.length ? "waiting" : "idle"}>{r.filed.locked ? "Filed · locked" : r.filed.r1 || r.filed.r3b ? (r.filed.r1 ? "GSTR-1 filed" : "GSTR-3B filed") : r.inv.length ? "Open" : "No activity"}</Status> },
         ]} />
       </Card>
     </Shell>
