@@ -1,6 +1,7 @@
 import { lookupParty, stateLabel } from "../../data/invoicing";
 import { sortAbc } from "../../mock/types";
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
+import { addDays } from "../../data/store";
 import {ordersSig} from "../../data";
 import {vOrders, vQuotes} from "../../data";
 import { useState } from "preact/hooks";
@@ -43,7 +44,7 @@ export function Quotes() {
   const cur = open && (vQuotes().find((q) => q.id === open.id) ?? open);
   const upd = (q: Quote, p: Partial<Quote>) => { quotesSig.value = quotesSig.value.map((x) => (x.id === q.id ? { ...x, ...p } : x)); if (p.outcome) log(`Quote ${p.outcome}`, q.no); };
   const rows = [...vQuotes()].filter((q) => f === "all" || q.outcome === f).sort((a, b) => b.no.localeCompare(a.no));
-  const make = (o?: Order) => { const valid = new Date(Date.now() + rate("quoteValid") * 864e5).toISOString().slice(0, 10);
+  const make = (o?: Order) => { const valid = addDays(today(), rate("quoteValid"));
     const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: o?.customer ?? "", orderNo: o?.no, lines: o ? linesOf(o) : [{ desc: "", hsn: "491199", qty: 1, rate: 0 }], gstRate: rate("gst"), valid, outcome: "open", pay: o?.pay };
     quotesSig.value = [...quotesSig.value, q]; log("Created quotation", q.no); setOpen(q); setView("edit"); };
   const pending = vOrders().filter((o) => o.stage === "quotation" && !vQuotes().some((q) => q.orderNo === o.no));

@@ -1,5 +1,5 @@
 /** Books, GST months, goals and exports — only the Mauny screens use these, so they load with Mauny, not on every page. */
-import { billsSig, balanceOf, orderValue, gstSig, invoicesSig, expensesSig, moneySig, assetsSig, loansSig, openingSig, accountsSig, fyOf, fyWindow, inWin, invTax, r2, daysBetween, financeSummary, logFn, type Asset, type Goal, type GoalMetric, type GstMonth } from "./ledger";
+import { invDue, billsSig, balanceOf, orderValue, gstSig, invoicesSig, expensesSig, moneySig, assetsSig, loansSig, openingSig, accountsSig, fyOf, fyWindow, inWin, invTax, r2, daysBetween, financeSummary, logFn, type Asset, type Goal, type GoalMetric, type GstMonth } from "./ledger";
 import type { Order } from "../mock/types";
 import { today } from "./store";
 import { consSig } from "./index";
@@ -11,9 +11,9 @@ export function books(fy: string) {
   const purchase = billsSig.value.filter((b) => b.status === "logged" && inWin(b.date, win)).map((b) => ({ id: b.id, no: b.no, date: b.date, party: b.vendor, taxable: b.subtotal, cgst: r2(b.tax / 2), sgst: r2(b.tax / 2), igst: 0, total: b.total }));
   const t = today();
   const debt = new Map<string, number[]>();
-  invoicesSig.value.filter((i) => !i.paidOn && i.kind === "invoice" && i.status === "issued").forEach((i) => {
+  invoicesSig.value.filter((i) => invDue(i) > 0).forEach((i) => {
     const age = daysBetween(i.date, t), b = age <= 30 ? 0 : age <= 60 ? 1 : age <= 90 ? 2 : 3;
-    const row = debt.get(i.customer) ?? [0, 0, 0, 0]; row[b] += invTax(i).total; debt.set(i.customer, row);
+    const row = debt.get(i.customer) ?? [0, 0, 0, 0]; row[b] += invDue(i); debt.set(i.customer, row);
   });
   const debtors = [...debt].map(([party, r]) => ({ id: party, party, b0: r[0], b30: r[1], b60: r[2], b90: r[3], total: r.reduce((a, b) => a + b, 0) }));
   const creditors = expensesSig.value.filter((e) => !e.paid).map((e) => {
@@ -49,7 +49,7 @@ export function books(fy: string) {
 export function parties() {
   const m = new Map<string, { name: string; type: string; gstin: string; bal: number }>();
   const norm = (s: string) => s.toLowerCase().replace(/\b(pvt|private|ltd|limited|co|llp)\b\.?/g, "").replace(/[^a-z0-9]/g, "");
-  invoicesSig.value.forEach((i) => { const k = i.gstin || norm(i.customer); const p = m.get(k) ?? { name: i.customer, type: "Customer", gstin: i.gstin ?? "", bal: 0 }; if (!i.paidOn && i.status === "issued") p.bal += invTax(i).total; m.set(k, p); });
+  invoicesSig.value.forEach((i) => { const k = i.gstin || norm(i.customer); const p = m.get(k) ?? { name: i.customer, type: "Customer", gstin: i.gstin ?? "", bal: 0 }; p.bal += invDue(i); m.set(k, p); });
   expensesSig.value.forEach((e) => { const k = norm(e.vendor); const p = m.get(k) ?? { name: e.vendor, type: e.msme ? `Vendor · MSME ${e.msme}` : "Vendor", gstin: "", bal: 0 }; if (!e.paid) p.bal -= e.amount; m.set(k, p); });
   return [...m].map(([id, p]) => ({ id, ...p }));
 }

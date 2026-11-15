@@ -8,8 +8,8 @@
 import { computed } from "@preact/signals";
 import { fingerprint, persisted, today, uid } from "./store";
 import { bizSig, type Biz } from "./biz";
-import { invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type Invoice, type Party, type SellerSnap } from "./ledger";
-import { clientsSig, type Client } from "./inventory";
+import { hasSeries, INV_TYPE_LABEL, invoicesSig, logFn, nextNo, seriesLatest, setSeriesFloor, type InvLine, type InvType, type Invoice, type Party, type SellerSnap } from "./ledger";
+import { clientsSig, segmentOf, type Client } from "./inventory";
 import { ordersSig } from "./index";
 
 /* ---------------------------------------------------------------- states (GST state codes) */
@@ -90,14 +90,22 @@ export function rememberParty(p: Party) {
   else clientsSig.value = [...clientsSig.value, { id: uid(), kind: p.gstin ? "Business" : "Individual", city: "", medium: "", active: true, ...patch } as Client];
 }
 
+/* ---------------------------------------------------------------- invoice type (internal) */
+/** Which kind of order an invoice is for: from the linked order (In-house / B2B / Bulk / Client), else whatever was chosen. Never printed. */
+export function typeOfOrder(no?: string): InvType | undefined {
+  const o = no ? ordersSig.value.find((x) => x.no === no) : undefined; if (!o) return undefined;
+  const seg = segmentOf(o); return seg === "inhouse" ? "inhouse" : o.size === "b2b" || o.b2b ? "b2b" : seg === "bulk" ? "bulk" : "client";
+}
+export const typeLabel = (i: { type?: InvType; orderNo?: string }) => { const t = i.type ?? typeOfOrder(i.orderNo); return t ? INV_TYPE_LABEL[t] : "—"; };
+
 /* ---------------------------------------------------------------- drafts */
 /** Invoices not yet issued. Kept apart from the register so they never count in sales, GST or the number series. */
 export const draftsSig = persisted<Invoice[]>("invoiceDrafts", []);
-export function newDraft(d: { billTo?: Party; lines?: InvLine[]; orderNo?: string; batch?: string } = {}): Invoice {
+export function newDraft(d: { billTo?: Party; lines?: InvLine[]; orderNo?: string; batch?: string; type?: InvType } = {}): Invoice {
   const billTo = d.billTo ?? blankParty();
   const inv: Invoice = {
     id: uid(), kind: "invoice", no: "Draft", date: today(), customer: billTo.name, lines: d.lines ?? [{ desc: "", hsn: hsnSig.value[0]?.code ?? "", qty: 1, rate: 0 }],
-    gstRate: invoiceBiz.value.gstRate ?? 18, interstate: false, status: "issued", billTo, shipToParty: blankParty(), sameShip: true, orderNo: d.orderNo, batch: d.batch, seller: sellerNow(),
+    gstRate: invoiceBiz.value.gstRate ?? 18, interstate: false, status: "issued", billTo, shipToParty: blankParty(), sameShip: true, orderNo: d.orderNo, batch: d.batch, type: d.type ?? typeOfOrder(d.orderNo), seller: sellerNow(),
   };
   draftsSig.value = [inv, ...draftsSig.value];
   return derive(inv);
@@ -121,6 +129,7 @@ export function derive(d: Invoice): Invoice {
 /** Everything that must be right before a number is taken. Empty = ready to issue. */
 export function problems(d: Invoice): string[] {
   const out: string[] = [], b = d.billTo ?? blankParty();
+  if (!d.type) out.push("Invoice type is missing (internal: Client, Bulk, B2B or In-house)");
   if (!b.name.trim()) out.push("Bill to: name is missing");
   if (!b.address.trim()) out.push("Bill to: address is missing");
   if (!b.state) out.push("Bill to: state is missing (decides CGST+SGST or IGST)");
@@ -138,6 +147,7 @@ export function problems(d: Invoice): string[] {
     if (!(l.qty > 0)) out.push(`Item ${k + 1}: quantity must be more than 0`);
     if (!(l.rate > 0)) out.push(`Item ${k + 1}: unit price must be more than 0`);
   });
+  if (!hasSeries(d.date)) out.push("Date: invoices are numbered from 1 Apr 2025 (FY 2025-26) — pick a valid date");
   const latest = seriesLatest("invoice", d.date);
   if (latest && d.date < latest) out.push(`Date: the last invoice in this series is dated ${latest}; a new one cannot be dated earlier`);
   if (d.date > today()) out.push("Date: an invoice cannot be dated in the future");
@@ -149,6 +159,7 @@ export function issueDraft(d: Invoice, keepOldDetails = true): Invoice {
   const p = problems(d); if (p.length) throw new Error(p.join("\n"));
   const seller = keepOldDetails && d.seller ? d.seller : sellerNow();
   const no = nextNo("invoice", d.date);
+  if (no === "—") throw new Error("Pick a valid invoice date.");
   if (invoicesSig.value.some((i) => i.no === no)) throw new Error(`${no} already exists — reload and try again.`);
   const clean = (x: Party): Party => ({ ...x, gstin: x.gstin.trim().toUpperCase(), name: x.name.trim() });
   const inv = derive({ ...d, no, seller, status: "issued", billTo: clean(d.billTo!), shipToParty: d.sameShip ? undefined : clean(d.shipToParty!), lines: d.lines.map((l) => ({ ...l, desc: l.desc.trim() })) });
@@ -189,15 +200,23 @@ export function setMissingAddress(i: Invoice, address: string) {
   logFn("Added invoice address", i.no, "money");
 }
 
-/** Corrections the owner asked for on invoices made before this generator. Safe to run any number of times. */
+/** Which one-time data corrections have already run (synced, so no device repeats them). */
+export const migrationsSig = persisted<string[]>("migrations", []);
+const FIXES = "known-invoice-fixes-1";
+/**
+ * One-time corrections the owner asked for on invoices made before this generator: B-015 rate 42,000 → 43,000, B-017 billed
+ * CGST+SGST (Gujarat party), and a missing address filled from the client / order / another invoice. It runs once, only when
+ * those invoices are present, logs every change, and is then switched off — an issued invoice is never rewritten again.
+ */
 export function fixKnownInvoices() {
-  let changed = false;
+  if (migrationsSig.value.includes(FIXES) || !invoicesSig.value.length) return;
+  const done: string[] = [];
   const next = invoicesSig.value.map((i) => {
-    if (i.no === "B-015" && i.lines.length === 1 && i.lines[0].qty === 1 && i.lines[0].rate === 42000) { changed = true; return { ...i, lines: [{ ...i.lines[0], rate: 43000 }] }; }
-    if (i.no === "B-017" && i.interstate) { changed = true; return { ...i, interstate: false }; } // billed to a Gujarat party: CGST + SGST, round-off 0
-    // Older invoices without an address: fill it (and the contact) from the client, order or another invoice.
-    if (!i.billTo && !i.address?.trim()) { const a = addressFor(i); if (a) { changed = true; return { ...i, address: a, contact: contactFor(i) || i.contact }; } }
+    if (i.no === "B-015" && i.lines.length === 1 && i.lines[0].qty === 1 && i.lines[0].rate === 42000) { done.push("B-015 rate 42,000 → 43,000"); return { ...i, lines: [{ ...i.lines[0], rate: 43000 }] }; }
+    if (i.no === "B-017" && i.interstate) { done.push("B-017 set to CGST + SGST"); return { ...i, interstate: false }; }
+    if (!i.billTo && !i.address?.trim()) { const a = addressFor(i); if (a) { done.push(`${i.no} address filled`); return { ...i, address: a, contact: contactFor(i) || i.contact }; } }
     return i;
   });
-  if (changed) invoicesSig.value = next;
+  if (done.length) { invoicesSig.value = next; logFn("One-time invoice corrections", done.join("; "), "money"); }
+  migrationsSig.value = [...migrationsSig.value, FIXES];
 }

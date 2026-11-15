@@ -53,7 +53,7 @@ export const WORK_TABS = [
 ];
 
 export const MAUNY_TABS = [
-  { href: "/mauny", label: "Entry" },
+  { href: "/mauny", label: "Overview" },
   { href: "/mauny/daybook", label: "Day book" },
   { href: "/mauny/purchases", label: "Purchases" },
   { href: "/mauny/finance", label: "Finance" },
@@ -61,7 +61,7 @@ export const MAUNY_TABS = [
   { href: "/mauny/books", label: "Books" },
   { href: "/mauny/gst", label: "GST desk" },
   { href: "/mauny/reports", label: "Reports" },
-  { href: "/mauny/accounts", label: "Settings" },
+  { href: "/mauny/accounts", label: "Statements & wallets" },
 ];
 
 export const WORKSHOP_TABS = [
@@ -72,6 +72,7 @@ export const WORKSHOP_TABS = [
   { href: "/workshop/audit", label: "Stock audit" },
   { href: "/workshop/movements", label: "Stock ledger" },
   { href: "/workshop/consumption", label: "Consumption" },
+  { href: "/workshop/prices", label: "Prices" },
 ];
 
 export const CALC_TABS = [

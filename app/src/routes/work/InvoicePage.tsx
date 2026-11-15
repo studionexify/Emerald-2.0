@@ -1,4 +1,4 @@
-import { blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
+import { typeLabel, typeOfOrder, blankParty, canInvoice, COPIES, deleteDraft, draftOutdated, draftsSig, fixKnownInvoices, hsnSig, invoiceBiz, issueDraft, lookupParty, newDraft, problems, sellerNow, STATES, stateOfGstin, updateDraft , missingAddress, setMissingAddress } from "../../data/invoicing";
 import { sortAbc } from "../../mock/types";
 import {ordersSig} from "../../data";
 import {vOrders} from "../../data";
@@ -8,6 +8,7 @@ import { Menu } from "../../ui/disclose";
 import { downloadInvoicePdf, FitA4 } from "./pdf";
 import { navigate } from "../../router";
 import { openOrderSig, segmentOf, SEGMENT_HREF } from "../../data/inventory";
+import { INV_TYPE_LABEL } from "../../data/ledger";
 import {accountsSig, batchesSig, cancelInvoice, creditNote, inr, invoicesSig, invTax, markPaid, markUnpaid, monthLocked, nextNo, shortDate, today, uid, patchOrder, type InvLine, type Invoice, type Order, me, seriesPrefix, type Party} from "../../data";
 import { bizSig, type Biz } from "../../data/biz";
 import {clientsSig} from "../../data";
@@ -88,6 +89,7 @@ function DraftForm({ d }: { d: Invoice }) {
         <Button variant="outline" class="!h-7" onClick={() => up({ seller: sellerNow() })}>Use new details</Button><span class="t-meta">or keep the old ones (asked when you issue)</span></div>}
       <div class="grid grid-cols-2 gap-2 md:max-w-[520px]">
         <Field label="Invoice date"><input class={inputCls} type="date" max={today()} value={d.date} onInput={(e) => up({ date: val(e) })} /></Field>
+        <Field label="Invoice type (internal — not printed)"><select class={inputCls} value={d.type ?? ""} onChange={(e) => up({ type: ((e.target as HTMLSelectElement).value || undefined) as Invoice["type"] })}><option value="">Choose…</option>{(Object.entries(INV_TYPE_LABEL) as [string, string][]).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
         <Field label="Number (given when issued)"><input class={inputCls} disabled value={nextNo("invoice", d.date)} /></Field>
       </div>
       <div class="grid gap-3 md:grid-cols-2 items-start">
@@ -259,8 +261,8 @@ function ViewWindow({ cur, onClose, onOpen }: { cur: Invoice; onClose: () => voi
         {allowed && cur.kind === "invoice" && cur.status === "issued" && (
           <div class="flex flex-wrap items-end gap-2 border-t border-line pt-2">
             <Field label="Credit note ₹ (taxable)"><input class={inputCls} type="number" value={cn || ""} onInput={(e) => setCn(num(e))} /></Field>
-            <Button variant="outline" onClick={() => { if (cn) { onOpen(creditNote(cur, cn, prompt("Reason") ?? "")); setCn(0); } }}>Issue credit note</Button>
-            {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.`).then((ok) => ok && cancelInvoice(cur))}>Cancel invoice</Button>}
+            <Button variant="outline" onClick={() => { if (cn) { try { onOpen(creditNote(cur, cn, prompt("Reason for the credit note") ?? "")); setCn(0); } catch (e) { alert((e as Error).message); } } }}>Issue credit note</Button>
+            {!monthLocked(cur.date) && <Button variant="ghost" onClick={() => ask(`Cancel ${cur.no}? The number stays used.${cur.paidOn ? " Its payment is taken back out of the books." : ""}`).then((ok) => { if (!ok) return; cancelInvoice(cur); const o = cur.orderNo ? ordersSig.value.find((x) => x.no === cur.orderNo) : undefined; if (o && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && i.kind === "invoice")) patchOrder(o, { invoiced: false }); })}>Cancel invoice</Button>}
           </div>
         )}
       </div>
@@ -270,7 +272,7 @@ function ViewWindow({ cur, onClose, onOpen }: { cur: Invoice; onClose: () => voi
 
 type Win = { k: "new"; order?: Order } | { k: "draft"; id: string } | { k: "view"; id: string } | { k: "settings" };
 export function Invoice() {
-  const [f, setF] = useState("all");
+  const [f, setF] = useState("all"), [tf, setTf] = useState("all");
   const [win, setWin] = useState<Win | null>(null);
   const [busy, setBusy] = useState("");
   useEffect(() => { fixKnownInvoices(); }, []);
@@ -281,7 +283,7 @@ export function Invoice() {
   const drafted = (o: string, b?: string) => draftsSig.value.some((d) => d.orderNo === o && d.batch === b);
   const waiting = vOrders().filter((o) => o.stage === "invoice" && !o.invoiced && !invoicesSig.value.some((i) => i.orderNo === o.no && i.status === "issued" && !i.batch) && !drafted(o.no));
   const bw = batchesSig.value.filter((b) => b.stage === "invoice" && !b.invoiceNo && !drafted(b.orderNo, b.name));
-  const reg = [...invoicesSig.value].filter((i) => f === "all" || (f === "paid" ? !!i.paidOn : f === "credit" ? i.kind === "credit" : f === "cancelled" ? i.status === "cancelled" : !i.paidOn && i.kind === "invoice" && i.status === "issued")).sort((a, b) => b.no.localeCompare(a.no, undefined, { numeric: true }));
+  const reg = [...invoicesSig.value].filter((i) => tf === "all" || (i.type ?? typeOfOrder(i.orderNo)) === tf).filter((i) => f === "all" || (f === "paid" ? !!i.paidOn : f === "credit" ? i.kind === "credit" : f === "cancelled" ? i.status === "cancelled" : !i.paidOn && i.kind === "invoice" && i.status === "issued")).sort((a, b) => b.no.localeCompare(a.no, undefined, { numeric: true }));
   const dup = new Set(invoicesSig.value.map((i) => i.no).filter((n, k, a) => a.indexOf(n) !== k));
   const draftFor = (o: Order, b?: { name: string; units: number }) => {
     const lines = b ? [{ desc: `${o.items[0]?.name ?? "Item"} — ${b.name}`, hsn: "491199", qty: b.units, rate: o.items[0]?.price ?? 0 }] : linesOf(o);
@@ -292,7 +294,7 @@ export function Invoice() {
   return (
     <WorkShell stage="invoice" title="Invoice" sub={`Tax invoices · gapless series per FY · next ${nextNo("invoice")}`}
       actions={allowed && <><Button variant="outline" onClick={() => setWin({ k: "settings" })}>Invoice settings</Button><Button icon="plus" onClick={() => setWin({ k: "new" })}>New invoice</Button></>}
-      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /></div>}>
+      toolbar={<div class="flex flex-wrap gap-2"><Pick value={f} on={setF} items={["all", "unpaid", "paid", "credit", "cancelled"]} label={(s) => s[0].toUpperCase() + s.slice(1)} /><Pick value={tf} on={setTf} items={["all", "client", "bulk", "b2b", "inhouse"]} label={(s) => s === "all" ? "All types" : INV_TYPE_LABEL[s as keyof typeof INV_TYPE_LABEL]} /></div>}>
       {win?.k === "settings" && <Sheet huge open onClose={close} title="Invoice settings" footer={<Button onClick={close}>Done</Button>}><div class="w-full md:w-[min(760px,86vw)]"><InvoiceSettings /></div></Sheet>}
       {win?.k === "new" && <Sheet huge open onClose={close} title="New invoice">
         <div class="w-full md:w-[min(720px,86vw)] grid gap-4 md:grid-cols-2 items-start">
@@ -334,6 +336,7 @@ export function Invoice() {
             { key: "n", label: "No.", render: (i) => <b>{i.no}</b> },
             { key: "d", label: "Date", render: (i) => shortDate(i.date) },
             { key: "c", label: "Customer", render: (i) => <>{i.customer}{missingAddress(i) && <span class="t-meta text-warn"> · no address</span>}</> },
+            { key: "ty", label: "Type", render: (i) => typeLabel(i), hideTablet: true },
             { key: "o", label: "Order", render: (i) => (i.orderNo ? `${i.orderNo}${i.batch ? " · " + i.batch : ""}` : "—"), hideTablet: true },
             { key: "t", label: "Taxable", align: "right", render: (i) => inr(invTax(i).taxable), hideTablet: true },
             { key: "v", label: "Total", align: "right", render: (i) => inr(invTax(i).total) },

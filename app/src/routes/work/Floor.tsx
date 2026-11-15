@@ -3,7 +3,7 @@ import { sortAbc } from "../../mock/types";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
-import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross } from "../../data";
+import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross, runHours } from "../../data";
 import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -215,7 +215,7 @@ export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onC
 export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: number; run: Batch; onClose: () => void; simple?: boolean }) {
   const i = o.items[k], f = floorLine(o, i);
   const cs = run.colours?.length ? run.colours : lineColours(i);
-  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0);
+  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0), [hrs, setHrs] = useState(runHours(run));
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c, j) => [c, run.spoolIds?.[j] ?? bestSpool(c, run.printer) ?? ""])));
   const [g, setG] = useState<Record<string, number>>(() => Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
   const [chg, setChg] = useState<string | null>(null), [w, setW] = useState<Record<string, number>>({});
@@ -225,7 +225,7 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
   const [later, setLater] = useState(!simple && f.remaining > pcs);
   /** Spool weighed at the end (gross): grams used = gross before − gross now, spread over every plate since it was loaded. */
   const weigh = (c: string, v: number) => { setW({ ...w, [c]: v }); const n = spoolName(sp[c]); if (n && v > 0) setG({ ...g, [c]: Math.max(0, Math.round((spoolGross(n.s) - v) / allPlates)) }); };
-  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later }); onClose(); };
+  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later, hours: hrs }); onClose(); };
   const when = run.at ? new Date(run.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
   return <Sheet huge open onClose={onClose} title={`■ Complete print · ${i.name}`}
     footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs}>Complete log</Button></>}>
@@ -238,6 +238,7 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
       <b class="pb-1.5 text-[17px] num">= {pcs} pcs</b></>}
       <label class="ml-auto flex flex-col gap-1 text-[11px] text-c2">{simple ? "Failed (of these)" : "Wasted (of these)"}<input type="number" min={0} max={pcs} class={`${inp} !border-red/40`} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>
     </div>
+    <label class="flex items-center gap-2 mt-3 text-[12px] text-c2">Print time (hours)<input type="number" min={0} step="0.1" class={`${inp} w-24`} value={hrs || ""} onInput={(e) => setHrs(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Print time in hours" /><span>{run.printer ? `logged on ${run.printer}: machine hours, service count, failure %, machine and power cost` : "no printer picked, so nothing is logged on a printer"}</span></label>
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
     {!simple && <label class="flex items-start gap-2 mt-4 p-3 rounded-xl border border-line cursor-pointer text-[13px]"><input type="checkbox" class="mt-0.5 accent-grn" checked={later} onChange={(e) => setLater((e.target as HTMLInputElement).checked)} />
       <span><b>Spools stay loaded — weigh at the end</b><span class="block text-[12px] text-c2">Logs pieces only. Print the next plates from the same spools; weigh once when the batch is done and the grams are split over every plate.</span></span></label>}
