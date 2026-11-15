@@ -200,15 +200,23 @@ export function setMissingAddress(i: Invoice, address: string) {
   logFn("Added invoice address", i.no, "money");
 }
 
-/** Corrections the owner asked for on invoices made before this generator. Safe to run any number of times. */
+/** Which one-time data corrections have already run (synced, so no device repeats them). */
+export const migrationsSig = persisted<string[]>("migrations", []);
+const FIXES = "known-invoice-fixes-1";
+/**
+ * One-time corrections the owner asked for on invoices made before this generator: B-015 rate 42,000 → 43,000, B-017 billed
+ * CGST+SGST (Gujarat party), and a missing address filled from the client / order / another invoice. It runs once, only when
+ * those invoices are present, logs every change, and is then switched off — an issued invoice is never rewritten again.
+ */
 export function fixKnownInvoices() {
-  let changed = false;
+  if (migrationsSig.value.includes(FIXES) || !invoicesSig.value.length) return;
+  const done: string[] = [];
   const next = invoicesSig.value.map((i) => {
-    if (i.no === "B-015" && i.lines.length === 1 && i.lines[0].qty === 1 && i.lines[0].rate === 42000) { changed = true; return { ...i, lines: [{ ...i.lines[0], rate: 43000 }] }; }
-    if (i.no === "B-017" && i.interstate) { changed = true; return { ...i, interstate: false }; } // billed to a Gujarat party: CGST + SGST, round-off 0
-    // Older invoices without an address: fill it (and the contact) from the client, order or another invoice.
-    if (!i.billTo && !i.address?.trim()) { const a = addressFor(i); if (a) { changed = true; return { ...i, address: a, contact: contactFor(i) || i.contact }; } }
+    if (i.no === "B-015" && i.lines.length === 1 && i.lines[0].qty === 1 && i.lines[0].rate === 42000) { done.push("B-015 rate 42,000 → 43,000"); return { ...i, lines: [{ ...i.lines[0], rate: 43000 }] }; }
+    if (i.no === "B-017" && i.interstate) { done.push("B-017 set to CGST + SGST"); return { ...i, interstate: false }; }
+    if (!i.billTo && !i.address?.trim()) { const a = addressFor(i); if (a) { done.push(`${i.no} address filled`); return { ...i, address: a, contact: contactFor(i) || i.contact }; } }
     return i;
   });
-  if (changed) invoicesSig.value = next;
+  if (done.length) { invoicesSig.value = next; logFn("One-time invoice corrections", done.join("; "), "money"); }
+  migrationsSig.value = [...migrationsSig.value, FIXES];
 }

@@ -147,7 +147,7 @@ Limits, stated plainly:
 | 6. Real forms | The order checklist "Record" buttons open forms (approval, PO number, QC entry, packing record that draws stock, courier + tracking number + freight, payment into an account, invoice draft). Random PO/tracking numbers, "Mark printed" and the hard-coded 50-unit batch are gone; batches and dispatch are asked. | UI: QC, approval, payment saved; empty tracking refused |
 | 7. Invoice type | `Invoice.type` (Client / Bulk / B2B / In-house): set from the order, chosen on blank invoices (required to issue), shown as a Register column and filter, copied to credit notes. Old invoices fall back to their order's type. | issue test |
 
-Floor sheet printer logs: see §11. Not done: `fixKnownInvoices`.
+Floor sheet printer logs: see §11. Nothing from the original top list remains open.
 
 ## 11. Floor sheet printer logs (third pass)
 
@@ -165,3 +165,7 @@ Test (function level): 10 pieces, 2 wasted, 3 h on a printer at 100 h → printe
 - **"Last month" window** is now 1–31 Oct (was 30 Sep–30 Oct). **Mauny month arrows** skipped a month in IST (November → September); now November → October → September.
 - **Invoice date crash fixed.** A date with no series (before 1 Apr 2025, a half-typed year, or cleared) no longer throws: the number shows "—", the draft says "Date: invoices are numbered from 1 Apr 2025 … pick a valid date", and Review stays disabled. A draft saved with such a date reopens normally after reload (UI test, no errors).
 - Pure date-string arithmetic (MSME 45 days, day-book arrows) was already time-zone safe and is unchanged. Heartbeat still uses UTC on purpose.
+
+## 13. `fixKnownInvoices` (fifth pass)
+
+It is now a **one-time migration**: it runs once (only when invoices exist), applies the B-015 (₹42,000 → ₹43,000), B-017 (CGST + SGST) and missing-address corrections, writes one log line naming each change, records `known-invoice-fixes-1` in a synced "migrations" list, and never runs again — on any device. Test: first open applied both fixes and logged once; after resetting B-015 to ₹42,000 and reopening, it stayed ₹42,000. If those two invoices were already corrected in your live data, the run changes nothing and just switches itself off. Caveat: if a device opens Invoice before cloud data has arrived, it could mark the migration done without finding B-015/B-017; in that case fix them by hand once.
