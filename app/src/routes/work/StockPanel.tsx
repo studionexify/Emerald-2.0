@@ -2,11 +2,11 @@
 import { useState } from "preact/hooks";
 import { shortDate, ordersSig, batchesSig, jobsSig, spoolsSig, printersSig, filMasterSig, jobSpool, lineProgress, patchOrder, vOrders, type Order } from "../../data";
 import { colourHex } from "../../data/floor";
-import { allocate, buildDemand, freeMap, orderNeed, printerPlans, stockFor, type Demand, type GSrc, type Mode, type PlanRow } from "../../data/stockPlan";
+import { allocate, buildDemand, freeMap, orderNeed, pickSpools, printerPlans, spoolNo, stockFor, type Demand, type GSrc, type Mode, type PlanRow } from "../../data/stockPlan";
 
 const Sq = ({ colour }: { colour: string }) => <span class="w-3.5 h-3.5 shrink-0 inline-block rounded-[4px] shadow-[inset_0_0_0_1px_rgb(128_128_128/0.7)]" style={{ background: colourHex(colour) || "repeating-linear-gradient(45deg,var(--c-2) 0 3px,var(--c-1) 3px 6px)" }} />;
 const g = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(2)} kg` : `${Math.round(n)} g`);
-const SRC: Record<GSrc, string> = { sliced: "", rough: "rough", past: "from past print", similar: "from similar size", unknown: "no grams" };
+const SRC: Record<GSrc, string> = { sliced: "", logged: "from logged use", rough: "rough", past: "from past print", similar: "from similar size", unknown: "no grams" };
 const chip = "inline-flex items-center rounded-full px-2 h-5 text-[11px] font-semibold whitespace-nowrap";
 const STATE: Record<string, string> = { free: "In store", loaded: "On machine", plate: "On a plate", weigh: "Weigh pending" };
 const prog = (o: Order, i: Order["items"][number], b: Parameters<typeof lineProgress>[2]) => { const p = lineProgress(o, i, b); return { printed: p.printed, printing: p.printing }; };
@@ -35,6 +35,11 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
   const plans = printerPlans(spools, printersSig.value.filter((p) => p.active !== false).map((p) => p.name), demands, batches).map((p) => ({ ...p, picks: p.picks.filter((x) => vis({ d: x.d } as PlanRow)) })).filter((p) => p.picks.length > 0 || p.loaded.length > 0);
   const find = q.trim().toLowerCase(), list = stock.filter((c) => !find || c.colour.toLowerCase().includes(find));
 
+  /* Which spool to pick for `g` grams of a colour: the smallest free spool that holds it, else the fullest ones until covered. */
+  const spoolFor = (colour: string, grams: number) => { const row = stock.find((c) => c.colour.toLowerCase() === colour.trim().toLowerCase()); return pickSpools(row?.spools ?? [], grams); };
+  const Pick = (colour: string, grams: number) => { if (grams <= 0) return null; const { picks, covered } = spoolFor(colour, grams);
+    return picks.length ? <span class="t-meta">{picks.slice(0, 3).map((x, n) => <b key={x.s.id} class="text-c4 font-semibold">{n ? ", " : ""}#{spoolNo(x.s)}<span class="text-c3 font-normal"> ({g(x.s.grams)})</span></b>)}{picks.length > 3 ? ` +${picks.length - 3} more` : ""}{covered ? "" : " · not enough"}</span> : <span class="t-meta text-red">no free spool</span>; };
+
   /* Collapsible section: one line when closed (title, a short summary, a count), content only on demand. */
   const Sec = (id: string, title: string, sum: preact.ComponentChildren, body: preact.ComponentChildren, tone = "") => { const on = secs.has(id);
     return <section key={id} class="rounded-xl border border-line bg-c0">
@@ -50,9 +55,9 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
         {r.status === "partial" && <span class={`${chip} bg-amb-bg text-amb`}>{r.can} of {d.pending}</span>}
         {r.status === "blocked" && <span class={`${chip} bg-red-bg text-red`}>Blocked</span>}</button>
       {on && <div class="px-2.5 pb-2.5 grid gap-1.5">
-        <div class="flex flex-wrap gap-1">{d.pcs.map((x) => <span key={x.colour} class="inline-flex items-center gap-1 rounded-full bg-c0 border border-line px-2 py-0.5 text-[11.5px]"><Sq colour={x.colour} />{x.colour} {x.src !== "sliced" ? "~" : ""}{Math.round(x.g * d.pending)} g</span>)}</div>
+        <div class="flex flex-wrap gap-1">{d.pcs.map((x) => <span key={x.colour} class="rounded-lg bg-c0 border border-line px-2 py-1 text-[11.5px] max-w-full"><span class="inline-flex items-center gap-1.5"><Sq colour={x.colour} />{x.colour} {x.src !== "sliced" && x.src !== "logged" ? "~" : ""}{Math.round(x.g * d.pending)} g</span><span class="block">Pick {Pick(x.colour, x.g * d.pending)}</span></span>)}</div>
         {warn && <div class="text-[12px] text-red">Short: {r.short.map((x) => `${x.colour} ${g(x.g)}`).join(" · ")}{r.missing.length ? ` · cannot start without ${r.missing.join(", ")}` : ""}</div>}
-        {d.estimated && <div class="t-meta flex items-center gap-2">~ estimated ({[...new Set(d.pcs.filter((x) => x.src !== "sliced").map((x) => SRC[x.src]))].join(", ")})
+        {d.estimated && <div class="t-meta flex items-center gap-2">~ estimated ({[...new Set(d.pcs.filter((x) => x.src !== "sliced" && x.src !== "logged").map((x) => SRC[x.src]))].join(", ")})
           {d.pcs.some((x) => x.src === "rough") && <label class="ml-auto inline-flex items-center gap-1">g/pc<input type="number" min={0} aria-label={`Rough grams per piece for ${d.name}`} value={Math.round(d.pcs.reduce((a, x) => a + x.g, 0))} onChange={(e) => setRough(d, (e.target as HTMLInputElement).value)} class="h-7 w-14 px-1 rounded-md border border-line bg-c0 text-right num" /></label>}</div>}</div>}
     </li>; };
 
@@ -73,7 +78,7 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
         {unk.length > 0 && needed.length > 0 && <button type="button" onClick={() => setSecs(new Set([...secs, "unk"]))} class="mt-1 text-[12px] underline cursor-pointer !min-h-0 text-c4">{unk.length} design{unk.length > 1 ? "s" : ""} without grams, so this may be understated</button>}
         {shortC.length > 0 && <ul class="mt-2 grid gap-1">{shortC.map((n) => <li key={n.colour} class="flex items-center gap-2 text-[12.5px]"><Sq colour={n.colour} /><span class="min-w-0 flex-1 break-words">{n.colour}</span><span class="num text-c3">need {g(n.need)}</span><span class="num font-semibold text-red">short {g(n.short)}</span></li>)}</ul>}</div>}
       {order && needed.length > 0 && Sec("need", "Colours needed", `${needed.length} colour${needed.length > 1 ? "s" : ""}${shortC.length ? ` · ${shortC.length} short` : " · all covered"}`,
-        <ul class="grid gap-1.5">{needed.map((n) => <li key={n.colour} class="flex items-center gap-2 text-[12.5px]"><Sq colour={n.colour} /><span class="min-w-0 flex-1 break-words">{n.colour}</span>
+        <ul class="grid gap-1.5">{needed.map((n) => <li key={n.colour} class="flex items-center gap-2 text-[12.5px]"><Sq colour={n.colour} /><span class="min-w-0 flex-1 break-words">{n.colour}<span class="block">{Pick(n.colour, n.need)}</span></span>
           <span class="num text-c3">{g(n.need)} of {g(n.free)}</span><span class={`${chip} w-12 justify-center ${n.short ? "bg-red-bg text-red" : "bg-grn-bg text-grn"}`}>{n.short ? "Short" : "OK"}</span></li>)}</ul>, shortC.length ? "text-red" : "text-grn")}
 
       {Sec("next", "What to print next", doable.length ? `${doable.length} design${doable.length > 1 ? "s" : ""} can be printed` : "Nothing fits the free stock", <>{toggle}
