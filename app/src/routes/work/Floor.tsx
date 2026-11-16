@@ -80,7 +80,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <div class="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] sm:flex sm:flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
           {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${Object.keys(est).length ? "~" : ""}${kg.toFixed(2)} kg`)}
         </div>
-        <div class="max-[1099px]:hidden"><table class="w-full border-collapse text-[14px] num">
+        <div class={stock ? "max-[1799px]:hidden" : "max-[1099px]:hidden"}><table class="w-full border-collapse text-[14px] num">
           <thead class="sticky top-0 z-[5] bg-c4 text-c0"><tr>
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
             {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-bottom !px-0.5 w-6 min-w-0 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
@@ -113,7 +113,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
             <tr><td colSpan={11} class="px-1 py-1.5 text-right">Balance after job (g)</td>{columns.map((c) => { const b = store[c] - need[c]; return <td key={c} class={`${td} font-semibold ${b < 0 ? "text-red" : "text-grn"} ${store[c] ? "" : "floor-empty"}`}>{b > 0 ? "+" : ""}{b}</td>; })}</tr>
           </tfoot>
         </table></div>
-        <div class="min-[1100px]:hidden grid gap-2">
+        <div class={`${stock ? "min-[1800px]:hidden" : "min-[1100px]:hidden"} grid gap-2`}>
           {shown.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i), run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return (
             <div key={k} class={`rounded-xl border border-line p-3 ${fin ? "bg-c1 text-c2 grayscale opacity-70" : "bg-c0"}`}>
               <div class="flex items-center gap-3">
@@ -371,12 +371,12 @@ function EditLines({ o, onClose }: { o: Order; onClose: () => void }) {
   return <Sheet huge open onClose={onClose} title={`Edit line items · ${o.no}`}
     footer={<><Button variant="outline" class="mr-auto" onClick={() => setItems([...items, { name: "", material: items[0]?.material ?? "PLA", colour: "", qty: 1, price: 0, cost: 0 }])}>＋ Add line item</Button><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save changes</Button></>}>
     <p class="t-meta mb-3">Fix any mistake. Nothing changes until you save. Removing a row hides it from this sheet only; the order keeps it.</p>
-    <table class="w-full border-collapse text-[13px]">
+    <div class="overflow-x-auto"><table class="w-full min-w-[860px] border-collapse text-[13px]">
       <thead><tr class="border-b border-line text-[11px] text-c2">{["Img", "Name", "Qty", "Printed", "Wasted", "Model", "Machine", "Size", "Height mm", "Rough g/pc", ""].map((h) => <th key={h} class={`px-1 py-2 ${h === "Name" ? "text-left" : ""}`}>{h}</th>)}</tr></thead>
       <tbody>{items.map((i, k) => i.offFloor ? null : <tr key={k} class="border-b border-line">
         <td class="px-1 py-1.5 w-14"><Thumb thumb={i.thumb} full={i.img} alt={i.name || "Item"} class="w-11 h-11" onAdd={(fl) => attach(k, fl)} />
           <label class="block text-[10px] text-grn text-center cursor-pointer">{i.thumb || i.img ? "Change" : "Upload"}<input type="file" accept="image/*" class="sr-only" onChange={(e) => attach(k, (e.target as HTMLInputElement).files?.[0])} /></label></td>
-        <td class="px-1"><input class={inp} value={i.name} placeholder="Item name" onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} /></td>
+        <td class="px-1 min-w-[10rem]"><input class={inp} value={i.name} placeholder="Item name" onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} /></td>
         {(["qty", "printed", "failed"] as const).map((key) => <td key={key} class="px-1 w-[72px]"><input type="number" min={0} class={`${inp} text-center num`} value={i[key] ?? 0} onInput={(e) => put(k, { [key]: n0((e.target as HTMLInputElement).value) })} /></td>)}
         <td class="px-1 text-center"><Toggle paid={!!i.paid} onChange={(v) => put(k, { paid: v })} /></td>
         <td class="px-1 text-center"><MachineSelect value={i.machine} onChange={(v) => put(k, { machine: v || undefined })} /></td>
@@ -385,6 +385,6 @@ function EditLines({ o, onClose }: { o: Order; onClose: () => void }) {
         <td class="px-1 w-[84px]"><input type="number" min={0} aria-label="Rough total grams per piece" placeholder="g" title="Rough total grams per piece. Used for planning only; sliced grams replace it once a print is logged." class={`${inp} text-center num`} value={i.roughG ?? ""} onInput={(e) => put(k, { roughG: n0((e.target as HTMLInputElement).value) || undefined })} /></td>
         <td class="px-1 w-9"><button type="button" aria-label={`Remove ${i.name} from sheet`} onClick={() => put(k, { offFloor: true })} class="w-8 h-8 !min-h-0 rounded-lg text-red hover:bg-red-bg cursor-pointer">🗑</button></td>
       </tr>)}</tbody>
-    </table>
+    </table></div>
   </Sheet>;
 }

@@ -1,6 +1,6 @@
 /** Filament stock drawer for the production screens: free stock per colour, need vs available for the open order, and what can be printed now. */
 import { useState } from "preact/hooks";
-import { ordersSig, batchesSig, jobsSig, spoolsSig, printersSig, filMasterSig, jobSpool, lineProgress, patchOrder, vOrders, type Order } from "../../data";
+import { shortDate, ordersSig, batchesSig, jobsSig, spoolsSig, printersSig, filMasterSig, jobSpool, lineProgress, patchOrder, vOrders, type Order } from "../../data";
 import { colourHex } from "../../data/floor";
 import { allocate, buildDemand, freeMap, orderNeed, printerPlans, stockFor, type Demand, type GSrc, type Mode, type PlanRow } from "../../data/stockPlan";
 
@@ -30,7 +30,7 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
   const plans = printerPlans(spools, printersSig.value.filter((p) => p.active !== false).map((p) => p.name), demands, batches).map((p) => ({ ...p, picks: p.picks.filter((x) => seen.has(x.d.orderId)) }));
   const H = (t: string, extra?: preact.ComponentChildren) => <div class="flex items-center gap-2 mt-4 mb-1.5"><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase">{t}</div>{extra}</div>;
   const Row = ({ r }: { r: PlanRow }) => { const d = r.d; return <li class="rounded-lg border border-line px-2.5 py-2 text-[12.5px]">
-    <div class="flex items-start gap-2"><div class="min-w-0 flex-1"><b class="block truncate">{d.name}</b><span class="t-meta block truncate">{nm(d)} · due {d.due || "—"}</span></div>
+    <div class="flex items-start gap-2"><div class="min-w-0 flex-1"><b class="block break-words">{d.name}</b><span class="t-meta block break-words">{nm(d)} · due {d.due ? shortDate(d.due) : "—"}</span></div>
       {r.status === "ready" && <span class={`${chip} bg-grn-bg text-grn`}>Can finish · {d.pending}</span>}
       {r.status === "partial" && <span class={`${chip} bg-amb-bg text-amb`}>{r.can} of {d.pending}</span>}
       {r.status === "blocked" && <span class={`${chip} bg-red-bg text-red`}>Blocked</span>}</div>
@@ -45,7 +45,7 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
       <h3 class="text-[15px] font-semibold mr-auto">Filament stock{order ? ` · ${order.no}` : ""}</h3>
       {onClose && <button type="button" aria-label="Close stock panel" onClick={onClose} class="w-8 h-8 !min-h-0 rounded-full hover:bg-c1 cursor-pointer text-[16px] leading-none">✕</button>}
     </div>
-    <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-6">
+    <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-6 max-md:pb-24">
       <div class="flex flex-wrap gap-1.5 mt-3">{[["", "All materials"], ...mats.map((m) => [m, m])].map(([v, l]) => <button key={v} type="button" aria-pressed={mat === v} onClick={() => setMat(v)} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${mat === v ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>)}</div>
       <p class="t-meta mt-1.5">Free = in store, not loaded on a machine and not on a plate. Net filament grams, spool weight excluded.</p>
 
@@ -54,18 +54,18 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
           <span class="text-c3 font-sans">Colour</span><span class="text-c3 text-right">Need</span><span class="text-c3 text-right">Free</span><span class="text-c3 text-right">Short</span>
           {need.map((n) => <>
             <span key={n.colour} class="font-sans inline-flex items-center gap-1.5 min-w-0"><Sq colour={n.colour} /><span class="truncate">{n.colour}</span></span>
-            <span class="text-right">{n.need ? g(n.need) : "—"}</span><span class="text-right">{g(n.free)}</span><span class={`text-right font-semibold ${n.short ? "text-red" : "text-grn"}`}>{n.short ? g(n.short) : "OK"}</span></>)}
+            <span class="text-right">{n.need ? g(n.need) : "—"}</span><span class="text-right">{g(n.free)}</span><span class={`text-right font-semibold ${n.short ? "text-red" : n.need ? "text-grn" : "text-c3"}`}>{n.short ? g(n.short) : n.need ? "OK" : "—"}</span></>)}
         </div> : <p class="t-meta">Nothing pending on this order, or its grams are not entered yet.</p>}
         {unk.length > 0 && <p class="text-[12px] text-amb mt-2">{unk.length} design{unk.length > 1 ? "s" : ""} have no grams, so the totals above are incomplete. Add rough grams in Edit line items.</p>}</>}
 
       {H("In store by colour")}
       <ul class="grid gap-1">{stock.map((c) => { const on = open === c.colour, left = Math.max(0, c.free - c.reserved); return <li key={c.colour} class="rounded-lg border border-line">
         <button type="button" onClick={() => setOpen(on ? null : c.colour)} aria-expanded={on} class="w-full flex items-center gap-2 px-2.5 py-2 text-left !min-h-0 cursor-pointer text-[12.5px]">
-          <Sq colour={c.colour} /><b class="min-w-0 flex-1 truncate">{c.colour}</b>
+          <Sq colour={c.colour} /><b class="min-w-0 flex-1 break-words">{c.colour}</b>
           {left <= 0 ? <span class={`${chip} bg-red-bg text-red`}>None free</span> : left <= reorder ? <span class={`${chip} bg-amb-bg text-amb`}>Reorder</span> : null}
           <span class="num font-semibold">{g(left)}</span><span class="text-c3 text-[11px]">{on ? "▴" : "▾"}</span></button>
         <div class="px-2.5 pb-1.5 -mt-1 t-meta flex flex-wrap gap-x-3">{c.spools.length} spool{c.spools.length > 1 ? "s" : ""}{c.busy > 0 && <span>{g(c.busy)} on machine or plate</span>}{c.reserved > 0 && <span>{g(c.reserved)} held by queued jobs</span>}</div>
-        {on && <ul class="border-t border-line px-2.5 py-1.5 grid gap-1">{c.spools.map(({ s, state }) => <li key={s.id} class="flex items-center gap-2 text-[12px]"><span class="min-w-0 flex-1 truncate">#{s.slot ?? s.spoolNo} · {s.material} · {s.brand}</span>
+        {on && <ul class="border-t border-line px-2.5 py-1.5 grid gap-1">{c.spools.map(({ s, state }) => <li key={s.id} class="flex items-center gap-2 text-[12px]"><span class="min-w-0 flex-1 break-words">#{s.slot ?? s.spoolNo} · {s.material} · {s.brand}</span>
           <span class={`${chip} ${state === "free" ? "bg-c1 text-c3" : "bg-amb-bg text-amb"}`}>{STATE[state]}{state === "loaded" && s.printer ? ` · ${s.printer}` : ""}</span><span class="num font-semibold">{g(s.grams)}</span></li>)}</ul>}
       </li>; })}</ul>
       {!stock.length && <p class="t-meta">No filament in store{mat ? ` for ${mat}` : ""}.</p>}
@@ -75,16 +75,16 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
       {doable.length ? <ul class="grid gap-1.5">{doable.map((r) => <Row key={r.d.id} r={r} />)}</ul> : <p class="t-meta">Nothing can be finished with the free stock right now.</p>}
       {blocked.length > 0 && <>{H("Blocked by stock")}<ul class="grid gap-1.5">{blocked.map((r) => <Row key={r.d.id} r={r} />)}</ul></>}
       {held.length > 0 && <>{H("Held by a queued job")}<p class="t-meta mb-1.5">Already assigned to a spool through the job queue, so not planned again.</p>
-        <ul class="grid gap-1">{held.map(({ d }) => <li key={d.id} class="rounded-lg border border-line px-2.5 py-1.5 text-[12.5px]"><b class="block truncate">{d.name}</b><span class="t-meta block truncate">{nm(d)} · {d.pending} pcs</span></li>)}</ul></>}
+        <ul class="grid gap-1">{held.map(({ d }) => <li key={d.id} class="rounded-lg border border-line px-2.5 py-1.5 text-[12.5px]"><b class="block break-words">{d.name}</b><span class="t-meta block break-words">{nm(d)} · {d.pending} pcs</span></li>)}</ul></>}
       {hidden > 0 && <p class="t-meta mt-3">{hidden} more design{hidden > 1 ? "s" : ""} from orders outside the current Alpha / Beta view also use this stock.</p>}
       {unknown.length > 0 && <>{H("Grams unknown")}<p class="t-meta mb-1.5">Not ranked, because no sliced grams, rough grams, past print or similar-size design exists. Enter rough grams per piece:</p>
-        <ul class="grid gap-1">{unknown.map(({ d }) => <li key={d.id} class="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-[12.5px]"><span class="min-w-0 flex-1"><b class="block truncate">{d.name}</b><span class="t-meta block truncate">{nm(d)} · {d.pending} pcs{d.pcs.length ? "" : " · no colours set"}</span></span>
+        <ul class="grid gap-1">{unknown.map(({ d }) => <li key={d.id} class="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-[12.5px]"><span class="min-w-0 flex-1"><b class="block break-words">{d.name}</b><span class="t-meta block break-words">{nm(d)} · {d.pending} pcs{d.pcs.length ? "" : " · no colours set"}</span></span>
           <input type="number" min={0} placeholder="g/pc" aria-label={`Rough grams per piece for ${d.name}`} onChange={(e) => setRough(d, (e.target as HTMLInputElement).value)} class="h-8 w-16 px-1.5 rounded-md border border-line bg-c0 text-right num" /></li>)}</ul></>}
 
       {plans.length > 0 && <>{H("By printer · fewest spool swaps")}<p class="t-meta mb-1.5">Loaded spools count only for their own printer.</p>
         <ul class="grid gap-1.5">{plans.map((p) => <li key={p.printer} class="rounded-lg border border-line px-2.5 py-2 text-[12.5px]">
-          <div class="flex items-center gap-2"><b>{p.printer}</b><span class="t-meta truncate">{p.loaded.map((l) => `${l.colour} ${g(l.g)}`).join(" · ")}</span></div>
-          {p.picks.length ? <ol class="mt-1 grid gap-0.5">{p.picks.map((x, n) => <li key={x.d.id} class="flex items-center gap-2"><span class="text-c3 w-4">{n + 1}.</span><span class="min-w-0 flex-1 truncate">{x.d.name} <span class="t-meta">· {nm(x.d)}</span></span>
+          <div class="flex items-center gap-2"><b>{p.printer}</b><span class="t-meta break-words">{p.loaded.map((l) => `${l.colour} ${g(l.g)}`).join(" · ")}</span></div>
+          {p.picks.length ? <ol class="mt-1 grid gap-0.5">{p.picks.map((x, n) => <li key={x.d.id} class="flex items-center gap-2"><span class="text-c3 w-4">{n + 1}.</span><span class="min-w-0 flex-1 break-words">{x.d.name} <span class="t-meta">· {nm(x.d)}</span></span>
             <span class={`${chip} ${x.swaps.length ? "bg-amb-bg text-amb" : x.enough ? "bg-grn-bg text-grn" : "bg-c1 text-c3"}`}>{x.swaps.length ? `swap in ${x.swaps[0]}` : x.enough ? "no swap" : "no swap · low on spool"}</span></li>)}</ol> : <p class="t-meta mt-1">Nothing pending matches what is loaded.</p>}
         </li>)}</ul></>}
     </div>
