@@ -1,6 +1,7 @@
 /** Floor sheet (bulk work sheet): colour stock, grams needed, and logging plates per line item. */
 import { batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
 import { filMasterSig, spoolsSig } from "./inventory";
+import { loggedPc } from "./stockPlan";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 
@@ -105,7 +106,10 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
   const priorIds = new Set(prior.map((x) => x.id));
   batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, hours: d.hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
   log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${d.later ? "weigh at the end" : `${Object.values(grams).reduce((a, x) => a + x, 0)} g over ${allPlates} plate${allPlates > 1 ? "s" : ""}`}`);
-  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } });
+  /* Weight of each part, saved on the line: grams logged per colour ÷ pieces printed over every weighed run, per plate. */
+  const gpp: Record<string, number> = d.later ? { ...i.gpp } : { ...i.gpp, ...d.gpp }, real = loggedPc(o, i, batchesSig.value);
+  for (const [c, g] of Object.entries(real)) { const key = Object.keys(gpp).find((x) => x.trim().toLowerCase() === c.trim().toLowerCase()) ?? c; gpp[key] = Math.round(g * d.perPlate * 10) / 10; }
+  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp });
 }
 /** Cancel a run that never finished. */
 export const cancelRun = (id: string) => { batchesSig.value = batchesSig.value.filter((b) => b.id !== id); };
