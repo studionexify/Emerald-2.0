@@ -317,7 +317,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
       </Section>}
 
     </WorkShell></div>
-    {stock && <div class="shrink-0 w-[min(380px,100vw)] max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:shadow-2xl h-full min-h-0 border-l border-line"><StockPanel onClose={flipStock} /></div>}
+    {stock && <div class="shrink-0 w-[min(380px,100vw)] max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:shadow-2xl h-full min-h-0 border-l border-line"><StockPanel order={open ? vOrders().find((o) => o.id === open.id) ?? open : undefined} onClose={flipStock} /></div>}
     </div>
   );
 }

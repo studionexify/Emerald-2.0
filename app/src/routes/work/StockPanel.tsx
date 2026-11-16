@@ -16,15 +16,18 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
   const orders = ordersSig.value, batches = batchesSig.value, jobs = jobsSig.value, spools = spoolsSig.value;
   const mats = [...new Set(spools.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0).map((s) => s.material))].sort();
   const stock = stockFor(spools, batches, jobs, jobSpool, mat), free = freeMap(stock);
-  const demands = buildDemand(orders, batches, jobs, prog, jobSpool);
+  const demands = buildDemand(orders, batches, jobs, prog, jobSpool, order?.no);
   const rows = allocate(demands, free, mode);
   const seen = new Set(vOrders().map((o) => o.id));
-  const nm = (d: Demand) => (seen.has(d.orderId) ? `${d.orderNo} · ${d.customer || "In-house"}` : "Another order");
+  const nm = (d: Demand) => `${d.orderNo} · ${d.customer || "In-house"}`;
   const need = order ? orderNeed(order, demands, free) : [], unk = order ? demands.filter((d) => d.orderNo === order.no && d.unknown) : [];
   const reorder = filMasterSig.value.reorderG || 1000;
-  const doable = rows.filter((r) => r.status === "ready" || r.status === "partial"), blocked = rows.filter((r) => r.status === "blocked"), unknown = rows.filter((r) => r.status === "unknown");
+  /* Alpha / Beta is a view filter: orders outside the current view still use stock, but are only counted, never named or editable here. */
+  const vis = (r: PlanRow) => seen.has(r.d.orderId), pick = (f: (r: PlanRow) => boolean) => rows.filter(f);
+  const doable = pick((r) => (r.status === "ready" || r.status === "partial") && vis(r)), blocked = pick((r) => r.status === "blocked" && vis(r)), unknown = pick((r) => r.status === "unknown" && vis(r)), held = pick((r) => r.status === "held" && vis(r));
+  const hidden = rows.filter((r) => !vis(r)).length;
   const setRough = (d: Demand, v: string) => { const o = ordersSig.value.find((x) => x.id === d.orderId); if (!o) return; const n = Math.max(0, Number(v) || 0); patchOrder(o, { items: o.items.map((x, j) => (j === d.k ? { ...x, roughG: n || undefined } : x)) }); };
-  const plans = printerPlans(spools, printersSig.value.filter((p) => p.active !== false).map((p) => p.name), demands);
+  const plans = printerPlans(spools, printersSig.value.filter((p) => p.active !== false).map((p) => p.name), demands, batches).map((p) => ({ ...p, picks: p.picks.filter((x) => seen.has(x.d.orderId)) }));
   const H = (t: string, extra?: preact.ComponentChildren) => <div class="flex items-center gap-2 mt-4 mb-1.5"><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase">{t}</div>{extra}</div>;
   const Row = ({ r }: { r: PlanRow }) => { const d = r.d; return <li class="rounded-lg border border-line px-2.5 py-2 text-[12.5px]">
     <div class="flex items-start gap-2"><div class="min-w-0 flex-1"><b class="block truncate">{d.name}</b><span class="t-meta block truncate">{nm(d)} · due {d.due || "—"}</span></div>
@@ -32,7 +35,8 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
       {r.status === "partial" && <span class={`${chip} bg-amb-bg text-amb`}>{r.can} of {d.pending}</span>}
       {r.status === "blocked" && <span class={`${chip} bg-red-bg text-red`}>Blocked</span>}</div>
     <div class="flex flex-wrap gap-1 mt-1.5">{d.pcs.map((x) => <span key={x.colour} class="inline-flex items-center gap-1 rounded-full bg-c1 px-1.5 py-0.5 text-[11px]"><Sq colour={x.colour} />{x.colour} {x.src !== "sliced" ? "~" : ""}{Math.round(x.g * d.pending)} g</span>)}</div>
-    {d.estimated && <div class="t-meta mt-1">~ estimated grams ({[...new Set(d.pcs.filter((x) => x.src !== "sliced").map((x) => SRC[x.src]))].join(", ")})</div>}
+    {d.estimated && <div class="t-meta mt-1 flex items-center gap-2">~ estimated grams ({[...new Set(d.pcs.filter((x) => x.src !== "sliced").map((x) => SRC[x.src]))].join(", ")})
+      {d.pcs.some((x) => x.src === "rough") && <label class="ml-auto inline-flex items-center gap-1">rough g/pc<input type="number" min={0} aria-label={`Rough grams per piece for ${d.name}`} value={Math.round(d.pcs.reduce((a, x) => a + x.g, 0))} onChange={(e) => setRough(d, (e.target as HTMLInputElement).value)} class="h-7 w-14 px-1 rounded-md border border-line bg-c0 text-right num" /></label>}</div>}
     {r.status !== "ready" && r.short.length > 0 && <div class="text-[11.5px] text-red mt-1">Short: {r.short.map((x) => `${x.colour} ${g(x.g)}`).join(" · ")}{r.missing.length ? ` · cannot start without ${r.missing.join(", ")}` : ""}</div>}
   </li>; };
 
@@ -70,6 +74,9 @@ export function StockPanel({ order, onClose }: { order?: Order; onClose?: () => 
       <p class="t-meta mb-1.5">{mode === "deadline" ? "Earliest due claims stock first, across all live orders, so the same grams are never promised twice." : "Lightest designs first. A quick heuristic for more pieces, not a guaranteed maximum."}</p>
       {doable.length ? <ul class="grid gap-1.5">{doable.map((r) => <Row key={r.d.id} r={r} />)}</ul> : <p class="t-meta">Nothing can be finished with the free stock right now.</p>}
       {blocked.length > 0 && <>{H("Blocked by stock")}<ul class="grid gap-1.5">{blocked.map((r) => <Row key={r.d.id} r={r} />)}</ul></>}
+      {held.length > 0 && <>{H("Held by a queued job")}<p class="t-meta mb-1.5">Already assigned to a spool through the job queue, so not planned again.</p>
+        <ul class="grid gap-1">{held.map(({ d }) => <li key={d.id} class="rounded-lg border border-line px-2.5 py-1.5 text-[12.5px]"><b class="block truncate">{d.name}</b><span class="t-meta block truncate">{nm(d)} · {d.pending} pcs</span></li>)}</ul></>}
+      {hidden > 0 && <p class="t-meta mt-3">{hidden} more design{hidden > 1 ? "s" : ""} from orders outside the current Alpha / Beta view also use this stock.</p>}
       {unknown.length > 0 && <>{H("Grams unknown")}<p class="t-meta mb-1.5">Not ranked, because no sliced grams, rough grams, past print or similar-size design exists. Enter rough grams per piece:</p>
         <ul class="grid gap-1">{unknown.map(({ d }) => <li key={d.id} class="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-[12.5px]"><span class="min-w-0 flex-1"><b class="block truncate">{d.name}</b><span class="t-meta block truncate">{nm(d)} · {d.pending} pcs{d.pcs.length ? "" : " · no colours set"}</span></span>
           <input type="number" min={0} placeholder="g/pc" aria-label={`Rough grams per piece for ${d.name}`} onChange={(e) => setRough(d, (e.target as HTMLInputElement).value)} class="h-8 w-16 px-1.5 rounded-md border border-line bg-c0 text-right num" /></li>)}</ul></>}
