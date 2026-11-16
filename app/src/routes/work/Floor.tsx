@@ -5,7 +5,7 @@ import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
 import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross, runHours } from "../../data";
 import { StockPanel } from "./StockPanel";
-import { pieceGrams } from "../../data/stockPlan";
+import { pieceGrams, loggedPc } from "../../data/stockPlan";
 import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, lineColours, logPlates, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -47,10 +47,10 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const toggleDone = () => { const v = !showDone; setShowDone(v); try { localStorage.setItem("emerald:floor:showDone", v ? "1" : "0"); } catch {} };
   const shown = showDone ? sorted : sorted.filter((r) => r.f.remaining);
   /* Grams per piece: sliced first, then rough / past print / similar size (marked ~). Unknown stays 0, never guessed. */
-  const pool = ordersSig.value.flatMap((x) => x.items), pg = new Map(rows.map((r) => [r.k, pieceGrams(r.i, pool)]));
+  const pool = ordersSig.value.flatMap((x) => x.items), pg = new Map(rows.map((r) => [r.k, pieceGrams(r.i, pool, loggedPc(o, r.i, batchesSig.value))]));
   const gOf = (k: number, c: string) => pg.get(k)?.find((x) => eq(x.colour, c));
   const est: Record<string, boolean> = {};
-  const need = Object.fromEntries(columns.map((c) => [c, Math.round(rows.reduce((a, r) => { const x = gOf(r.k, c); if (!x?.g || !r.f.remaining) return a; if (x.src !== "sliced") est[c] = true; return a + r.f.remaining * x.g; }, 0))]));
+  const need = Object.fromEntries(columns.map((c) => [c, Math.round(rows.reduce((a, r) => { const x = gOf(r.k, c); if (!x?.g || !r.f.remaining) return a; if (x.src !== "sliced" && x.src !== "logged") est[c] = true; return a + r.f.remaining * x.g; }, 0))]));
   const tot = rows.reduce((a, r) => ({ q: a.q + r.i.qty, p: a.p + r.f.printed, w: a.w + r.f.wasted, r: a.r + r.f.remaining, e: a.e + r.f.extra }), { q: 0, p: 0, w: 0, r: 0, e: 0 });
   const done = rows.filter((r) => !r.f.remaining).length, kg = Object.values(need).reduce((a, x) => a + x, 0) / 1000;
   const put = (k: number, p: Partial<LineItem>) => patchOrder(o, { items: o.items.map((x, j) => (j === k ? { ...x, ...p } : x)) });

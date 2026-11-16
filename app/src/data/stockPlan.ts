@@ -10,19 +10,32 @@ const key = (c: string) => c.trim().toLowerCase();
 export const lineCols = (i: LineItem) => i.colours ?? (i.colour ? [i.colour] : []);
 
 /* ------------------------------------------------------------------ grams per piece */
-export type GSrc = "sliced" | "rough" | "past" | "similar" | "unknown";
+export type GSrc = "sliced" | "logged" | "rough" | "past" | "similar" | "unknown";
 export type PieceG = { colour: string; g: number; src: GSrc };
 const slicedPc = (i: LineItem, c: string) => { const k = Object.keys(i.gpp ?? {}).find((x) => eq(x, c)); const g = k ? i.gpp![k] : 0; return g && i.perPlate ? g / i.perPlate : 0; };
 const slicedTotal = (i: LineItem) => Object.keys(i.gpp ?? {}).reduce((a, k) => a + slicedPc(i, k), 0);
 const sizeMatch = (a: LineItem, b: LineItem) => a.heightMm && b.heightMm ? b.heightMm / a.heightMm >= 0.8 && b.heightMm / a.heightMm <= 1.25 : !!a.designSize && a.designSize === b.designSize;
 
 /**
- * Grams per piece for each colour of a line, best source first:
- * sliced (real) → rough total typed on the line → same design's past prints → similar-sized designs → unknown.
+ * Grams per piece actually used, from the logged runs of one line: grams consumed per colour ÷ pieces printed (good and failed).
+ * Runs still waiting for their final weigh have no grams yet, so they add neither grams nor pieces; a later weigh covers its earlier plates.
  */
-export function pieceGrams(i: LineItem, pool: LineItem[]): PieceG[] {
+export function loggedPc(o: Order, i: LineItem, batches: Batch[]): Record<string, number> {
+  const mine = batches.filter((b) => b.orderNo === o.no && b.name === i.name && !b.running && !b.weighLater), units = mine.reduce((a, b) => a + (b.units || 0), 0), g: Record<string, number> = {};
+  if (!units) return g;
+  for (const b of mine) for (const [id, v] of Object.entries(b.grams ?? {})) { const j = b.spoolIds?.indexOf(id) ?? -1, c = j >= 0 ? b.colours?.[j] : undefined; if (c && v > 0) g[c] = (g[c] ?? 0) + v; }
+  for (const c of Object.keys(g)) g[c] = g[c] / units;
+  return g;
+}
+
+/**
+ * Grams per piece for each colour of a line, best source first:
+ * sliced (real) → logged use on this line → rough total typed on the line → same design's past prints → similar-sized designs → unknown.
+ */
+export function pieceGrams(i: LineItem, pool: LineItem[], logged: Record<string, number> = {}): PieceG[] {
   const out: PieceG[] = lineCols(i).map((c) => ({ colour: c, g: slicedPc(i, c), src: "sliced" as GSrc }));
   const miss = () => out.filter((x) => !x.g);
+  for (const x of miss()) { const k = Object.keys(logged).find((y) => eq(y, x.colour)); if (k && logged[k] > 0) { x.g = logged[k]; x.src = "logged"; } }
   if (!miss().length) return out;
   const have = out.reduce((a, x) => a + x.g, 0);
   if (i.roughG && i.roughG > 0) { const m = miss(), rest = i.roughG - have; for (const x of m) { x.g = (rest > 0 ? rest : i.roughG) / m.length; x.src = "rough"; } return out; }
@@ -60,10 +73,10 @@ export function buildDemand(orders: Order[], batches: Batch[], jobs: Job[], prog
       if (i.offFloor || (!all && !tracked(o, i, batches))) return;
       const p = progress(o, i, batches), pending = Math.max(0, i.qty - p.printed - p.printing);
       if (!pending) return;
-      const pcs = pieceGrams(i, pool);
+      const pcs = pieceGrams(i, pool, loggedPc(o, i, batches));
       // A queued job with a spool holds the grams itself: from a free spool (reserved in stockFor) or from the spool already on its machine. The line stays listed, but is not planned twice.
       const reserved = jobs.some((j) => j.status === "queued" && j.orderNo === o.no && eq(j.item, i.name) && !!jobSpool(j));
-      out.push({ id: `${o.id}:${k}`, orderId: o.id, orderNo: o.no, customer: o.customer, due: o.due, name: i.name, k, pending, pcs, unknown: !pcs.length || pcs.some((x) => !x.g), estimated: pcs.some((x) => x.src !== "sliced" && x.src !== "unknown"), machine: i.machine, type: o.type, reserved });
+      out.push({ id: `${o.id}:${k}`, orderId: o.id, orderNo: o.no, customer: o.customer, due: o.due, name: i.name, k, pending, pcs, unknown: !pcs.length || pcs.some((x) => !x.g), estimated: pcs.some((x) => x.src !== "sliced" && x.src !== "logged" && x.src !== "unknown"), machine: i.machine, type: o.type, reserved });
     });
   }
   return out.sort((a, b) => a.due.localeCompare(b.due) || a.orderNo.localeCompare(b.orderNo) || a.k - b.k);
@@ -145,4 +158,22 @@ export function orderNeed(o: Order, demands: Demand[], free: Map<string, number>
   for (const d of allDemandsForOrder) for (const x of d.pcs) { const r = row(x.colour); if (x.g) r.need += d.pending * x.g; else r.unknownPcs += d.pending; }
   for (const r of m.values()) { r.need = Math.round(r.need); r.short = Math.max(0, r.need - r.free); }
   return [...m.values()].sort((a, b) => b.short - a.short || a.colour.localeCompare(b.colour));
+}
+
+/* ------------------------------------------------------------------ which spool to pick */
+export type SpoolPick = { s: Spool; take: number };
+/** Spool number as printed on the shelf label: slot if set, else spool no. */
+export const spoolNo = (s: Spool) => String(s.slot ?? s.spoolNo);
+/**
+ * Suggest free spools of a colour for `need` grams. One spool when any holds enough (the smallest that does, so big spools stay whole);
+ * otherwise the fullest spools until covered. `covered` is false when the free stock cannot reach it.
+ */
+export function pickSpools(rows: SpoolRow[], need: number): { picks: SpoolPick[]; covered: boolean } {
+  const free = rows.filter((r) => r.state === "free" && r.s.grams > 0).map((r) => r.s).sort((a, b) => a.grams - b.grams);
+  if (need <= 0) return { picks: [], covered: true };
+  const one = free.find((x) => x.grams >= need);
+  if (one) return { picks: [{ s: one, take: need }], covered: true };
+  const picks: SpoolPick[] = []; let left = need;
+  for (const x of [...free].reverse()) { if (left <= 0) break; const take = Math.min(x.grams, left); picks.push({ s: x, take }); left -= take; }
+  return { picks, covered: left <= 0 };
 }
