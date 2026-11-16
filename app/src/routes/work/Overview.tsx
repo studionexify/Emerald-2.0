@@ -6,6 +6,7 @@ import { b2bFor } from "../../data/inventory";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
 import { lazy } from "../../router";
+const StockPanel = lazy(() => import("./StockPanel").then((m) => m.StockPanel));
 const Floor = lazy(() => import("./Floor").then((m) => m.Floor));
 const QuickCreate = lazy(() => import("./InHouseParts").then((m) => m.QuickCreate));
 const InHouseCard = lazy(() => import("./InHouseParts").then((m) => m.InHouseCard));
@@ -231,6 +232,9 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [open, setOpen] = useOpenOrder();
   const [edit, setEdit] = useState<Order | null>(null);
   const [floor, setFloor] = useState<Order | null>(null), [quick, setQuick] = useState(false);
+  /* Filament stock drawer: same on Client, Bulk & B2B and In-house. Open state is remembered on this device. */
+  const [stock, setStock] = useState(() => { try { return localStorage.getItem("emerald:stock:drawer") === "1"; } catch { return false; } });
+  const flipStock = () => { const v = !stock; setStock(v); try { localStorage.setItem("emerald:stock:drawer", v ? "1" : "0"); } catch {} };
   const [n, setN] = useState(PAGE);
   const [st, setSt] = useState("");
   const [q, setQ] = useState(""), [sort, setSort] = useState<"due" | "done" | "pending">("due");
@@ -259,7 +263,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
     : [["To print", all.reduce((t, o) => t + orderProgress(o).pending, 0), "hourglass"], ["Printing now", myJobs.filter((j) => j.status === "printing").length + batchesSig.value.filter((b) => b.running && nos.has(b.orderNo)).length, "printer"]];
   kpis.push(["Queue", queued, "list"]);
   return (
-    <>{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{quick && <QuickCreate onClose={() => setQuick(false)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<WorkShell detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+    <div class="flex h-full min-h-0">{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{quick && <QuickCreate onClose={() => setQuick(false)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<div class="flex-1 min-w-0 h-full"><WorkShell actions={<Button variant="outline" onClick={flipStock} aria-pressed={stock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>} detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Summary kpis={kpis} list={list} active={st} onPick={setSt} stages={stages} />
 
       {seg === "inhouse" && <button type="button" onClick={() => setQuick(true)} class="self-start !min-h-0 h-11 px-5 rounded-xl bg-grn text-c0 inline-flex items-center gap-2 text-[15px] font-bold tracking-wide cursor-pointer hover:opacity-90"><Icon name="plus" size={18} />Create</button>}
@@ -312,6 +316,8 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
         ]} />
       </Section>}
 
-    </WorkShell></>
+    </WorkShell></div>
+    {stock && <div class="shrink-0 w-[min(380px,100vw)] max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:shadow-2xl h-full min-h-0 border-l border-line"><StockPanel onClose={flipStock} /></div>}
+    </div>
   );
 }
