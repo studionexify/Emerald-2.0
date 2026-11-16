@@ -11,6 +11,7 @@ export const B2B_TYPES = sortAbc(["Stationery", "Gift shop", "Corporate gifting"
 export type LineItem = { name: string; material: string; colour: string; qty: number; price: number; cost: number; /** ~160px inline thumbnail */ thumb?: string; /** reduced view image (media ref) */ img?: string;
   /** units printed good so far (bulk tracking) */ printed?: number; /** units wasted to failed / bad prints */ failed?: number;
   /** Floor sheet (internal): colour names from the filament library */ colours?: string[]; /** sliced grams per plate, by colour */ gpp?: Record<string, number>;
+  /** Planning only (never moves stock): rough size class, height in mm and rough total grams per piece. Sliced `gpp` always wins. */ designSize?: "S" | "M" | "L"; heightMm?: number; roughG?: number;
   /** copies per plate */ perPlate?: number; /** assigned printer name */ machine?: string; /** model is paid (internal) */ paid?: boolean; /** hidden from the Floor sheet only */ offFloor?: boolean; /** in-house only: why it is being made */ purpose?: string };
 export type Order = {
   /** Alpha = bank/UPI, Beta = cash. One mode per order. */ pay?: "alpha" | "beta";

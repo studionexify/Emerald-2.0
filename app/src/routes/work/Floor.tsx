@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
 import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross, runHours } from "../../data";
-import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, gramsPerPc, lineColours, logPlates, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
+import { StockPanel } from "./StockPanel";
+import { pieceGrams } from "../../data/stockPlan";
+import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, lineColours, logPlates, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 const n0 = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
@@ -27,6 +29,12 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const o = ordersSig.value.find((x) => x.id === order.id) ?? order;
   const [sort, setSort] = useState<{ k: SortKey; up: boolean }>({ k: "sr", up: true });
   const [logK, setLogK] = useState<number | null>(null), [cols, setCols] = useState(false), [lines, setLines] = useState(false);
+  /* Filament stock beside the table: both panes live, draggable divider. Open state and width are remembered on this device. */
+  const [stock, setStock] = useState(() => { try { return localStorage.getItem("emerald:floor:stock") === "1"; } catch { return false; } });
+  const [pw, setPw] = useState(() => { try { return Math.min(640, Math.max(300, Number(localStorage.getItem("emerald:floor:stockW")) || 380)); } catch { return 380; } });
+  const toggleStock = () => { const v = !stock; setStock(v); try { localStorage.setItem("emerald:floor:stock", v ? "1" : "0"); } catch {} };
+  const saveW = (w: number) => { setPw(w); try { localStorage.setItem("emerald:floor:stockW", String(w)); } catch {} };
+  const drag = (e: PointerEvent) => { e.preventDefault(); const x0 = e.clientX, w0 = pw; const mv = (ev: PointerEvent) => setPw(Math.min(640, Math.max(300, w0 - (ev.clientX - x0)))); const up = (ev: PointerEvent) => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); saveW(Math.min(640, Math.max(300, w0 - (ev.clientX - x0)))); }; addEventListener("pointermove", mv); addEventListener("pointerup", up); };
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && logK === null && !cols && !lines && onClose(); addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, [logK, cols, lines]);
 
   const columns = floorColumns(o);
@@ -38,7 +46,11 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const [showDone, setShowDone] = useState(() => { try { return localStorage.getItem("emerald:floor:showDone") === "1"; } catch { return false; } });
   const toggleDone = () => { const v = !showDone; setShowDone(v); try { localStorage.setItem("emerald:floor:showDone", v ? "1" : "0"); } catch {} };
   const shown = showDone ? sorted : sorted.filter((r) => r.f.remaining);
-  const need = Object.fromEntries(columns.map((c) => [c, Math.round(rows.reduce((a, r) => a + (lineColours(r.i).some((x) => eq(x, c)) ? r.f.remaining * gramsPerPc(r.i, lineColours(r.i).find((x) => eq(x, c))!) : 0), 0))]));
+  /* Grams per piece: sliced first, then rough / past print / similar size (marked ~). Unknown stays 0, never guessed. */
+  const pool = ordersSig.value.flatMap((x) => x.items), pg = new Map(rows.map((r) => [r.k, pieceGrams(r.i, pool)]));
+  const gOf = (k: number, c: string) => pg.get(k)?.find((x) => eq(x.colour, c));
+  const est: Record<string, boolean> = {};
+  const need = Object.fromEntries(columns.map((c) => [c, Math.round(rows.reduce((a, r) => { const x = gOf(r.k, c); if (!x?.g || !r.f.remaining) return a; if (x.src !== "sliced") est[c] = true; return a + r.f.remaining * x.g; }, 0))]));
   const tot = rows.reduce((a, r) => ({ q: a.q + r.i.qty, p: a.p + r.f.printed, w: a.w + r.f.wasted, r: a.r + r.f.remaining, e: a.e + r.f.extra }), { q: 0, p: 0, w: 0, r: 0, e: 0 });
   const done = rows.filter((r) => !r.f.remaining).length, kg = Object.values(need).reduce((a, x) => a + x, 0) / 1000;
   const put = (k: number, p: Partial<LineItem>) => patchOrder(o, { items: o.items.map((x, j) => (j === k ? { ...x, ...p } : x)) });
@@ -52,9 +64,10 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
-    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class="absolute top-[2.5dvh] bottom-[2.5dvh] left-1/2 -translate-x-1/2 w-max min-w-[min(900px,95vw)] max-w-[95vw] bg-c0 rounded-2xl shadow-2xl flex flex-col max-[640px]:inset-0 max-[640px]:translate-x-0 max-[640px]:left-0 max-[640px]:w-full max-[640px]:min-w-0 max-[640px]:max-w-none max-[640px]:rounded-none">
+    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class={`absolute top-[2.5dvh] bottom-[2.5dvh] left-1/2 -translate-x-1/2 ${stock ? "w-[95vw]" : "w-max min-w-[min(900px,95vw)] max-w-[95vw]"} bg-c0 rounded-2xl shadow-2xl flex flex-col max-[640px]:inset-0 max-[640px]:translate-x-0 max-[640px]:left-0 max-[640px]:w-full max-[640px]:min-w-0 max-[640px]:max-w-none max-[640px]:rounded-none`}>
       <button type="button" aria-label="Close Floor" onClick={onClose} class="absolute -top-3 -right-3 max-[640px]:top-2 max-[640px]:right-2 max-[640px]:w-11 max-[640px]:h-11 max-[640px]:text-[20px] z-20 w-13 h-13 ring-4 ring-c0 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
-      <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-2xl max-[640px]:rounded-none overscroll-contain"><div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8 max-[640px]:pt-4 max-[640px]:pb-6">
+      <div class={`flex-1 min-h-0 flex rounded-2xl max-[640px]:rounded-none overflow-hidden ${stock ? "max-[900px]:flex-col" : ""}`}>
+      <div class={`flex-1 min-h-0 min-w-0 overflow-y-auto ${stock ? "overflow-x-auto" : "overflow-x-hidden"} overscroll-contain`}><div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8 max-[640px]:pt-4 max-[640px]:pb-6">
         <div class="flex flex-wrap items-start gap-3 pr-16">
           <div class="mr-auto min-w-0"><h2 class="text-[20px] font-semibold leading-tight">{o.no} · {o.customer}</h2>
             <div class="t-meta mt-1">Due {shortDate(o.due)} · {rows.length} designs · {tot.q} pcs</div></div>
@@ -62,11 +75,12 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
             <input type="checkbox" checked={showDone} onChange={toggleDone} class="accent-grn w-4 h-4 !min-h-0 cursor-pointer" />Show completed ({done})</label>}
           <Button variant="outline" onClick={() => setLines(true)}>✎ Edit line items</Button>
           <Button variant="outline" onClick={() => setCols(true)}>✎ Edit colours</Button>
+          <Button variant="outline" onClick={toggleStock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>
         </div>
         <div class="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] sm:flex sm:flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
-          {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${kg.toFixed(2)} kg`)}
+          {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${Object.keys(est).length ? "~" : ""}${kg.toFixed(2)} kg`)}
         </div>
-        <div class="max-[1099px]:hidden"><table class="w-full border-collapse text-[14px] num">
+        <div class={stock ? "max-[1799px]:hidden" : "max-[1099px]:hidden"}><table class="w-full border-collapse text-[14px] num">
           <thead class="sticky top-0 z-[5] bg-c4 text-c0"><tr>
             <H k="sr">Sr</H><th class={`${th} !cursor-default`}>Print</th><th class={`${th} !cursor-default`}>Img</th><H k="name" left>Name</H><H k="qty">Qty</H><H k="printed">Printed</H><H k="wasted">Wasted</H><H k="remaining">Remaining</H><H k="extra">Extra</H><H k="model">Model</H><H k="machine">Machine</H>
             {columns.map((c) => { const empty = !store[c]; return <th key={c} class={`${th} !align-bottom !px-0.5 w-6 min-w-0 ${empty ? "floor-empty text-red" : ""}`} onClick={() => setSort({ k: `c:${c}`, up: sort.k === `c:${c}` ? !sort.up : false })}>
@@ -95,11 +109,11 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
           <tfoot class="text-[12px] text-c3">
             <tr class="border-t-2 border-line"><td colSpan={4} class="px-1 py-1.5 font-semibold text-c4">Total</td><td class={td}>{tot.q}</td><td class={td}>{tot.p}</td><td class={td}>{tot.w}</td><td class={td}>{tot.r}</td><td class={`${td} text-acc`}>+{tot.e}</td><td colSpan={2} class="px-1 text-right whitespace-nowrap">In store (g)</td>
               {columns.map((c) => <td key={c} class={`${td} ${store[c] ? "" : "floor-empty text-red font-semibold"}`}>{store[c]}</td>)}</tr>
-            <tr><td colSpan={11} class="px-1 py-1.5 text-right">Needed for pending (g)</td>{columns.map((c) => <td key={c} class={`${td} ${store[c] ? "" : "floor-empty"}`}>{need[c] || "—"}</td>)}</tr>
+            <tr><td colSpan={11} class="px-1 py-1.5 text-right">Needed for pending (g)</td>{columns.map((c) => <td key={c} class={`${td} ${store[c] ? "" : "floor-empty"}`} title={est[c] ? "Includes estimated grams" : undefined}>{need[c] ? `${est[c] ? "~" : ""}${need[c]}` : "—"}</td>)}</tr>
             <tr><td colSpan={11} class="px-1 py-1.5 text-right">Balance after job (g)</td>{columns.map((c) => { const b = store[c] - need[c]; return <td key={c} class={`${td} font-semibold ${b < 0 ? "text-red" : "text-grn"} ${store[c] ? "" : "floor-empty"}`}>{b > 0 ? "+" : ""}{b}</td>; })}</tr>
           </tfoot>
         </table></div>
-        <div class="min-[1100px]:hidden grid gap-2">
+        <div class={`${stock ? "min-[1800px]:hidden" : "min-[1100px]:hidden"} grid gap-2`}>
           {shown.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i), run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running); return (
             <div key={k} class={`rounded-xl border border-line p-3 ${fin ? "bg-c1 text-c2 grayscale opacity-70" : "bg-c0"}`}>
               <div class="flex items-center gap-3">
@@ -121,6 +135,10 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         </div>
         {!rows.length && <p class="t-meta py-6 text-center">No line items on the sheet. Use Edit line items to add one.</p>}
       </div></div>
+      {stock && <>
+        <div role="separator" aria-orientation="vertical" aria-label="Resize stock panel" tabIndex={0} onPointerDown={drag} onKeyDown={(e) => { if (e.key === "ArrowLeft") saveW(Math.min(640, pw + 24)); if (e.key === "ArrowRight") saveW(Math.max(300, pw - 24)); }} class="w-1.5 shrink-0 cursor-col-resize bg-line hover:bg-grn/40 focus-visible:bg-grn/40 max-[900px]:hidden" />
+        <div style={{ width: `${pw}px` }} class="shrink-0 min-h-0 border-l border-line max-[900px]:!w-full max-[900px]:h-[45%] max-[900px]:border-l-0 max-[900px]:border-t"><StockPanel order={o} /></div></>}
+      </div>
     </div>
     {logK !== null && (() => { const it = o.items[logK], run = batchesSig.value.find((b) => b.orderNo === o.no && b.name === it.name && b.running); return run ? <FinishPrint o={o} k={logK} run={run} onClose={() => setLogK(null)} /> : <StartPrint o={o} k={logK} onClose={() => setLogK(null)} />; })()}
     {cols && <EditColours o={o} onClose={() => setCols(false)} />}
@@ -353,17 +371,20 @@ function EditLines({ o, onClose }: { o: Order; onClose: () => void }) {
   return <Sheet huge open onClose={onClose} title={`Edit line items · ${o.no}`}
     footer={<><Button variant="outline" class="mr-auto" onClick={() => setItems([...items, { name: "", material: items[0]?.material ?? "PLA", colour: "", qty: 1, price: 0, cost: 0 }])}>＋ Add line item</Button><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save changes</Button></>}>
     <p class="t-meta mb-3">Fix any mistake. Nothing changes until you save. Removing a row hides it from this sheet only; the order keeps it.</p>
-    <table class="w-full border-collapse text-[13px]">
-      <thead><tr class="border-b border-line text-[11px] text-c2">{["Img", "Name", "Qty", "Printed", "Wasted", "Model", "Machine", ""].map((h) => <th key={h} class={`px-1 py-2 ${h === "Name" ? "text-left" : ""}`}>{h}</th>)}</tr></thead>
+    <div class="overflow-x-auto"><table class="w-full min-w-[860px] border-collapse text-[13px]">
+      <thead><tr class="border-b border-line text-[11px] text-c2">{["Img", "Name", "Qty", "Printed", "Wasted", "Model", "Machine", "Size", "Height mm", "Rough g/pc", ""].map((h) => <th key={h} class={`px-1 py-2 ${h === "Name" ? "text-left" : ""}`}>{h}</th>)}</tr></thead>
       <tbody>{items.map((i, k) => i.offFloor ? null : <tr key={k} class="border-b border-line">
         <td class="px-1 py-1.5 w-14"><Thumb thumb={i.thumb} full={i.img} alt={i.name || "Item"} class="w-11 h-11" onAdd={(fl) => attach(k, fl)} />
           <label class="block text-[10px] text-grn text-center cursor-pointer">{i.thumb || i.img ? "Change" : "Upload"}<input type="file" accept="image/*" class="sr-only" onChange={(e) => attach(k, (e.target as HTMLInputElement).files?.[0])} /></label></td>
-        <td class="px-1"><input class={inp} value={i.name} placeholder="Item name" onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} /></td>
+        <td class="px-1 min-w-[10rem]"><input class={inp} value={i.name} placeholder="Item name" onInput={(e) => put(k, { name: (e.target as HTMLInputElement).value })} /></td>
         {(["qty", "printed", "failed"] as const).map((key) => <td key={key} class="px-1 w-[72px]"><input type="number" min={0} class={`${inp} text-center num`} value={i[key] ?? 0} onInput={(e) => put(k, { [key]: n0((e.target as HTMLInputElement).value) })} /></td>)}
         <td class="px-1 text-center"><Toggle paid={!!i.paid} onChange={(v) => put(k, { paid: v })} /></td>
         <td class="px-1 text-center"><MachineSelect value={i.machine} onChange={(v) => put(k, { machine: v || undefined })} /></td>
+        <td class="px-1 text-center"><select value={i.designSize ?? ""} aria-label="Design size" onChange={(e) => put(k, { designSize: ((e.target as HTMLSelectElement).value || undefined) as LineItem["designSize"] })} class="h-9 px-1 rounded-lg bg-c1 text-[13px] cursor-pointer"><option value="">—</option>{["S", "M", "L"].map((x) => <option key={x}>{x}</option>)}</select></td>
+        <td class="px-1 w-[76px]"><input type="number" min={0} aria-label="Height in mm" placeholder="mm" class={`${inp} text-center num`} value={i.heightMm ?? ""} onInput={(e) => put(k, { heightMm: n0((e.target as HTMLInputElement).value) || undefined })} /></td>
+        <td class="px-1 w-[84px]"><input type="number" min={0} aria-label="Rough total grams per piece" placeholder="g" title="Rough total grams per piece. Used for planning only; sliced grams replace it once a print is logged." class={`${inp} text-center num`} value={i.roughG ?? ""} onInput={(e) => put(k, { roughG: n0((e.target as HTMLInputElement).value) || undefined })} /></td>
         <td class="px-1 w-9"><button type="button" aria-label={`Remove ${i.name} from sheet`} onClick={() => put(k, { offFloor: true })} class="w-8 h-8 !min-h-0 rounded-lg text-red hover:bg-red-bg cursor-pointer">🗑</button></td>
       </tr>)}</tbody>
-    </table>
+    </table></div>
   </Sheet>;
 }
