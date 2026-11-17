@@ -2,7 +2,7 @@ import { vOrders } from "../data";
 import type { ComponentChildren } from "preact";
 import { signal } from "@preact/signals";
 import { useEffect, useState } from "preact/hooks";
-import { navigate, useLocation } from "../router";
+import { lazy, navigate, useLocation } from "../router";
 import { syncState } from "../data/sync";
 import { NAV, NAV_GROUPS, type NavItem } from "../nav";
 import { AskHost, Icon } from "../ui";
@@ -10,7 +10,9 @@ import { searchQ } from "../data/search";
 import { segmentOf } from "../data/inventory";
 import { attention, batchesSig, binSig, tasksSig, can, isExternal, me, moduleOf, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
-import { UploadDock } from "./UploadDock";
+import { uploadsSig } from "../data/upload-state";
+/* the dock is loaded only once a file is actually uploading */
+const UploadDock = lazy<Record<string, never>>(() => import("./UploadDock").then((m) => m.UploadDock));
 
 /** Module key for the themed accent: first path segment; home-like pages share the brand emerald. */
 export const modOf = (path: string) => { const k = path.split("/")[1] || "home"; return ["search", "more"].includes(k) ? "home" : k; };
@@ -226,7 +228,7 @@ export function Frame({ children }: { children: ComponentChildren }) {
         <main class="overflow-hidden flex-1 min-w-0 min-h-0 pr-[env(safe-area-inset-right)] md:pl-0 pl-[env(safe-area-inset-left)]">{children}</main>
       </div>
       <Dock />
-      <UploadDock />
+      {uploadsSig.value.length > 0 && <UploadDock />}
       <AskHost />
     </div>
   );

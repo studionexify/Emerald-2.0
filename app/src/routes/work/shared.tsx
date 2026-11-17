@@ -328,7 +328,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
           : <p class="t-meta">Needs about {need} g · {have} g on the picked spool{picked.length > 1 ? "s" : ""}</p>; })()}
       <button class="h-8 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
     </form>
-    {live.map((r) => { const f = fin[r.id] ?? [r.part ? 0 : r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id], hrs[r.id] ?? runHours(r))); }}>
+    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id], hrs[r.id] ?? runHours(r))); }}>
       <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.part ? ` · ${r.part}` : ""}{r.spool ? ` · ${r.spool}` : ""}{r.by ? <span class="t-meta"> · {r.by}</span> : null}</span></div>
       <div class="flex flex-wrap items-center gap-1.5">
         <label class="t-meta">Good</label><input class={`${c} w-14`} type="number" min={0} value={f[0]} onInput={(e) => setFin({ ...fin, [r.id]: [Number((e.target as HTMLInputElement).value) || 0, f[1]] })} />

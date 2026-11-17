@@ -186,6 +186,24 @@ export function gramsPerPiece(item: string, batches = batchesSig.value) {
   const g = Object.values(r.grams!).reduce((a, x) => a + x, 0);
   return g / (r.done + (r.failed ?? 0));
 }
+/**
+ * A line cut into parts: a piece counts once EVERY part of it is printed good, so the pieces done are the fewest good prints of any part,
+ * and the pieces failed are the most failed prints of any part. Runs not tied to a part count as before.
+ */
+export function partPieces(i: Order["items"][number], batches: Batch[], orderNo: string) {
+  if (!i.parts?.length) return null;
+  const per = i.parts.map((p) => { const rs = batches.filter((b) => b.orderNo === orderNo && b.name === i.name && b.part === p.name && !b.running); return { good: rs.reduce((a, b) => a + (b.done || 0), 0), bad: rs.reduce((a, b) => a + (b.failed ?? 0), 0) }; });
+  return { printed: Math.min(...per.map((x) => x.good)), failed: Math.max(...per.map((x) => x.bad)) };
+}
+/** Move a part line's counts by what one run changed (before and after the run's state flipped). */
+export function applyPartDelta(o: Order, name: string, before: ReturnType<typeof partPieces>, after: ReturnType<typeof partPieces>): Order {
+  const i = o.items.find((x) => x.name === name); if (!i || !before || !after) return o;
+  /* counts not yet stored on the line are summed from the runs, but only the runs that are not parts: those are handled by `after` */
+  const plain = batchesSig.value.filter((b) => b.orderNo === o.no && b.name === name && !b.running && !b.part);
+  const printed = (i.printed !== undefined ? i.printed - before.printed : plain.reduce((a, b) => a + (b.done || 0), 0)) + after.printed;
+  const failed = (i.failed !== undefined ? i.failed - before.failed : plain.reduce((a, b) => a + (b.failed ?? 0), 0)) + after.failed;
+  return patchOrder(o, { items: o.items.map((x) => (x === i ? { ...x, printed: Math.max(0, printed), failed: Math.max(0, failed) } : x)) });
+}
 const addToLine = (o: Order, name: string, good: number, bad: number): Order =>
   o.items.some((i) => i.name === name && (i.printed !== undefined || i.failed !== undefined))
     ? patchOrder(o, { items: o.items.map((i) => (i.name === name && (i.printed !== undefined || i.failed !== undefined) ? { ...i, printed: Math.max(0, (i.printed ?? 0) + good), failed: Math.max(0, (i.failed ?? 0) + bad) } : i)) })
@@ -209,17 +227,20 @@ export function logMachineTime(o: Order, run: { name: string; printer?: string; 
 }
 export function finishRun(o: Order, id: string, good: number, bad: number, grams: Record<string, number> = {}, reason?: string, hours = 0): Order {
   const b = batchesSig.value.find((x) => x.id === id); if (!b) return o;
+  const line = o.items.find((x) => x.name === b.name), was = b.part && line?.parts?.length ? partPieces(line, batchesSig.value, o.no) : null;
   // Filament used (good and failed pieces alike) comes off each spool and lands in the order's consumption.
   const cons: string[] = [];
   for (const [id, g] of Object.entries(grams)) { const sp = spoolsSig.value.find((x) => x.id === id); if (g > 0) cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : id, qty: g, orderNo: o.no, batch: b.name, printer: b.printer, spoolId: sp?.id }).id); }
   const lg = logMachineTime(o, b, hours, good, bad, Object.values(grams).reduce((a, x) => a + x, 0)); cons.push(...lg.cons);
   batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: false, done: good, failed: bad, grams, cons, hours: hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, reason: bad > 0 ? reason || undefined : undefined, by: me.value?.name ?? x.by } : x));
   log("Print done", `${o.no} · ${b.name}: ${good} good, ${bad} failed on ${b.printer}${bad && reason ? ` (${reason})` : ""}`);
+  if (was && line) return applyPartDelta(o, b.name, was, partPieces(line, batchesSig.value, o.no));
   return addToLine(o, b.name, good, bad);
 }
 /** Undo a finished run: counts come back off the line, grams go back on the spools, and the run is on the plate again to re-log. */
 export function undoRun(o: Order, id: string): Order {
   const b = batchesSig.value.find((x) => x.id === id); if (!b || b.running) return o;
+  const line = o.items.find((x) => x.name === b.name), was = b.part && line?.parts?.length ? partPieces(line, batchesSig.value, o.no) : null;
   // New runs: removing their usage rows puts the grams back. Older runs deducted directly, so add those back by hand.
   const rows = consSig.value.filter((c) => b.cons?.includes(c.id));
   for (const c of rows) if (!c.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(c.item, s.spoolNo) || s.spoolNo === c.item ? { ...s, grams: s.grams + c.qty } : s));
@@ -228,6 +249,7 @@ export function undoRun(o: Order, id: string): Order {
   if (b.hours && b.printer) for (const n of b.printer.split(" + ").map((x) => x.trim())) printersSig.value = printersSig.value.map((p) => (p.name === n ? { ...p, hours: Math.max(0, Math.round((p.hours - b.hours!) * 10) / 10) } : p));
   batchesSig.value = batchesSig.value.map((x) => (x.id === id ? { ...x, running: true, done: 0, failed: undefined, grams: undefined, cons: undefined, hours: undefined, jobIds: undefined, reason: undefined } : x));
   log("Undid print", `${o.no} · ${b.name}: ${b.done} good, ${b.failed ?? 0} failed`);
+  if (was && line) return applyPartDelta(o, b.name, was, partPieces(line, batchesSig.value, o.no));
   return addToLine(o, b.name, -b.done, -(b.failed ?? 0));
 }
 /** Pace forecast for an order from its print runs: pieces per day since the first run, and the finish date at that pace. */
