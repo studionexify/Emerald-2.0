@@ -15,9 +15,16 @@ import type { Use, WorkbenchProps } from "./nexcal/Workbench";
 
 /* ---------------------------------------------------------------- small helpers */
 /** Object URL of one photo's small preview ("" until it arrives). */
-function usePreview(id?: string): string {
-  const [u, setU] = useState("");
-  useEffect(() => { let live = true; setU(""); if (id) previewUrl(id).then((x) => live && setU(x)); return () => { live = false; }; }, [id]);
+function usePreview(id?: string, ref?: { current: Element | null }): string {
+  const [u, setU] = useState(""), [near, setNear] = useState(!ref);
+  /* a card far below the fold fetches nothing until it is about to scroll into view */
+  useEffect(() => {
+    if (near || !ref?.current) return;
+    if (typeof IntersectionObserver !== "function") { setNear(true); return; }
+    const io = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: "400px" });
+    io.observe(ref.current); return () => io.disconnect();
+  }, [near, id]);
+  useEffect(() => { let live = true; setU(""); if (id && near) previewUrl(id).then((x) => live && setU(x)); return () => { live = false; }; }, [id, near]);
   return u;
 }
 const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -28,8 +35,8 @@ const Ph = () => <span class="w-full h-full flex items-center justify-center tex
 
 /** A stored photo's small preview, or a placeholder. */
 function Pic({ id, alt, class: cls = "" }: { id?: string; alt: string; class?: string }) {
-  const src = usePreview(id);
-  return src ? <img src={src} alt={alt} loading="lazy" class={`w-full h-full object-cover ${cls}`} /> : <Ph />;
+  const box = useRef<HTMLSpanElement>(null), src = usePreview(id, box);
+  return <span ref={box} class="block w-full h-full">{src ? <img src={src} alt={alt} loading="lazy" decoding="async" class={`w-full h-full object-cover ${cls}`} /> : <Ph />}</span>;
 }
 function Local({ item, alt }: { item: DraftItem; alt: string }) {
   const url = useMemo(() => (item.file ? URL.createObjectURL(item.file) : ""), [item.file]);
@@ -57,13 +64,15 @@ const Seg = <T extends string>({ value, on, items }: { value: T; on: (v: T) => v
 
 /* ---------------------------------------------------------------- page */
 type Panel = null | { k: "new" } | { k: "edit"; id: string } | { k: "view"; id: string };
-type Dlg = null | "pack" | "share" | "assign";
+type Dlg = null | "pack" | "share" | "assign" | "storage";
 
 export default function Nexder() {
   const designs = nexderDesignsSig.value, cats = nexderCatsSig.value;
   const [q, setQ] = useState(""), [cat, setCat] = useState(""), [view, setView] = useState<"all" | "shared">("all");
   const [panel, setPanel] = useState<Panel>(null), [dlg, setDlg] = useState<Dlg>(null);
-  const [selecting, setSelecting] = useState(false), [sel, setSel] = useState<string[]>([]);
+  /** off → pick (tapping cards ticks them, nothing is lost by searching or changing category) → act (Finish selection: share, pack, assign) */
+  const [mode, setMode] = useState<"off" | "pick" | "act">("off"), [sel, setSel] = useState<string[]>([]);
+  const selecting = mode === "pick";
   const writable = can("nexder", "full") && nexderReady;
   const shared = sharedWithMe(), unseen = unseenShares().length;
   useEffect(() => { if (nexderReady) { syncTrash(); if (can("nexder", "full")) sweepOrphans(); } }, []);
@@ -74,8 +83,11 @@ export default function Nexder() {
   const picked = sel.map(by).filter(Boolean) as NxDesign[];
   const open = panel && panel.k !== "new" ? by(panel.id) : undefined;
   useEffect(() => { if (panel && panel.k !== "new" && !open) setPanel(null); }, [panel, open]);
-  const stopSelect = () => { setSelecting(false); setSel([]); };
-  const tap = (d: NxDesign) => (selecting ? setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id])) : setPanel({ k: "view", id: d.id }));
+  const stopSelect = () => { setMode("off"); setSel([]); };
+  const flip = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const tap = (d: NxDesign) => (selecting ? flip(d.id) : setPanel({ k: "view", id: d.id }));
+  /* designs by category, every category open, the way the Filament tab groups by material */
+  const groups = cats.map((c) => ({ c, ds: list.filter((d) => d.catId === c.id).sort((a, b) => a.no.localeCompare(b.no)) })).filter((g) => g.ds.length).sort((a, b) => a.c.name.localeCompare(b.c.name));
 
   const detail = !panel ? null : panel.k === "view" && open
     ? <ViewPanel d={open} writable={writable} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
@@ -85,8 +97,9 @@ export default function Nexder() {
 
   return (
     <Page title="Nexder" sub="Designs, photos and files. Photos and files are kept in Google Drive; Emerald shows small copies."
-      actions={<>{designs.length > 0 && <Button variant="outline" icon={selecting ? "check" : undefined} onClick={() => (selecting ? stopSelect() : setSelecting(true))}>{selecting ? "Done" : "Select"}</Button>}
-        {writable && <Button icon="plus" onClick={() => { setPanel({ k: "new" }); stopSelect(); }}>New design</Button>}</>}
+      actions={<>{nexderReady && designs.length > 0 && <Button variant="outline" icon="archive" onClick={() => setDlg("storage")}>Storage</Button>}
+        {designs.length > 0 && (mode === "off" ? <Button variant="outline" onClick={() => { setMode("pick"); setPanel(null); }}>Select</Button> : <Button variant="outline" onClick={stopSelect}>Cancel selection</Button>)}
+        {writable && <Button icon="plus" onClick={() => { setPanel({ k: "new" }); }}>New design</Button>}</>}
       toolbar={<>
         <label class="relative w-full md:w-[260px]"><span class="sr-only">Search designs</span><span class="absolute left-3 top-2.5 text-c2 pointer-events-none"><Icon name="search" size={13} /></span>
           <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Name or number" class={`${inputCls} !pl-8`} /></label>
@@ -102,28 +115,40 @@ export default function Nexder() {
       {!designs.length
         ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="No designs yet" action={writable ? <Button icon="plus" class="mt-2" onClick={() => setPanel({ k: "new" })}>New design</Button> : undefined} /></div>
         : !list.length ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="Nothing matches" action={<button class="underline text-[13px]" onClick={() => { setQ(""); setCat(""); setView("all"); }}>Clear filters</button>} /></div>
-        : <div class="grid gap-3 items-start grid-cols-[repeat(auto-fill,minmax(168px,1fr))]">{list.map((d) => {
-          const on = sel.includes(d.id), cur = open?.id === d.id;
-          return (
-            <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={selecting ? on : undefined} aria-label={`${d.name}, ${d.no}`}
-              class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
-              <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
-              {incomplete(d).length > 0 && <span class="absolute top-2.5 right-2.5 rounded-full bg-amb-bg text-amb text-[11px] font-semibold px-2 h-5 inline-flex items-center">Upload incomplete</span>}
-              {selecting && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
-              <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span> · {catName(d.catId)}</span></span>
-            </button>
-          );
-        })}</div>}
-      {selecting && sel.length > 0 && (
+        : <div class="grid gap-6">{groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)); return (
+          <section key={c.id} aria-label={c.name} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
+            <div class="flex items-center gap-2 pb-2 border-b-2 border-c4/25">
+              <b class="text-[14px] tracking-[0.04em]">{c.name}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
+              {selecting && <button type="button" onClick={() => setSel((x) => (all ? x.filter((id) => !ds.some((d) => d.id === id)) : [...new Set([...x, ...ds.map((d) => d.id)])]))} class="ml-auto text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{all ? "Unselect category" : "Select category"}</button>}
+            </div>
+            <div class="grid gap-3 items-start grid-cols-[repeat(auto-fill,minmax(160px,1fr))] mt-3">{ds.map((d) => {
+              const on = sel.includes(d.id), cur = open?.id === d.id;
+              return (
+                <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={mode !== "off" ? on : undefined} aria-label={`${d.name}, ${d.no}`}
+                  class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
+                  <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
+                  {incomplete(d).length > 0 && <span class="absolute top-2.5 right-2.5 rounded-full bg-amb-bg text-amb text-[11px] font-semibold px-2 h-5 inline-flex items-center">Upload incomplete</span>}
+                  {mode !== "off" && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
+                  <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span></span></span>
+                </button>);
+            })}</div>
+          </section>); })}</div>}
+      {mode !== "off" && (
         <div class="sticky bottom-2 flex justify-center pointer-events-none z-20">
           <div class="pointer-events-auto inline-flex flex-wrap justify-center items-center gap-1 min-h-12 pl-4 pr-1.5 py-1 rounded-3xl bg-c4 text-c0 shadow-xl max-w-full">
-            <span class="text-[13px] font-semibold mr-2 whitespace-nowrap">{sel.length} selected</span>
-            {([["share", "Share", "share"], ["zip", "Client pack", "pack"], ["link", "Assign to order", "assign"]] as const).filter(([, , k]) => k === "share" || writable).map(([i, l, k]) => (
-              <button key={k} type="button" onClick={() => setDlg(k as Dlg)} class="h-9 px-3 !min-h-0 rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer"><Icon name={i} size={15} />{l}</button>))}
-            <button type="button" aria-label="Clear selection" onClick={() => setSel([])} class="w-9 h-9 !min-h-0 rounded-full inline-flex items-center justify-center hover:bg-c0/15 cursor-pointer"><Icon name="close" size={14} /></button>
+            <span class="text-[13px] font-semibold mr-2 whitespace-nowrap">{sel.length} selected{mode === "pick" ? " · tap cards, search and filter freely" : ""}</span>
+            {mode === "pick" ? <>
+              {sel.length > 0 && <button type="button" onClick={() => setSel([])} class="h-9 px-3 !min-h-0 rounded-full text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer">Clear</button>}
+              <button type="button" disabled={!sel.length} onClick={() => setMode("act")} class="h-9 px-4 !min-h-0 rounded-full bg-c0 text-c4 text-[13px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"><Icon name="check" size={14} /> Finish selection</button>
+            </> : <>
+              {([["share", "Share", "share"], ["zip", "Client pack", "pack"], ["link", "Assign to order", "assign"]] as const).filter(([, , k]) => k === "share" || writable).map(([i, l, k]) => (
+                <button key={k} type="button" onClick={() => setDlg(k as Dlg)} class="h-9 px-3 !min-h-0 rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer"><Icon name={i} size={15} />{l}</button>))}
+              <button type="button" onClick={() => setMode("pick")} class="h-9 px-3 !min-h-0 rounded-full text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer">Change selection</button>
+              <button type="button" aria-label="Clear selection" onClick={stopSelect} class="w-9 h-9 !min-h-0 rounded-full inline-flex items-center justify-center hover:bg-c0/15 cursor-pointer"><Icon name="close" size={14} /></button>
+            </>}
           </div>
         </div>)}
-      {designs.length > 0 && nexderReady && <Storage writable={can("nexder", "full")} />}
+      {dlg === "storage" && <StorageSheet writable={can("nexder", "full")} onClose={() => setDlg(null)} />}
       {windowOpen && <DesignWindow key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />}
       {dlg === "pack" && <PackModal initial={picked} onClose={() => setDlg(null)} />}
       {dlg === "share" && <ShareModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
@@ -426,14 +451,14 @@ function PackModal({ initial, onClose }: { initial: NxDesign[]; onClose: () => v
 }
 
 /* ---------------------------------------------------------------- storage meter and Drive check */
-function Storage({ writable }: { writable: boolean }) {
+function StorageSheet({ writable, onClose }: { writable: boolean; onClose: () => void }) {
   const [sp, setSp] = useState<Space | null>(null), [err, setErr] = useState(""), [res, setRes] = useState<Check[] | null>(null), [busy, setBusy] = useState(false);
   const pv = previewBytes();
+  useEffect(() => { load(); }, []);
   const load = () => driveSpace().then(setSp).catch((e) => setErr((e as Error).message));
   const bar = (v: number, max: number) => <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class={`h-full ${v / max > 0.9 ? "bg-red" : "bg-acc"}`} style={{ width: `${Math.min(100, (v / max) * 100)}%` }} /></div>;
   return (
-    <details class="rounded-[var(--radius-card)] bg-c0 min-w-0" onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open && !sp) load(); }}>
-      <summary class="flex items-center gap-2 min-h-10 px-3 py-2 select-none"><span class="chev text-c2 inline-flex"><Icon name="right" size={12} /></span><span class="text-[13px] font-semibold">Storage</span><span class="ml-auto t-meta text-right">Google Drive and previews</span></summary>
+    <Sheet onClose={onClose} title="Storage">
       <div class="px-3 pb-3 grid gap-3">
         <div class="grid gap-1"><div class="flex justify-between gap-3 text-[13px]"><span>Google Drive</span><span class="num">{sp ? `${fmtBytes(sp.usage)}${sp.limit ? ` of ${fmtBytes(sp.limit)}` : ""}` : err ? "unavailable" : "…"}</span></div>
           {sp?.limit ? bar(sp.usage, sp.limit) : null}
@@ -442,7 +467,7 @@ function Storage({ writable }: { writable: boolean }) {
         {writable && <div class="grid gap-2"><div><Button variant="outline" disabled={busy} onClick={async () => { setBusy(true); setRes(null); setRes(await checkDrive().catch((e) => [{ step: "Check", ok: false, note: (e as Error).message }])); setBusy(false); load(); }}>{busy ? "Checking…" : "Check Google Drive"}</Button></div>
           {res && <ul class="grid gap-1">{res.map((c) => <li key={c.step} class="text-[12.5px] break-words"><b class={c.ok ? "text-grn" : "text-red"}>{c.ok ? "OK" : "Failed"}</b> · {c.step}{c.note ? <span class="text-c3"> · {c.note}</span> : null}</li>)}</ul>}</div>}
       </div>
-    </details>
+    </Sheet>
   );
 }
 

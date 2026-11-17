@@ -290,7 +290,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
   const runs = batchesSig.value.filter((b) => b.orderNo === order.no && b.name === item.name && (b.running || b.printer || b.spool));
   const p = lineProgress(order, item);
   const printers = printersSig.value.filter((x) => x.active !== false && x.status !== "down");
-  const [qty, setQty] = useState(0), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]), [rk, setRk] = useState(0);
+  const [qty, setQty] = useState(0), [part, setPart] = useState(""), [pr, setPr] = useState(""), [sps, setSps] = useState<string[]>([""]), [rk, setRk] = useState(0);
   const [fin, setFin] = useState<Record<string, [number, number]>>({}), [gm, setGm] = useState<Record<string, Record<string, number>>>({}), [why, setWhy] = useState<Record<string, string>>({}), [hrs, setHrs] = useState<Record<string, number>>({});
   const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
   const room = Math.max(0, p.pending - p.printing);
@@ -300,7 +300,7 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
   /** Suggested grams per spool for a run: learnt grams-per-piece × pieces, split evenly across its spools. */
   const guess = (r: Batch, id: string) => gm[r.id]?.[id] ?? (gpp ? Math.round((gpp * r.units) / Math.max(1, runSpools(r).length)) : 0);
   const gramsFor = (r: Batch) => Object.fromEntries(runSpools(r).map((x) => [x.id, guess(r, x.id)]));
-  const start = (e: Event) => { e.preventDefault(); const n = qty || room; if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", picked.map((x) => ({ id: x.id, label: spoolLabel(x) }))); setQty(0); setSps([""]); setRk(rk + 1); onOpen({ ...order }); };
+  const start = (e: Event) => { e.preventDefault(); const n = qty || room || (part.trim() ? 1 : 0); if (!n) return; startRun(order, item.name, n, pr || printers[0]?.name || "Printer", picked.map((x) => ({ id: x.id, label: spoolLabel(x) })), part.trim() || undefined); setQty(0); setPart(""); setSps([""]); setRk(rk + 1); onOpen({ ...order }); };
   const live = runs.filter((r) => r.running), past = runs.filter((r) => !r.running);
   return <div class="flex flex-col gap-2">
     <form class="rounded-lg border border-c4/30 bg-c1 p-2 flex flex-col gap-1.5" onSubmit={start}>
@@ -309,7 +309,8 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
         <input class={c} type="number" min={1} placeholder={String(room)} value={qty || ""} onInput={(e) => setQty(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Pieces in this run" />
         <select class={c} value={pr || printers[0]?.name} onChange={(e) => setPr((e.target as HTMLSelectElement).value)} aria-label="Printer">{printers.map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}</select>
       </div>
-      <span class="t-meta">Spools / materials used — type, colour, then spool no.</span>
+      <input class={c} value={part} onInput={(e) => setPart((e.target as HTMLInputElement).value)} placeholder="Part of a bigger piece? e.g. Left half (optional)" aria-label="Part (optional)" />
+      <span class="t-meta">Spools / materials used on this printer — type, colour, then spool no. Press Start again for the next printer: each has its own run and its own filaments.</span>
       {sps.map((v, k) => <div key={`${rk}-${k}`} class="flex items-center gap-1.5">
         <span class="t-meta w-4 text-right">{k + 1}</span>
         <SpoolPick n={k + 1} value={v} taken={sps.filter((_, j) => j !== k)} onChange={(id) => setSps(sps.map((x, j) => (j === k ? id : x)))} />
@@ -322,8 +323,8 @@ export function PrintRuns({ order, item, onOpen }: { order: Order; item: Order["
           : <p class="t-meta">Needs about {need} g · {have} g on the picked spool{picked.length > 1 ? "s" : ""}</p>; })()}
       <button class="h-8 rounded-lg bg-c4 text-c0 text-xs font-medium cursor-pointer">Start print</button>
     </form>
-    {live.map((r) => { const f = fin[r.id] ?? [r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id], hrs[r.id] ?? runHours(r))); }}>
-      <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.spool ? ` · ${r.spool}` : ""}{r.by ? <span class="t-meta"> · {r.by}</span> : null}</span></div>
+    {live.map((r) => { const f = fin[r.id] ?? [r.part ? 0 : r.units, 0]; const rs = runSpools(r); return <form key={r.id} class="rounded-lg border border-line p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); onOpen(finishRun(order, r.id, f[0], f[1], gramsFor(r), why[r.id], hrs[r.id] ?? runHours(r))); }}>
+      <div class="flex items-center gap-2"><Status tone="active">printing</Status><span class="flex-1 min-w-0 truncate"><b class="num">{r.units}×</b> {r.printer}{r.part ? ` · ${r.part}` : ""}{r.spool ? ` · ${r.spool}` : ""}{r.by ? <span class="t-meta"> · {r.by}</span> : null}</span></div>
       <div class="flex flex-wrap items-center gap-1.5">
         <label class="t-meta">Good</label><input class={`${c} w-14`} type="number" min={0} value={f[0]} onInput={(e) => setFin({ ...fin, [r.id]: [Number((e.target as HTMLInputElement).value) || 0, f[1]] })} />
         <label class="t-meta">Failed</label><input class={`${c} w-14`} type="number" min={0} value={f[1]} onInput={(e) => setFin({ ...fin, [r.id]: [f[0], Number((e.target as HTMLInputElement).value) || 0] })} />
