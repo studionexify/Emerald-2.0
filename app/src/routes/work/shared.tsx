@@ -14,6 +14,9 @@ import { ask, askText, Pick, Button, DetailHead, Fold, Icon, Page, Status } from
 import { startRun, finishRun, runHours, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
+import { PartsButton } from "./Parts";
+import { advancesOf } from "../../data/ledger";
+const AdvanceCard = lazy<{ order: Order; total: number }>(() => import("./Advance").then((m) => m.AdvanceCard));
 const QuoteFlow = lazy<{ order: Order; onClose: () => void; start?: "approve" }>(() => import("./ClientFlow").then((m) => m.QuoteFlow));
 const Floor = lazy<{ order: Order; onClose: () => void }>(() => import("./Floor").then((m) => m.Floor));
 
@@ -156,6 +159,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
         {seg !== "inhouse" && <div class="flex justify-between text-[13px] pt-2 mt-1 border-t border-line"><span class="text-c3">Total</span><b class="num">{inr(total)}</b></div>}
       </Fold>
 
+      {seg !== "inhouse" && <Fold id={F("pay")} hue={H.client} title="Payment & advance" meta={(() => { const adv = advancesOf(order.no).reduce((x, m) => x + m.amount, 0); return adv ? `${inr(adv)} received` : "no advance"; })()}><AdvanceCard order={order} total={total} /></Fold>}
       <Fold id={F("prod")} hue={H.prod} title="Stages & checklist" meta={`${STAGE_LABEL[order.stage]} · ${ckDone}/${ck.length}`}>
         <ol class="flex flex-col mb-2" aria-label="Pipeline">
           {STAGE_ORDER.filter((st) => seg !== "inhouse" || sug.includes(st) || st === order.stage).map((st, i) => { const at = STAGE_ORDER.indexOf(st), done = at < cur, now = at === cur, off = !sug.includes(st);
@@ -235,6 +239,7 @@ function LineRow({ order, i, k, onOpen, filG, seg }: { order: Order; i: Order["i
       <button class="w-7 h-7 !min-h-0 grid place-items-center rounded-lg text-c3 cursor-pointer" style={{ transform: open ? "rotate(90deg)" : undefined }} onClick={() => setOpen(!open)} aria-label="More"><Icon name="right" size={12} /></button>
     </div>
     {open && <div class="pb-3 flex flex-col gap-2 text-xs pop-in">
+      <div class="flex"><PartsButton o={order} k={k} /></div>
       {seg === "bulk" && <PrintRuns order={order} item={i} onOpen={onOpen} />}
       {seg === "bulk" ? <details><summary class="cursor-pointer t-meta py-1">Product image</summary>
       <label class={`flex items-center gap-2 rounded-lg border border-dashed p-2 cursor-pointer ${drag ? "border-c4 bg-c1" : "border-line"}`}

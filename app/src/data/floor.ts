@@ -1,4 +1,5 @@
 /** Floor sheet (bulk work sheet): colour stock, grams needed, and logging plates per line item. */
+import type { LinePart } from "../mock/types";
 import { batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
 import { filMasterSig, spoolsSig } from "./inventory";
 
@@ -113,3 +114,27 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
 }
 /** Cancel a run that never finished. */
 export const cancelRun = (id: string) => { batchesSig.value = batchesSig.value.filter((b) => b.id !== id); };
+
+/* ---------------------------------------------------------------- cut into parts */
+/** Cut a line into n parts, each starting from the line's own type and colour. Refused once prints are logged against the line's parts. */
+export function cutParts(o: Order, k: number, n: number): Order {
+  const i = o.items[k], count = Math.max(2, Math.min(24, Math.round(n) || 2));
+  const parts: LinePart[] = Array.from({ length: count }, (_, j) => ({ id: crypto.randomUUID(), name: `Part ${j + 1}`, material: i.material, colour: lineColours(i)[0] ?? i.colour, printer: i.machine?.split(" + ")[0] ?? "" }));
+  log("Cut into parts", `${o.no} · ${i.name} into ${count}`);
+  return setLine(o, k, { parts });
+}
+export const saveParts = (o: Order, k: number, parts: LinePart[] | undefined): Order => setLine(o, k, { parts: parts?.length ? parts : undefined });
+/** Everything printed so far for a line, failed prints included: grams that left the spools and hours on the machines. */
+export function runTotals(o: Order, i: LineItem, part?: string) {
+  const runs = batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && (part === undefined || (b.part ?? "") === part));
+  const done = runs.filter((b) => !b.running);
+  return {
+    runs: runs.length, running: runs.length - done.length,
+    good: done.reduce((a, b) => a + (b.done || 0), 0), failed: done.reduce((a, b) => a + (b.failed ?? 0), 0),
+    g: Math.round(done.reduce((a, b) => a + Object.values(b.grams ?? {}).reduce((x, y) => x + y, 0), 0)),
+    h: Math.round(done.reduce((a, b) => a + (b.hours ?? 0), 0) * 10) / 10,
+    /** runs printed with the spools still loaded: their grams arrive at the final weigh */
+    toWeigh: done.filter((b) => b.weighLater).length,
+  };
+}
+export const hoursText = (h: number) => { const m = Math.round(h * 60); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
