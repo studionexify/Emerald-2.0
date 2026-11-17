@@ -2,12 +2,16 @@
  * Nexder: the studio's library of designs (photos + any files such as STL, 3MF, STEP).
  *
  * Records (designs, categories, shares) hold only metadata and ONE tiny inline cover. Original photos, the small preview
- * copies and design files are blobs behind `blobStore`. Today that store is IndexedDB on the uploading device.
- * To connect Google Drive, give `blobStore` a second implementation (put → drive-media upload, get → mediaDownload,
- * see data/media.ts and supabase/DRIVE-SETUP.md). Nothing else in Nexder changes, because records only keep blob ids.
+ * copies and design files are blobs behind `blobStore`.
+ * Signed in to the cloud: every blob is also sent to Google Drive through the drive-media Edge Function (the same pipeline
+ * as order photos, see data/media.ts and supabase/DRIVE-SETUP.md). The Drive file id is kept in the synced `mediaSig`, so
+ * other devices can fetch it. Originals are always downloaded from Drive; this device keeps a cache for the small previews.
+ * Without cloud sync (single-device mode) everything stays in IndexedDB on this device.
  */
 import { zipSync } from "fflate";
-import { persisted, today, uid } from "./store";
+import { effect, signal } from "@preact/signals";
+import { localGet, localSet, persisted, today, uid } from "./store";
+import { mediaSig } from "./media";
 import { binSig, jobSpool, registerBin, toBin } from "./inventory";
 import { me, usersSig } from "./auth";
 import { batchesSig, jobsSig, log, ordersSig, patchOrder, lineProgress, spoolsSig, type LineItem, type Order } from "./index";
@@ -43,10 +47,57 @@ const db = () => dbp ??= new Promise<IDBDatabase>((ok, bad) => {
   r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error);
 });
 const tx = async <T,>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>) => { const d = await db(); return new Promise<T>((ok, bad) => { const r = f(d.transaction("blobs", mode).objectStore("blobs")); r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error); }); };
+const cloud = !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.MODE !== "artifact";
+/** The drive-media function refuses bigger files (supabase/functions/drive-media). */
+export const DRIVE_MAX = 8 * 1024 * 1024;
+type Wait = { name: string; mime: string; big?: boolean };
+const queue = signal<Record<string, Wait>>(localGet("nexder:queue", {}));
+const saveQueue = () => localSet("nexder:queue", queue.value);
+const driveOf = (id: string) => mediaSig.value.find((m) => m.id === id)?.drive;
+/** Where a stored blob lives right now. */
+export type Where = "drive" | "uploading" | "toobig" | "device";
+export const whereIs = (id: string): Where => (driveOf(id) ? "drive" : !cloud ? "device" : queue.value[id]?.big ? "toobig" : "uploading");
+export const whereText = (w: Where) => ({ drive: "on Google Drive", uploading: "uploading to Google Drive…", toobig: "over 8 MB, kept on this device only", device: "this device only" })[w];
+const b64 = async (b: Blob) => { const u = new Uint8Array(await b.arrayBuffer()); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+let sending = false;
+/** Sends waiting blobs to Drive. Safe to call any time: offline or signed out it does nothing and nothing is lost. */
+export async function syncUp() {
+  if (!cloud || sending || !Object.keys(queue.value).length) return;
+  const sync = await import("./sync"); if (!sync.cloudUser.value) return;
+  sending = true;
+  try {
+    for (const [id, w] of Object.entries(queue.value)) {
+      if (w.big) continue;
+      const blob = await tx<Blob | undefined>("readonly", (st) => st.get(id)).catch(() => undefined);
+      if (!blob) { const { [id]: _x, ...rest } = queue.value; queue.value = rest; saveQueue(); continue; }
+      if (blob.size > DRIVE_MAX) { queue.value = { ...queue.value, [id]: { ...w, big: true } }; saveQueue(); continue; }
+      const drive = await sync.mediaUpload({ id, name: w.name, mime: w.mime, data: await b64(blob) });
+      if (!drive) break; // offline or failing: try again later
+      if (!mediaSig.value.some((m) => m.id === id)) mediaSig.value = [...mediaSig.value, { id, drive, mime: w.mime }];
+      const { [id]: _done, ...rest } = queue.value; queue.value = rest; saveQueue();
+    }
+  } finally { sending = false; }
+}
+if (cloud) {
+  addEventListener("online", () => syncUp());
+  import("./sync").then((sync) => effect(() => { if (sync.cloudUser.value) syncUp(); }));
+}
+const fromDrive = async (id: string) => { const d = driveOf(id); if (!d || !cloud) return null; return (await (await import("./sync")).mediaDownload(d)) ?? null; };
 export const blobStore = {
-  put: (id: string, b: Blob) => tx("readwrite", (s) => s.put(b, id)).then(() => undefined),
-  get: (id: string) => tx<Blob | undefined>("readonly", (s) => s.get(id)).then((b) => b ?? null).catch(() => null),
-  del: (id: string) => tx("readwrite", (s) => s.delete(id)).then(() => undefined).catch(() => undefined),
+  /** Keeps the blob on this device at once, then sends it to Drive in the background. */
+  put: async (id: string, b: Blob, name = id, mime = b.type || "application/octet-stream") => {
+    await tx("readwrite", (st) => st.put(b, id));
+    if (cloud) { queue.value = { ...queue.value, [id]: { name, mime } }; saveQueue(); syncUp(); }
+  },
+  /** For showing: this device first, then Drive (and keep a copy here). */
+  get: async (id: string) => {
+    const l = await tx<Blob | undefined>("readonly", (st) => st.get(id)).catch(() => undefined); if (l) return l;
+    const r = await fromDrive(id); if (r) tx("readwrite", (st) => st.put(r, id)).catch(() => undefined);
+    return r;
+  },
+  /** For downloading: always from Google Drive once it is there; this device's copy only while the upload is still waiting. */
+  original: async (id: string) => (await fromDrive(id)) ?? (await tx<Blob | undefined>("readonly", (st) => st.get(id)).catch(() => undefined)) ?? null,
+  del: (id: string) => { if (queue.value[id]) { const { [id]: _x, ...rest } = queue.value; queue.value = rest; saveQueue(); } return tx("readwrite", (st) => st.delete(id)).then(() => undefined).catch(() => undefined); },
 };
 const small = (id: string) => id + "-s";
 const toBlob = (dataUrl: string) => fetch(dataUrl).then((r) => r.blob());
@@ -83,10 +134,10 @@ export async function saveDraft(d: Draft, catId: string): Promise<NxDesign | str
   /* blobs first: if storing fails nothing is half-saved */
   try {
     for (const p of d.photos) if (p.file) {
-      await blobStore.put(p.id, p.file);
-      await blobStore.put(small(p.id), await toBlob(await shrinkImage(p.file, 640, 0.7)));
+      await blobStore.put(p.id, p.file, p.name, p.mime);
+      await blobStore.put(small(p.id), await toBlob(await shrinkImage(p.file, 640, 0.7)), `preview-${p.name}.jpg`, "image/jpeg");
     }
-    for (const f of d.files) if (f.file) await blobStore.put(f.id, f.file);
+    for (const f of d.files) if (f.file) await blobStore.put(f.id, f.file, f.name, f.mime);
   } catch { return "This device could not store the files (storage full or blocked)"; }
   const keep = (a: DraftItem[]) => new Set(a.map((x) => x.id));
   if (prev) {
@@ -120,8 +171,8 @@ export const binHasBlobs = () => binSig.value.some((b) => b.kind === "Design");
 export function saveBlob(b: Blob, name: string) {
   const a = document.createElement("a"), u = URL.createObjectURL(b); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
 }
-/** Fetches the original from the blob store (Google Drive once connected), never a preview. */
-export async function downloadFile(f: { id: string; name: string }): Promise<boolean> { const b = await blobStore.get(f.id); if (!b) return false; saveBlob(b, f.name); return true; }
+/** Fetches the original from Google Drive (this device's copy only while the upload is still waiting), never a preview. */
+export async function downloadFile(f: { id: string; name: string }): Promise<boolean> { const b = await blobStore.original(f.id); if (!b) return false; saveBlob(b, f.name); return true; }
 
 /* ---------------------------------------------------------------- client pack */
 const clean = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().replace(/^\.+|\.+$/g, "").slice(0, 80) || "Untitled";
@@ -141,8 +192,8 @@ export async function buildPack(ds: NxDesign[], o: PackOpts): Promise<{ blob?: B
   const out: Record<string, Uint8Array> = {}; let missing = 0;
   for (const p of packPlan(ds, o)) {
     let n = 0;
-    for (const ph of p.photos) { const b = await blobStore.get(ph.id); if (!b) { missing++; continue; } n++; out[`${p.cat}/${p.name}/${p.name}-${n}.${ext(ph)}`] = new Uint8Array(await b.arrayBuffer()); }
-    for (const f of p.files) { const b = await blobStore.get(f.id); if (!b) { missing++; continue; } out[`${p.cat}/${p.name}/files/${clean(f.name)}`] = new Uint8Array(await b.arrayBuffer()); }
+    for (const ph of p.photos) { const b = await blobStore.original(ph.id); if (!b) { missing++; continue; } n++; out[`${p.cat}/${p.name}/${p.name}-${n}.${ext(ph)}`] = new Uint8Array(await b.arrayBuffer()); }
+    for (const f of p.files) { const b = await blobStore.original(f.id); if (!b) { missing++; continue; } out[`${p.cat}/${p.name}/files/${clean(f.name)}`] = new Uint8Array(await b.arrayBuffer()); }
   }
   if (!Object.keys(out).length) return { missing };
   /* images and most design files are already compressed; store them as they are */

@@ -1,4 +1,4 @@
-/** Nexder: the studio's library of designs. Photos and design files live in the blob store (Google Drive once connected); Emerald shows small copies. */
+/** Nexder: the studio's library of designs. Photos and design files are kept in Google Drive (single-device mode: on this device); Emerald shows small copies. */
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
@@ -6,7 +6,7 @@ import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from ".
 import { calculateNexcal, emptyNexcalInputs, NEXCAL_MATERIALS } from "../data/nexcal/engine";
 import { nexcalSig } from "../data/pricing";
 import {
-  addCategory, assignable, assignToOrder, blankDraft, blobStore, buildPack, catName, deleteDesign, downloadFile, draftOf, draftReady, markSeen, materialUsage, nexderCatsSig, nexderDesignsSig,
+  addCategory, assignable, whereIs, whereText, assignToOrder, blankDraft, blobStore, buildPack, catName, deleteDesign, downloadFile, draftOf, draftReady, markSeen, materialUsage, nexderCatsSig, nexderDesignsSig,
   nextNo, packBytes, packPlan, saveBlob, saveDraft, sharedWithMe, shareDesigns, unseenShares, type Draft, type DraftItem, type NxDesign, type NxSize, MAX_PER_CAT,
 } from "../data/nexder";
 import { uid } from "../data/store";
@@ -16,6 +16,7 @@ const urls = new Map<string, string>();
 /** Object URL for a stored blob ("" until it is read, or when it is not on this device). */
 function useStored(id?: string): string {
   const [u, setU] = useState(id ? urls.get(id) ?? "" : "");
+  const onDrive = id ? whereIs(id) === "drive" : false; // re-read once the Drive id has synced in from another device
   useEffect(() => {
     let live = true;
     if (!id) { setU(""); return; }
@@ -23,7 +24,7 @@ function useStored(id?: string): string {
     setU("");
     blobStore.get(id).then((b) => { if (!live || !b) return; const url = URL.createObjectURL(b); urls.set(id, url); setU(url); });
     return () => { live = false; };
-  }, [id]);
+  }, [id, onDrive]);
   return u;
 }
 const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -132,7 +133,7 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
   const ph = d.photos[Math.min(i, d.photos.length - 1)];
   const usage = materialUsage(d.id), total = usage.reduce((a, u) => a + u.total, 0);
   useEffect(() => { setI(0); setMissing(""); }, [d.id]);
-  const get = async (f: { id: string; name: string }) => { setBusy(f.id); setMissing(""); if (!(await downloadFile(f))) setMissing(`${f.name} is not on this device yet. It will download from Google Drive once Drive is connected.`); setBusy(""); };
+  const get = async (f: { id: string; name: string }) => { setBusy(f.id); setMissing(""); if (!(await downloadFile(f))) setMissing(whereIs(f.id) === "device" ? `${f.name} is only on the device that uploaded it. Sign in to cloud sync to keep it in Google Drive.` : `${f.name} could not be fetched from Google Drive. Check your connection and try again.`); setBusy(""); };
   const all = async () => { for (const f of d.files) await get(f); };
   return (
     <div class="flex flex-col min-h-full gap-3.5">
@@ -152,7 +153,7 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
         <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
         {d.files.length ? <div class="grid gap-1.5">{d.files.map((f) => (
           <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span>
-            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · original</span></span>
+            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {whereText(whereIs(f.id))}</span></span>
             <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button></div>))}</div>
           : <p class="t-meta">No design file yet.{writable ? " Edit the design to add one." : ""}</p>}
         {d.photos.length > 0 && <button type="button" onClick={async () => { for (const p of d.photos) await downloadFile(p); }} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download original photos</button>}
@@ -313,9 +314,9 @@ function PackModal({ initial, onClose }: { initial: NxDesign[]; onClose: () => v
   const run = async () => {
     setBusy(true); setNote("");
     const r = await buildPack(ds, o); setBusy(false);
-    if (!r.blob) return setNote("None of these photos are on this device yet. They will download from Google Drive once Drive is connected.");
+    if (!r.blob) return setNote("Could not fetch these from Google Drive. Check your connection and try again.");
     saveBlob(r.blob, `client-pack-${new Date().toISOString().slice(0, 10)}.zip`); log("Client pack", `${ds.length} designs`);
-    if (r.missing) setNote(`${r.missing} file${r.missing > 1 ? "s were" : " was"} not on this device and left out.`); else onClose();
+    if (r.missing) setNote(`${r.missing} file${r.missing > 1 ? "s were" : " was"} not available from Google Drive and left out.`); else onClose();
   };
   return (
     <Sheet onClose={onClose} title="Client pack" footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button icon="in" disabled={busy || !nImg && !files} onClick={run}>{busy ? "Building…" : "Download zip"}</Button></>}>
