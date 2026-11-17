@@ -83,7 +83,7 @@ export function BulkDialog({ kind, ds, onClose }: { kind: "price" | "dup" | "del
   const plan = deletePlan(ds);
   const run = async () => {
     setBusy(true); setOut([]);
-    if (kind === "price") { bulkPrice(ds.map((d) => d.id), mode, n); onClose(true); return; }
+    if (kind === "price") { bulkPrice(ds.map((d) => d.id), mode, n, `${MODES.find(([k]) => k === mode)![1].replace("₹", "").trim()} ${v}`); onClose(true); return; }
     const bad: string[] = [];
     if (kind === "dup") bad.push(...(await duplicateDesigns(ds)));
     else for (const d of ds) { const e = await deleteDesign(d); if (e) bad.push(`${d.name}: ${e}`); }

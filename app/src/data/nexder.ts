@@ -9,6 +9,7 @@
  * Every limit that could cost money is checked here before an upload starts (LIMITS), and the server checks it again.
  */
 import { Zip, ZipPassThrough } from "fflate";
+import { signal } from "@preact/signals";
 import { persisted, today, uid } from "./store";
 import { binSig, jobSpool, registerBin, toBin } from "./inventory";
 import { me, usersSig } from "./auth";
@@ -45,6 +46,11 @@ export type NxTrash = { id: string; folder: string; photoIds: string[] };
 
 export const nexderCatsSig = persisted<NxCat[]>("nexderCats", []);
 export const nexderDesignsSig = persisted<NxDesign[]>("nexderDesigns", []);
+/** Bulk price changes that can still be undone, newest first. Kept on this device only. */
+export type PriceUndo = { at: string; label: string; items: { id: string; from?: number; to?: number }[] };
+const UNDO_KEY = "emerald:nexder:priceUndo";
+export const priceUndoSig = signal<PriceUndo[]>((() => { try { const x = JSON.parse(localStorage.getItem(UNDO_KEY) ?? "[]"); return Array.isArray(x) ? x : []; } catch { return []; } })());
+export const setPriceUndo = (v: PriceUndo[]) => { priceUndoSig.value = v; try { localStorage.setItem(UNDO_KEY, JSON.stringify(v)); } catch { /* not remembered */ } };
 export const nexderSharesSig = persisted<NxShare[]>("nexderShares", []);
 export const nexderTrashSig = persisted<NxTrash[]>("nexderTrash", []);
 /** A design coming back from the Bin takes a new number when someone else was given its number meanwhile (the live design always keeps its own). */
