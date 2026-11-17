@@ -12,8 +12,8 @@ import { MediaImg } from "../../ui/media";
 import {clientsSig, shrinkImage, storeMedia, type Client} from "../../data";
 import { DocSheet, fromInvoice, fromQuote, type DocData } from "./Doc";
 import { WorkShell } from "./shared";
+import { approveOrder, ensureQuote, reopenQuote, declineQuote } from "../../data/quoting";
 
-const linesOf = (o: Order): InvLine[] => o.items.map((i) => ({ desc: `${i.name} (${i.material} ${i.colour})`, hsn: "491199", qty: i.qty, rate: i.price }));
 
 /** Editable line items for invoices and quotations. */
 function LinesEditor({ lines, on, locked }: { lines: InvLine[]; on: (l: InvLine[]) => void; locked?: boolean }) {
@@ -44,8 +44,8 @@ export function Quotes() {
   const cur = open && (vQuotes().find((q) => q.id === open.id) ?? open);
   const upd = (q: Quote, p: Partial<Quote>) => { quotesSig.value = quotesSig.value.map((x) => (x.id === q.id ? { ...x, ...p } : x)); if (p.outcome) log(`Quote ${p.outcome}`, q.no); };
   const rows = [...vQuotes()].filter((q) => f === "all" || q.outcome === f).sort((a, b) => b.no.localeCompare(a.no));
-  const make = (o?: Order) => { const valid = addDays(today(), rate("quoteValid"));
-    const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: o?.customer ?? "", orderNo: o?.no, lines: o ? linesOf(o) : [{ desc: "", hsn: "491199", qty: 1, rate: 0 }], gstRate: rate("gst"), valid, outcome: "open", pay: o?.pay };
+  const make = (o?: Order) => { if (o) { setOpen(ensureQuote(o)); setView("edit"); return; } // an order's quote comes from the shared function, so every screen makes the same quote
+    const q: Quote = { id: uid(), no: nextNo("quote"), date: today(), customer: "", lines: [{ desc: "", hsn: "491199", qty: 1, rate: 0 }], gstRate: rate("gst"), valid: addDays(today(), rate("quoteValid")), outcome: "open" };
     quotesSig.value = [...quotesSig.value, q]; log("Created quotation", q.no); setOpen(q); setView("edit"); };
   const pending = vOrders().filter((o) => o.stage === "quotation" && !vQuotes().some((q) => q.orderNo === o.no));
   const cnt = (s: string) => vQuotes().filter((q) => q.outcome === s);
@@ -67,7 +67,7 @@ export function Quotes() {
               <LinesEditor lines={cur.lines} on={(l) => upd(cur, { lines: l })} />
               <div class="flex justify-between text-sm font-semibold border-t border-line pt-2"><span>Total incl. GST</span><span class="num">{inr(cur.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + cur.gstRate / 100))}</span></div>
               {canSwitchMode() && <div class="flex flex-wrap items-center gap-2 mb-2"><span class="text-[12px] text-c3">Client will pay</span>{(["alpha", "beta"] as const).map((m) => <Chip key={m} active={(cur.pay ?? "alpha") === m} onClick={() => { upd(cur, { pay: m }); if (cur.orderNo) ordersSig.value = ordersSig.value.map((x) => (x.no === cur.orderNo ? { ...x, pay: m } : x)); }}>{PAY_LABEL[m]}</Chip>)}</div>}
-              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => { upd(cur, { outcome: o }); const ord = vOrders().find((x) => x.no === cur.orderNo); if (ord && o === "approved" && !ord.approved) patchOrder(ord, { approved: true }); }}>{o}</Chip>)}</div>
+              <div class="flex flex-wrap gap-2">{(["open", "approved", "lost", "unrecorded"] as const).map((o) => <Chip key={o} active={cur.outcome === o} onClick={() => { const ord = vOrders().find((x) => x.no === cur.orderNo); if (ord && o === "approved" && !ord.approved) { approveOrder(ord); return; } if (ord && o === "lost") { declineQuote(ord, ""); return; } if (ord && o === "open" && cur.outcome === "lost") { reopenQuote(ord); return; } upd(cur, { outcome: o }); }}>{o}</Chip>)}</div>
               
             </div>
           )}

@@ -30,6 +30,10 @@ export const nextOf = (o: Order): Stage | undefined => {
 };
 export const prevOf = (o: Order): Stage | undefined => STAGE_ORDER[STAGE_ORDER.indexOf(o.stage) - 1];
 
+const printedOf = (o: Order, i: Order["items"][number], b: Batch[]) => i.printed ?? b.filter((x) => x.orderNo === o.no && x.name === i.name && !x.running).reduce((s, x) => s + (x.done || 0), 0);
+/** Every piece of every floor line is printed (reprints of failed pieces count, so a wasted piece never dead-ends the order). */
+export const allPrinted = (o: Order, b: Batch[]) => { const lines = o.items.filter((i) => !i.offFloor); return lines.length > 0 && lines.every((i) => printedOf(o, i, b) >= i.qty); };
+
 export type Check = { label: string; done: boolean; field: keyof Order; action: string };
 /** Informational: what has been recorded for this order so far. Never blocks. */
 export function checks(o: Order, _b: Batch[]): Check[] {
@@ -37,7 +41,7 @@ export function checks(o: Order, _b: Batch[]): Check[] {
     { label: "Quotation approved", done: !!o.approved, field: "approved", action: "Record" },
     { label: "PO received (optional)", done: !!o.po, field: "po", action: "Record" },
     { label: "Build sheet", done: !!o.buildSheet, field: "buildSheet", action: "Record" },
-    { label: "Jobs off the floor", done: !!o.jobsDone, field: "jobsDone", action: "Record" },
+    { label: "Jobs off the floor", done: !!o.jobsDone || allPrinted(o, _b), field: "jobsDone", action: "Record" },
     { label: "QC logged", done: !!o.qcLogged, field: "qcLogged", action: "Record" },
     { label: "Packing recorded", done: !!o.packed, field: "packed", action: "Record" },
     { label: "Invoice raised", done: !!o.invoiced, field: "invoiced", action: "Record" },
@@ -53,7 +57,7 @@ export function gateReason(o: Order, batches: Batch[] = []): string | null {
   switch (o.stage) {
     case "quotation": return o.approved ? null : o.type === "inhouse" ? "Approve the job card first — approval is where the production details get filled in." : "Approve the quotation first — approval is where the production details get filled in.";
     case "po": return null; // PO is optional — never blocks production
-    case "production": return o.jobsDone || (mine.length > 0 && mine.every((b) => b.done >= b.units)) ? null : "Jobs are still on the floor — mark every print off before QC.";
+    case "production": return o.jobsDone || allPrinted(o, batches) || (mine.length > 0 && mine.every((b) => b.done >= b.units)) ? null : "Jobs are still on the floor — mark every print off before QC.";
     case "qc": return o.qcLogged ? null : "Log at least one QC entry before packing.";
     case "packing": return o.packed || o.skipPacking ? null : "Log the packing materials used before moving to invoicing.";
     case "invoice": return null;

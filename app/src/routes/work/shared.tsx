@@ -1,7 +1,8 @@
 import { sortAbc } from "../../mock/types";
 import { canSwitchMode, PAY_LABEL } from "../../data/mode";
 import { itemLabel, ordersSig, log, clientsSig, invoicesSig, quotesSig, shipmentsSig, openOrderSig, returnSig } from "../../data";
-import { navigate, path } from "../../router";
+import { navigate, path, lazy } from "../../router";
+import { quoteOf } from "../../data/quoting";
 import { segmentOf, type Segment } from "../../data/inventory";
 import { STAGE_HREF } from "../../ui/stage-strip";
 import { vOrders } from "../../data";
@@ -13,6 +14,8 @@ import { ask, askText, Pick, Button, DetailHead, Fold, Icon, Page, Status } from
 import { startRun, finishRun, runHours, undoRun, gramsPerPiece, runSpools, spoolLabel, printersSig, lineProgress, orderProgress, storeMedia, shrinkImage, can, BATCH_LABEL, BATCH_STAGES, batchAction, batchesSig, batchTo, checks, consume, duplicateOrder, inr, moveTo, gateReason, me, itemsSig, nextOf, orderConsumption, orderTotal, packSig, patchOrder, prevOf, shortDate, spoolsSig, STAGE_LABEL, STAGE_ORDER, SUGGESTED, TYPE_LABEL, historySig, designSig, photosSig, nowS, uid, type Stage, UNIT, type Batch, type ConKind, type Order, type OrderType } from "../../data";
 import { Thumb } from "../../ui/media";
 import { StageStrip } from "../../ui/stage-strip";
+const QuoteFlow = lazy<{ order: Order; onClose: () => void; start?: "approve" }>(() => import("./ClientFlow").then((m) => m.QuoteFlow));
+const Floor = lazy<{ order: Order; onClose: () => void }>(() => import("./Floor").then((m) => m.Floor));
 
 /** Order panel state for a list page: reopens the order you came back to (and its scroll). */
 export function useOpenOrder() {
@@ -56,7 +59,7 @@ export function OrderCard({ o, onOpen }: { o: Order; onOpen: (o: Order) => void;
 /** Inline order detail (no overlay; forward moves honour the stage gate). Render via the page's `detail` prop. */
 /** `onStage` keeps stage clicks inside the calling tab instead of opening the shared stage page. */
 export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order; onClose: () => void; onOpen: (o: Order) => void; onStage?: (st: Stage) => void }) {
-  const [msg, setMsg] = useState(""); const [rec, setRec] = useState<string | null>(null), [addB, setAddB] = useState(false);
+  const [msg, setMsg] = useState(""); const [rec, setRec] = useState<string | null>(null), [addB, setAddB] = useState(false), [qf, setQf] = useState<"" | "open" | "approve">(""), [fl, setFl] = useState(false);
   const next = nextOf(order), prev = prevOf(order);
   const sug = SUGGESTED[order.type];
   const mine = batchesSig.value.filter((b) => b.orderNo === order.no);
@@ -98,14 +101,37 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
   return (
     <div>
       <DetailHead title={<>{order.no} <span class="text-c3 font-medium">· {order.customer}</span></>} onClose={() => { setMsg(""); onClose(); }} />
+      {qf && <QuoteFlow order={order} start={qf === "approve" ? "approve" : undefined} onClose={() => setQf("")} />}
+      {fl && <Floor order={order} onClose={() => setFl(false)} />}
       {rec && <RecordSheet order={order} field={rec} onClose={() => setRec(null)} onDone={(n) => onOpen(n)} />}
       {addB && <AddBatchSheet order={order} onClose={() => setAddB(false)} onDone={() => onOpen({ ...order })} />}
       <div class="t-meta -mt-2 mb-2">Due {shortDate(order.due)}{seg !== "inhouse" && total ? ` · ${inr(total)}` : ""}</div>
       <div class="flex items-center gap-2 mb-2">
         <span class="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-full bg-c1 text-[12px] font-semibold whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full" style={{ background: H.prod }} />{STAGE_LABEL[order.stage]}</span>
-        {next && <Button onClick={() => go(next)}>Move to {STAGE_LABEL[next]} →</Button>}
+        {next && !(seg === "client" && ["quotation", "production", "qc", "packing", "invoice", "shipping"].includes(order.stage)) && <Button onClick={() => go(next)}>Move to {STAGE_LABEL[next]} →</Button>}
       </div>
-      {gate && order.stage !== "archived" && <p class="text-[11px] mb-2 text-c3" role="note">⚠ {gate}</p>}
+      {seg === "client" && order.stage === "quotation" && (() => { const q = quoteOf(order); const st = !q ? "No quotation yet" : q.outcome === "lost" ? "Client declined" : q.sent ? `Sent ${shortDate(q.sent)}${q.via ? ` by ${q.via}` : ""}. Waiting for the client.` : `${q.no} is ready. Send it to the client.`;
+        return <div class="rounded-xl border border-line bg-c1/50 p-3 mb-2 grid gap-2" role="group" aria-label="Next step">
+          <div class="text-[13px]"><b>Quotation</b><span class="block t-meta">{st}</span></div>
+          <div class="flex flex-wrap gap-2"><Button icon="doc" onClick={() => setQf("open")}>{q ? "Open quotation" : "Create quotation"}</Button>{q && <Button variant="outline" icon="check" onClick={() => setQf("approve")}>Client approved</Button>}</div>
+        </div>; })()}
+      {seg === "client" && order.stage === "production" && (() => { const t = orderProgress(order);
+        return <div class="rounded-xl border border-line bg-c1/50 p-3 mb-2 grid gap-2" role="group" aria-label="Next step">
+          <div class="text-[13px]"><b>Print</b><span class="block t-meta">{t.printed}/{t.qty} printed · {t.pending} left{t.failed ? ` · ${t.failed} wasted` : ""}</span></div>
+          <div class="flex flex-wrap gap-2"><Button onClick={() => setFl(true)}>{t.printed || t.failed ? "Open floor sheet" : "Start printing"}</Button>{t.pending === 0 && next && <Button variant="outline" onClick={() => go(next)}>Move to {STAGE_LABEL[next]} →</Button>}</div>
+        </div>; })()}
+      {seg === "client" && ["qc", "packing", "invoice", "shipping"].includes(order.stage) && (() => {
+        const handed = !!order.delivery && order.delivery.method !== "courier";
+        const S = ({ qc: { t: "Check the prints and log the result", f: "qcLogged", l: "Log QC", ok: !!order.qcLogged }, packing: { t: "Pack it and record what was used", f: "packed", l: "Record packing", ok: !!order.packed || !!order.skipPacking },
+          invoice: { t: "Raise the invoice (needed before archiving)", f: "invoiced", l: "Record invoice", ok: !!order.invoiced }, shipping: { t: "Hand it over and record the delivery", f: "tracking", l: "Record delivery", ok: !!order.tracking || handed } } as Record<string, { t: string; f: string; l: string; ok: boolean }>)[order.stage];
+        return <div class="rounded-xl border border-line bg-c1/50 p-3 mb-2 grid gap-2" role="group" aria-label="Next step">
+          <div class="text-[13px]"><b>{STAGE_LABEL[order.stage]}</b><span class="block t-meta">{S.ok ? "Done. Move it on when you are ready." : S.t}</span></div>
+          <div class="flex flex-wrap gap-2">{!S.ok && <Button onClick={() => setRec(S.f)}>{S.l}</Button>}
+            {order.stage === "packing" && !S.ok && <Button variant="outline" onClick={() => onOpen(patchOrder(order, { skipPacking: true }))}>Skip packing</Button>}
+            {order.stage === "shipping" && !order.paid && <Button variant="outline" onClick={() => setRec("paid")}>Record payment</Button>}
+            {(S.ok || order.stage === "invoice") && next && <Button variant={S.ok ? "primary" : "outline"} onClick={() => go(next)}>Move to {STAGE_LABEL[next]} →</Button>}</div>
+        </div>; })()}
+      {gate && order.stage !== "archived" && !(seg === "client" && ["quotation", "production", "qc", "packing", "invoice", "shipping"].includes(order.stage)) && <p class="text-[11px] mb-2 text-c3" role="note">⚠ {gate}</p>}
       {msg && <p class="text-sm mb-2 font-medium" role="status">{msg}</p>}
 
       {seg !== "inhouse" && <Fold id={F("client")} hue={H.client} title="Client" meta={cl?.city || order.medium}>

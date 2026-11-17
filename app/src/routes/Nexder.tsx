@@ -1,16 +1,16 @@
 /** Nexder: the studio's library of designs. Originals live in Google Drive, previews in Supabase Storage; Emerald keeps no files. */
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
-import { calculateNexcal, emptyNexcalInputs, NEXCAL_MATERIALS } from "../data/nexcal/engine";
-import { nexcalSig } from "../data/pricing";
 import {
   addCategory, assignable, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
-  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
+  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
 import { uid } from "../data/store";
+import type { Use, WorkbenchProps } from "./nexcal/Workbench";
 
 /* ---------------------------------------------------------------- small helpers */
 /** Object URL of one photo's small preview ("" until it arrives). */
@@ -35,6 +35,14 @@ function Local({ item, alt }: { item: DraftItem; alt: string }) {
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
   const stored = usePreview(item.file ? undefined : item.id), src = url || stored;
   return src ? <img src={src} alt={alt} class="w-full h-full object-cover" /> : <Ph />;
+}
+/** A text field that grows with what is typed, so a long name is always fully visible. */
+function Grow({ value, placeholder, onInput }: { value: string; placeholder?: string; onInput: (v: string) => void }) {
+  const r = useRef<HTMLTextAreaElement>(null);
+  const fit = () => { const t = r.current; if (t) { t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; } };
+  useEffect(fit, [value]);
+  return <textarea ref={r} rows={1} value={value} placeholder={placeholder} aria-label="Name" onInput={(e) => { onInput((e.target as HTMLTextAreaElement).value.replace(/\n/g, " ")); fit(); }} onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+    class="w-full min-h-8 px-3 py-[5px] rounded-xl border border-line bg-c0 text-c4 text-[13px] placeholder:text-c2 focus:border-c4 outline-none resize-none overflow-hidden leading-snug" />;
 }
 const Row = ({ title, meta, open, children }: { title: string; meta?: ComponentChildren; open?: boolean; children: ComponentChildren }) => (
   <details open={open} class="rounded-xl border border-line bg-c0 min-w-0">
@@ -71,9 +79,8 @@ export default function Nexder() {
   const detail = !panel ? null : panel.k === "view" && open
     ? <ViewPanel d={open} writable={writable} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
         onShare={() => { setSel([open.id]); setDlg("share"); }} onAssign={() => { setSel([open.id]); setDlg("assign"); }} />
-    : panel.k === "new" || panel.k === "edit"
-      ? <FormPanel key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />
-      : null;
+    : null;
+  const windowOpen = panel && (panel.k === "new" || panel.k === "edit");
 
   return (
     <Page title="Nexder" sub="Designs, photos and files. Photos and files are kept in Google Drive; Emerald shows small copies."
@@ -114,6 +121,7 @@ export default function Nexder() {
           </div>
         </div>)}
       {designs.length > 0 && nexderReady && <Storage writable={can("nexder", "full")} />}
+      {windowOpen && <DesignWindow key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />}
       {dlg === "pack" && <PackModal initial={picked} onClose={() => setDlg(null)} />}
       {dlg === "share" && <ShareModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
       {dlg === "assign" && <AssignModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
@@ -179,70 +187,112 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
   );
 }
 
-/* ---------------------------------------------------------------- upload / edit panel */
+/* ---------------------------------------------------------------- the design window: form on the left, the whole calculator on the right */
 /** The category used last, so adding several designs to one category needs no re-picking. */
 let lastCat = "";
-function FormPanel({ editId, presetCat, onClose, onSaved }: { editId?: string; presetCat: string; onClose: () => void; onSaved: (d: NxDesign) => void }) {
+const Calc = lazy<WorkbenchProps>(() => import("./nexcal/Workbench").then((m) => m.Workbench));
+const CALCULABLE = /\.(stl|obj|step|stp|3mf)$/i;
+const SIZE_NAMES = ["Small", "Medium", "Large", "Extra large"];
+
+function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string; presetCat: string; onClose: () => void; onSaved: (d: NxDesign) => void }) {
   const base = editId ? nexderDesignsSig.value.find((d) => d.id === editId) : undefined;
   const [multi, setMulti] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>(() => [base ? draftOf(base) : blankDraft()]);
   const [cur, setCur] = useState(0), [catId, setCatId] = useState(base?.catId ?? (nexderCatsSig.value.some((c) => c.id === (presetCat || lastCat)) ? presetCat || lastCat : ""));
   const [adding, setAdding] = useState(!nexderCatsSig.value.length), [newCat, setNewCat] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [prog, setProg] = useState<Progress | null>(null);
-  const ctl = useRef<AbortController | null>(null);
-  const [priceFor, setPriceFor] = useState<number | null>(null);
+  const [tab, setTab] = useState<"form" | "calc">("form"), [seen, setSeen] = useState<string[]>([drafts[0].key]), [feed, setFeed] = useState<Record<string, { n: number; files: File[] }>>({});
+  const ctl = useRef<AbortController | null>(null), asking = useRef(false);
   const cats = nexderCatsSig.value, cat = cats.find((c) => c.id === catId);
   const set = (k: number, p: Partial<Draft>) => setDrafts((ds) => ds.map((d, j) => (j === k ? { ...d, ...p } : d)));
-  const first = cat ? (cat.last < MAX_PER_CAT ? nextNo(cat.id) : null) : null;
-  const mk = () => { const r = addCategory(newCat); if (r.error) return setErr(r.error); setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); };
-  const ready = drafts.every(draftReady) && !!cat;
+  const first = cat ? (cat.last < MAX_PER_CAT ? nextNo(cat.id) : null) : adding && newCat.trim() ? String(nextCode() * 1000 + 1) : null;
+  const mk = () => { const r = addCategory(newCat); if (r.error) { setErr(r.error); return null; } setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); return r.cat!; };
+  const ready = drafts.every(draftReady) && (!!cat || (adding && !!newCat.trim()));
   const go = (m: boolean) => { setMulti(m); if (m && drafts.length < 2) setDrafts((d) => [...d, blankDraft()]); setCur(0); };
   const total = drafts.reduce((a, d) => a + newBytes(d), 0);
+  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)));
+  const pick = (k: number) => { setCur(k); setSeen((s) => (s.includes(drafts[k].key) ? s : [...s, drafts[k].key])); };
+
+  /* closing never throws work away without asking, and never leaves an upload running behind the window */
+  const leave = async () => {
+    if (asking.current) return;
+    if (busy || dirty) {
+      asking.current = true;
+      const ok = await ask(busy ? "An upload is running. Stop it and discard this design?" : "Close this window? What you typed and picked is not saved yet.", { ok: busy ? "Stop and discard" : "Discard", danger: true });
+      asking.current = false; if (!ok) return;
+    }
+    ctl.current?.abort(); onClose();
+  };
   const save = async () => {
-    setBusy(true); setErr(""); const ac = (ctl.current = new AbortController()); let last: NxDesign | null = null;
+    setBusy(true); setErr("");
+    let cid = catId; if (!cid && adding && newCat.trim()) { const c = mk(); if (!c) { setBusy(false); return; } cid = c.id; }
+    const ac = (ctl.current = new AbortController()); let last: NxDesign | null = null;
     for (const d of drafts) {
-      const r = await saveDraft(d, catId, setProg, ac.signal);
+      const r = await saveDraft(d, cid, setProg, ac.signal);
       if (typeof r === "string") { setErr(r); setBusy(false); setProg(null); return; }
       last = r; setDrafts((x) => x.filter((y) => y.key !== d.key));
     }
-    setBusy(false); setProg(null); lastCat = catId; if (last) onSaved(last);
+    setBusy(false); setProg(null); lastCat = cid; if (last) onSaved(last);
   };
-  const stop = () => { ctl.current?.abort(); onClose(); };
-  if (priceFor !== null) return <PricePanel grams={Number(drafts[priceFor].sizes[0]?.g) || 0} current={Number(drafts[priceFor].price) || 0} onBack={() => setPriceFor(null)} onUse={(v) => { set(priceFor, { price: v ? String(v) : "" }); setPriceFor(null); }} />;
-  return (
-    <div class="flex flex-col min-h-full gap-3.5">
-      <DetailHead title={base ? "Edit design" : multi ? "New designs" : "New design"} onClose={onClose} />
+
+  /* what the calculator hands back */
+  const use = (k: number) => (u: Use) => {
+    const d = drafts[k];
+    if (u.kind === "price") set(k, { price: String(u.price) });
+    else set(k, { sizes: [...d.sizes.filter((s) => !(s.mm === String(u.sizeMm) && s.g === String(u.grams))), { label: SIZE_NAMES[d.sizes.length] ?? `Size ${d.sizes.length + 1}`, mm: String(u.sizeMm), g: String(u.grams) }] });
+  };
+  const gotFiles = (k: number) => (fs: File[]) => setDrafts((ds) => ds.map((d, j) => (j !== k ? d : { ...d, files: [...d.files, ...fs.filter((f) => !d.files.some((x) => x.name === f.name && x.size === f.size)).map((f) => ({ id: uid().replace(/[^A-Za-z0-9-]/g, ""), name: f.name, size: f.size, mime: f.type || "application/octet-stream", file: f }))] })));
+  const calculate = (k: number, f: DraftItem) => { if (!f.file) return; setFeed((m) => ({ ...m, [drafts[k].key]: { n: (m[drafts[k].key]?.n ?? 0) + 1, files: [f.file!] } })); setTab("calc"); };
+
+  const form = (
+    <div class="p-4 grid gap-4 content-start">
       {!base && <Seg value={multi ? "m" : "s"} on={(v) => go(v === "m")} items={[["s", "Single product"], ["m", "Multiple products"]]} />}
       <div>
         <div class="flex items-center justify-between mb-1"><span class="text-[11px] font-medium text-c3">{multi ? "Category for all" : "Category"}</span>
           {!base && !adding && <button type="button" onClick={() => setAdding(true)} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">New category</button>}</div>
         {adding && !base
-          ? <div class="flex gap-2"><input autofocus value={newCat} placeholder="Category name" aria-label="New category name" onInput={(e) => setNewCat((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && mk()} class={inputCls} />
-              <Button onClick={mk}>Create</Button>{cats.length > 0 && <Button variant="outline" onClick={() => { setAdding(false); setErr(""); }}>Cancel</Button>}</div>
+          ? <div class="flex gap-2"><input value={newCat} placeholder="Category name, for example Desk" aria-label="New category name" onInput={(e) => setNewCat((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && mk()} class={inputCls} />
+              {cats.length > 0 && <Button variant="outline" onClick={() => { setAdding(false); setNewCat(""); setErr(""); }}>Cancel</Button>}</div>
           : <select aria-label="Category" value={catId} disabled={!!base} onChange={(e) => setCatId((e.target as HTMLSelectElement).value)} class={`${inputCls} cursor-pointer`}><option value="">Choose a category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
-        {cat && <span class="block t-meta mt-1">{base ? <>Number <b class="num text-c4">{base.no}</b>{base.catId !== catId ? "" : ""} · category is fixed once saved</> : first ? multi ? <>Numbers start at <b class="num text-c4">{first}</b></> : <>Number <b class="num text-c4">{first}</b> will be assigned</> : "This category is full (999 designs)"}</span>}
-        {adding && !cats.length && <span class="block t-meta mt-1">Numbers are grouped by category: the first category gets 10001, 10002…, the next 11001…</span>}
+        <span class="block t-meta mt-1">{base ? <>Number <b class="num text-c4">{base.no}</b> · the category is fixed once saved</> : adding && !cat ? <>A new category is created when you save{first ? <>. Numbers start at <b class="num text-c4">{first}</b></> : ""}</> : cat ? (first ? multi ? <>Numbers start at <b class="num text-c4">{first}</b></> : <>Number <b class="num text-c4">{first}</b> will be assigned</> : "This category is full (999 designs)") : "Numbers are grouped by category."}</span>
       </div>
       {drafts.map((d, k) => (!multi || cur === k)
-        ? <Product key={d.key} d={d} n={multi ? k + 1 : 0} set={(p) => set(k, p)} onPrice={() => setPriceFor(k)} onRemove={multi && drafts.length > 1 ? () => { setDrafts((x) => x.filter((_, j) => j !== k)); setCur(0); } : undefined} />
-        : <button type="button" key={d.key} onClick={() => setCur(k)} class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left rounded-xl border border-line bg-c0 cursor-pointer !min-h-0">
+        ? <Product key={d.key} d={d} n={multi ? k + 1 : 0} set={(p) => set(k, p)} onCalc={(f) => calculate(k, f)} onRemove={multi && drafts.length > 1 ? () => { setDrafts((x) => x.filter((_, j) => j !== k)); setCur(0); } : undefined} />
+        : <button type="button" key={d.key} onClick={() => pick(k)} class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left rounded-xl border border-line bg-c0 cursor-pointer !min-h-0">
             <span class="w-5 h-5 rounded-full bg-c1 text-c3 text-[11px] font-bold flex items-center justify-center shrink-0">{k + 1}</span>
             <span class="min-w-0 flex-1"><b class="block text-[13px] font-semibold break-words">{d.name || "Untitled"}</b><span class="t-meta">{d.photos.length} photo{d.photos.length === 1 ? "" : "s"} · {d.files.length} file{d.files.length === 1 ? "" : "s"}</span></span><span class="text-c3"><Icon name="down" size={14} /></span></button>)}
-      {multi && <button type="button" onClick={() => { setDrafts((x) => [...x, blankDraft()]); setCur(drafts.length); }} class="h-9 px-3 rounded-xl border border-dashed border-c2 text-[12px] font-medium text-c3 inline-flex items-center gap-1.5 justify-center cursor-pointer"><Icon name="plus" size={13} /> Add another product</button>}
-      {err && <p role="alert" class="text-[12.5px] text-red">{err}</p>}
-      {busy && prog && <div role="status" class="rounded-xl bg-c1/60 px-3 py-2.5 grid gap-1.5">
-        <div class="flex justify-between gap-3 text-[12.5px]"><span class="min-w-0 break-all">{prog.label === "Previews" ? "Preparing previews…" : `Uploading ${prog.label}`}</span><span class="num whitespace-nowrap">{prog.total ? Math.min(100, Math.round((prog.sent / prog.total) * 100)) : 0}%</span></div>
-        <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-acc" style={{ width: `${prog.total ? Math.min(100, (prog.sent / prog.total) * 100) : 0}%` }} /></div>
-        <div class="t-meta">{fmtBytes(prog.sent)} of {fmtBytes(prog.total)} · straight to Google Drive. Keep this tab open until it finishes.</div></div>}
-      {!busy && total > 0 && <p class="t-meta">{fmtBytes(total)} will be uploaded to Google Drive{total > 50 * 1048576 ? ". Keep this tab open while it uploads." : "."}</p>}
-      <div class="sticky -bottom-4 -mx-4 -mb-4 mt-auto border-t border-line bg-c0 px-4 py-3 flex gap-2 justify-end">
-        <Button variant="outline" onClick={busy ? stop : onClose}>{busy ? "Stop upload" : "Cancel"}</Button>
-        <Button disabled={!ready || busy} onClick={save}>{busy ? "Saving…" : base ? "Save changes" : multi ? `Save ${drafts.length} designs` : "Save design"}</Button>
-      </div>
+      {multi && <button type="button" onClick={() => { setDrafts((x) => [...x, blankDraft()]); pick(drafts.length); setSeen((s) => s); }} class="h-9 px-3 rounded-xl border border-dashed border-c2 text-[12px] font-medium text-c3 inline-flex items-center gap-1.5 justify-center cursor-pointer"><Icon name="plus" size={13} /> Add another product</button>}
     </div>
+  );
+  /* one calculator per product, kept alive while you switch between products, opened only when first needed */
+  const calc = (
+    <div class="p-4">
+      {drafts.map((d, k) => seen.includes(d.key) || k === cur ? (
+        <div key={d.key} class={k === cur ? "" : "hidden"}>{multi && <p class="t-meta mb-2">Calculator for <b class="text-c4">{d.name || `product ${k + 1}`}</b></p>}<Calc mode="embed" onUse={use(k)} onFiles={gotFiles(k)} feed={feed[d.key]} /></div>) : null)}
+    </div>
+  );
+
+  return (
+    <Sheet xl onClose={leave} title={<>{base ? "Edit design" : multi ? "New designs" : "New design"}</>}
+      footer={<div class="flex-1 min-w-0 !h-auto flex items-center gap-3 flex-wrap [&_button]:!h-9">
+        <div class="min-w-0 flex-1 text-[12.5px]">
+          {err ? <p role="alert" class="text-red break-words">{err}</p>
+            : busy && prog ? <div role="status" class="grid gap-1"><div class="flex justify-between gap-3"><span class="min-w-0 break-all">{prog.label === "Previews" ? "Preparing previews…" : `Uploading ${prog.label}`}</span><span class="num whitespace-nowrap">{prog.total ? Math.min(100, Math.round((prog.sent / prog.total) * 100)) : 0}% · {fmtBytes(prog.sent)} of {fmtBytes(prog.total)}</span></div>
+              <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-acc" style={{ width: `${prog.total ? Math.min(100, (prog.sent / prog.total) * 100) : 0}%` }} /></div><span class="t-meta">Straight to Google Drive. Keep this tab open until it finishes.</span></div>
+            : total > 0 ? <span class="t-meta">{fmtBytes(total)} will be uploaded to Google Drive{total > 50 * 1048576 ? ". Keep this tab open while it uploads." : "."}</span> : null}
+        </div>
+        <Button variant="outline" onClick={leave}>{busy ? "Stop upload" : "Cancel"}</Button>
+        <Button disabled={!ready || busy} onClick={save}>{busy ? "Saving…" : base ? "Save changes" : multi ? `Save ${drafts.length} designs` : "Save design"}</Button>
+      </div>}>
+      <div class="lg:hidden px-4 pb-2"><Seg value={tab} on={setTab} items={[["form", "Details"], ["calc", "Calculator"]]} /></div>
+      <div class="h-full min-h-0 lg:grid lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
+        <div class={`${tab === "form" ? "" : "max-lg:hidden"} h-full min-h-0 overflow-y-auto overscroll-contain lg:border-r lg:border-line`}>{form}</div>
+        <div class={`${tab === "calc" ? "" : "max-lg:hidden"} h-full min-h-0 overflow-y-auto overscroll-contain bg-canvas`}>{calc}</div>
+      </div>
+    </Sheet>
   );
 }
 
-function Product({ d, n, set, onPrice, onRemove }: { d: Draft; n: number; set: (p: Partial<Draft>) => void; onPrice: () => void; onRemove?: () => void }) {
+function Product({ d, n, set, onCalc, onRemove }: { d: Draft; n: number; set: (p: Partial<Draft>) => void; onCalc: (f: DraftItem) => void; onRemove?: () => void }) {
   const [over, setOver] = useState(false);
   const pick = (fs: FileList | File[] | null, photo: boolean) => {
     const a = [...(fs ?? [])].filter((f) => !photo || f.type.startsWith("image/")); if (!a.length) return;
@@ -250,10 +300,11 @@ function Product({ d, n, set, onPrice, onRemove }: { d: Draft; n: number; set: (
     set(photo ? { photos: [...d.photos, ...items] } : { files: [...d.files, ...items] });
   };
   const drop = (e: DragEvent) => { e.preventDefault(); setOver(false); const fs = [...(e.dataTransfer?.files ?? [])]; pick(fs.filter((f) => f.type.startsWith("image/")), true); pick(fs.filter((f) => !f.type.startsWith("image/")), false); };
-  const body = (
-    <div class={`grid gap-3.5 ${n ? "rounded-xl border border-c4 bg-c0 p-3" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
+  const size = (k: number, p: Partial<Draft["sizes"][number]>) => set({ sizes: d.sizes.map((x, j) => (j === k ? { ...x, ...p } : x)) });
+  return (
+    <div class={`grid gap-4 ${n ? "rounded-xl border border-c4 bg-c0 p-3" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
       {n > 0 && <div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-c4 text-c0 text-[11px] font-bold flex items-center justify-center">{n}</span><b class="text-[13px] flex-1">Product {n}</b>{onRemove && <button type="button" onClick={onRemove} class="text-[12px] text-red underline cursor-pointer !min-h-0">Remove</button>}</div>}
-      <Field label="Name"><input value={d.name} placeholder="Product name" onInput={(e) => set({ name: (e.target as HTMLInputElement).value })} class={inputCls} /></Field>
+      <Field label="Name"><Grow value={d.name} placeholder="Product name" onInput={(v) => set({ name: v })} /></Field>
       <div>
         <span class="block t-meta mb-1">Photos</span>
         <div class={`flex gap-2 flex-wrap rounded-xl ${over ? "ring-2 ring-c4 ring-offset-2 ring-offset-c0" : ""}`}>
@@ -264,57 +315,35 @@ function Product({ d, n, set, onPrice, onRemove }: { d: Draft; n: number; set: (
           <label class="w-16 h-16 rounded-xl border border-dashed border-c2 flex items-center justify-center text-c2 cursor-pointer shrink-0" title="Add photos"><Icon name="plus" size={18} /><span class="sr-only">Add photos</span>
             <input type="file" accept="image/*" multiple class="sr-only" onChange={(e) => { pick((e.target as HTMLInputElement).files, true); (e.target as HTMLInputElement).value = ""; }} /></label>
         </div>
-        <span class="block t-meta mt-1">The original is kept. Emerald shows a small copy.</span>
+        <span class="block t-meta mt-1">The original is kept in Google Drive. Emerald shows a small copy.</span>
       </div>
       <div>
         <span class="block t-meta mb-1">Files</span>
         {d.files.length > 0 && <div class="grid gap-1.5 mb-1.5">{d.files.map((f) => (
-          <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)}</span></span>
+          <div key={f.id} class="flex items-center gap-2 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)}</span></span>
+            {f.file && CALCULABLE.test(f.name) && <button type="button" onClick={() => onCalc(f)} class="h-7 px-2.5 !min-h-0 rounded-full border border-line bg-c0 text-[12px] font-semibold cursor-pointer whitespace-nowrap">Calculate</button>}
             <button type="button" aria-label={`Remove ${f.name}`} onClick={() => set({ files: d.files.filter((x) => x.id !== f.id) })} class="w-6 h-6 !min-h-0 rounded-full flex items-center justify-center text-c3 cursor-pointer"><Icon name="close" size={12} /></button></div>))}</div>}
         <label class="h-8 px-3 rounded-xl border border-dashed border-c2 text-[12px] font-medium text-c3 inline-flex items-center gap-1.5 w-full justify-center cursor-pointer"><Icon name="plus" size={13} /> Add file · STL, 3MF, STEP, any type
           <input type="file" multiple class="sr-only" onChange={(e) => { pick((e.target as HTMLInputElement).files, false); (e.target as HTMLInputElement).value = ""; }} /></label>
       </div>
-      <div class="grid gap-1.5">
-        <Row title="Description" meta={d.desc ? <span class="line-clamp-1">{d.desc}</span> : "optional"} open={!!d.desc}>
-          <textarea value={d.desc} rows={3} aria-label="Description" onInput={(e) => set({ desc: (e.target as HTMLTextAreaElement).value })} class="w-full rounded-xl border border-line bg-c0 px-3 py-2 text-[13px] outline-none focus:border-c4" /></Row>
-        <Row title="Sizes" meta={d.sizes.length ? `${d.sizes.length} size${d.sizes.length > 1 ? "s" : ""}` : "optional · for material use"} open={d.sizes.length > 0}>
-          {d.sizes.map((s, k) => (
-            <div key={k} class="grid grid-cols-[1fr_5rem_5rem_auto] gap-1.5 items-end">
-              <Field label="Size"><input value={s.label} placeholder="M" onInput={(e) => set({ sizes: d.sizes.map((x, j) => (j === k ? { ...x, label: (e.target as HTMLInputElement).value } : x)) })} class={inputCls} /></Field>
-              <Field label="Height mm"><input inputMode="numeric" value={s.mm} onInput={(e) => set({ sizes: d.sizes.map((x, j) => (j === k ? { ...x, mm: (e.target as HTMLInputElement).value } : x)) })} class={`${inputCls} num`} /></Field>
-              <Field label="Grams / pc"><input inputMode="numeric" value={s.g} onInput={(e) => set({ sizes: d.sizes.map((x, j) => (j === k ? { ...x, g: (e.target as HTMLInputElement).value } : x)) })} class={`${inputCls} num`} /></Field>
-              <button type="button" aria-label="Remove size" onClick={() => set({ sizes: d.sizes.filter((_, j) => j !== k) })} class="w-8 h-8 !min-h-0 rounded-full flex items-center justify-center text-c3 cursor-pointer"><Icon name="close" size={13} /></button></div>))}
-          <button type="button" onClick={() => set({ sizes: [...d.sizes, { label: "", mm: "", g: "" }] })} class="text-[12px] font-semibold underline underline-offset-2 self-start cursor-pointer !min-h-0">Add a size</button></Row>
-        <button type="button" onClick={onPrice} class="w-full flex items-center gap-2 px-3 py-2.5 text-left rounded-xl border border-line bg-c0 cursor-pointer !min-h-0"><span class="text-[13px] font-semibold">Price</span><span class="t-meta min-w-0 flex-1 break-words">{Number(d.price) > 0 ? <b class="num text-c4">{inr(Number(d.price))}</b> : "optional · opens Nexcal"}</span><span class="text-c3"><Icon name="right" size={13} /></span></button>
+      <div class="grid grid-cols-2 gap-3">
+        <Field label="Price (₹, optional)"><span class="relative block"><span class="pointer-events-none absolute left-3 top-1.5 text-[13px] text-c2">₹</span><input inputMode="decimal" value={d.price} placeholder="from the calculator" onInput={(e) => set({ price: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pl-6`} /></span></Field>
+        <div class="flex items-end"><span class="t-meta">Use the calculator on the right to work it out, then press “Use ₹… as price”.</span></div>
       </div>
-    </div>
-  );
-  return body;
-}
-
-/* ---------------------------------------------------------------- small Nexcal in the side panel */
-function PricePanel({ grams, current, onBack, onUse }: { grams: number; current: number; onBack: () => void; onUse: (v: number) => void }) {
-  const dflt = emptyNexcalInputs();
-  const [f, setF] = useState({ g: grams ? String(grams) : "", h: "", min: "", kg: String(dflt.filamentCostPerKg), m: String(dflt.marginPercent), mat: dflt.material });
-  const n = (s: string) => Number(s) || 0;
-  const r = useMemo(() => calculateNexcal({ ...dflt, material: f.mat, filamentGrams: n(f.g), printHours: n(f.h), labourMinutes: n(f.min), filamentCostPerKg: n(f.kg), marginPercent: n(f.m), orderQty: 1 }, nexcalSig.value), [f]);
-  const num = (k: "g" | "h" | "min" | "kg" | "m", label: string, unit: string) => <Field label={label}><span class="relative block"><input inputMode="decimal" value={f[k]} onInput={(e) => setF({ ...f, [k]: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-9`} /><span class="absolute right-3 top-2 text-[12px] text-c2 pointer-events-none">{unit}</span></span></Field>;
-  const ok = n(f.g) > 0 || n(f.h) > 0;
-  return (
-    <div class="flex flex-col min-h-full gap-3.5">
-      <div class="flex items-center gap-2"><button type="button" aria-label="Back to design" onClick={onBack} class="w-7 h-7 !min-h-0 rounded-full bg-c1 flex items-center justify-center cursor-pointer"><Icon name="back" size={14} /></button><h2 class="text-[17px] font-semibold tracking-tight flex-1">Price<span class="t-meta font-normal ml-2">Nexcal · FDM</span></h2></div>
-      <div class="rounded-xl bg-c1/60 p-3"><div class="t-section !text-c2">Suggested price per piece</div><div class="t-meta mt-1">incl. {nexcalSig.value.gstPercent}% GST</div><div class="num text-[32px] font-semibold leading-none mt-0.5">{ok ? inr(r.finalPriceRounded) : "—"}</div></div>
-      <div class="grid grid-cols-2 gap-2.5">{num("g", "Filament", "g")}{num("h", "Print time", "h")}</div>
-      <Field label="Material"><select value={f.mat} onChange={(e) => setF({ ...f, mat: (e.target as HTMLSelectElement).value })} class={`${inputCls} cursor-pointer`}>{NEXCAL_MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}</select></Field>
-      <div class="grid grid-cols-2 gap-2.5">{num("kg", "Filament price", "₹/kg")}{num("min", "Labour", "min")}</div>
-      <div class="grid grid-cols-2 gap-2.5">{num("m", "Margin", "%")}</div>
-      <Row title="Cost breakdown" meta="material, machine, labour">
-        {([["Filament and parts", r.totalMaterialsCost], ["Machine time", r.machineCost], ["Labour", r.totalLabourCost], ["Landed cost", r.unitLandedCost], ["Price before GST", r.calcPrice], ["GST", r.gstAmount]] as const).map(([l, v]) => <div key={l} class="flex justify-between gap-3 text-[13px]"><span class="text-c3">{l}</span><span class="num">{inr(v)}</span></div>)}</Row>
-      <p class="t-meta">Uses the Pricing settings from Nexcal, so a price here matches a quote.</p>
-      <div class="sticky -bottom-4 -mx-4 -mb-4 mt-auto border-t border-line bg-c0 px-4 py-3 flex gap-2">
-        {current > 0 && <Button variant="outline" onClick={() => onUse(0)}>Clear price</Button>}
-        <Button class="flex-1" icon="check" disabled={!ok} onClick={() => onUse(r.finalPriceRounded)}>{ok ? `Use ${inr(r.finalPriceRounded)} as price` : "Fill in filament or time"}</Button>
+      <div>
+        <div class="flex items-center justify-between mb-1"><span class="t-meta">Sizes <span class="text-c2">· optional, used for material in orders</span></span><button type="button" onClick={() => set({ sizes: [...d.sizes, { label: "", mm: "", g: "" }] })} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Add a size</button></div>
+        {d.sizes.length > 0 ? <div class="grid gap-2">{d.sizes.map((s, k) => (
+          <div key={k} class="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_auto] gap-1.5 items-end">
+            <Field label="Name"><input value={s.label} placeholder="Medium" onInput={(e) => size(k, { label: (e.target as HTMLInputElement).value })} class={inputCls} /></Field>
+            <Field label="Longest side"><span class="relative block"><input inputMode="decimal" value={s.mm} onInput={(e) => size(k, { mm: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-8`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">mm</span></span></Field>
+            <Field label="Weight"><span class="relative block"><input inputMode="decimal" value={s.g} onInput={(e) => size(k, { g: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-6`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">g</span></span></Field>
+            <button type="button" aria-label="Remove size" onClick={() => set({ sizes: d.sizes.filter((_, j) => j !== k) })} class="w-8 h-8 !min-h-0 rounded-full flex items-center justify-center text-c3 cursor-pointer"><Icon name="close" size={13} /></button></div>))}</div>
+          : <p class="t-meta">None yet. “Save as a size” in the calculator adds one with its weight and longest side.</p>}
       </div>
+      <details open={!!d.desc} class="rounded-xl border border-line bg-c0 min-w-0">
+        <summary class="flex items-center gap-2 px-3 py-2.5"><span class="text-[13px] font-semibold">Description</span><span class="t-meta min-w-0 flex-1 break-words">{d.desc ? "" : "optional"}</span><span class="chev text-c3 inline-flex"><Icon name="right" size={13} /></span></summary>
+        <div class="px-3 pb-3"><textarea value={d.desc} rows={3} aria-label="Description" onInput={(e) => set({ desc: (e.target as HTMLTextAreaElement).value })} class="w-full rounded-xl border border-line bg-c0 px-3 py-2 text-[13px] outline-none focus:border-c4" /></div>
+      </details>
     </div>
   );
 }
