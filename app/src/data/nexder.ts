@@ -35,7 +35,8 @@ export type NxFile = { id: string; name: string; size: number; mime: string; dri
 export type NxSize = { label: string; mm?: number; g: number; min?: number; sliced?: boolean };
 export type NxCat = { id: string; name: string; /** two-digit block, 10–99 */ code: number; /** last number used (never goes down, so a deleted design's number is never reused) */ last: number };
 export type NxDesign = {
-  id: string; name: string; catId: string; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
+  id: string; name: string; /** the category whose number block this design's number came from (fixed once saved) */ catId: string;
+  /** every category the design is listed in. Absent = just `catId`; empty = in none. */ cats?: string[]; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
   photos: NxPhoto[]; files: NxFile[]; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string;
 };
 export type NxShare = { id: string; designIds: string[]; to: string[]; by: string; at: string; note?: string; seen?: string[] };
@@ -51,6 +52,9 @@ registerBin("Design", nexderDesignsSig);
 if (nexderDesignsSig.value.some((d) => "cover" in d)) nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { const { cover: _c, ...rest } = d as NxDesign & { cover?: string }; return rest; });
 
 export const catOf = (d: NxDesign) => nexderCatsSig.value.find((c) => c.id === d.catId);
+/** Ids of the categories a design is listed in (only ones that still exist). */
+export const catsOf = (d: NxDesign): string[] => { const all = nexderCatsSig.value; return (d.cats ?? [d.catId]).filter((id) => all.some((c) => c.id === id)); };
+
 export const catName = (id: string) => nexderCatsSig.value.find((c) => c.id === id)?.name ?? "—";
 
 /* ---------------------------------------------------------------- backend (Google Drive + Supabase; a fake one for tests only) */
@@ -129,7 +133,7 @@ async function makePreview(f: File): Promise<Blob> {
  * Saves the design at once: the record, the Drive folder and the small previews. The originals are queued and go to Drive in the background
  * (see nexder-queue). If the previews or the record fail, what was made is deleted again.
  */
-export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
+export async function saveDraft(d: Draft, catId: string, listed: string[] | undefined, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
   const cat = nexderCatsSig.value.find((c) => c.id === catId); if (!cat) return "Choose a category";
   if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
   const prev = d.editId ? nexderDesignsSig.value.find((x) => x.id === d.editId) : undefined;
@@ -153,7 +157,7 @@ export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progres
     for (const [k, p] of addP.entries()) { onProgress({ label: "Previews", sent: k, total: addP.length }); if (signal?.aborted) throw new Error("cancelled"); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
     const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0, min: Number(s.min) > 0 ? Math.round(Number(s.min)) : undefined, sliced: s.sliced || undefined })).filter((s) => s.label && s.g > 0);
     const row: NxDesign = {
-      id: prev?.id ?? uid(), name: d.name.trim(), catId, no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
+      id: prev?.id ?? uid(), name: d.name.trim(), catId, ...(listed && !(listed.length === 1 && listed[0] === catId) ? { cats: listed } : {}), no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
       photos: d.photos.map((p) => ({ id: p.id, name: p.name, size: p.size, mime: p.mime, drive: p.drive ?? prev?.photos.find((x) => x.id === p.id)?.drive, psize: psize[p.id] ?? p.psize, ...(p.file || (p.pend && !p.drive && !prev?.photos.find((x) => x.id === p.id)?.drive) ? { pend: true } : {}) })),
       files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive ?? prev?.files.find((x) => x.id === f.id)?.drive, ...(f.file || (f.pend && !f.drive && !prev?.files.find((x) => x.id === f.id)?.drive) ? { pend: true } : {}) })),
       created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",

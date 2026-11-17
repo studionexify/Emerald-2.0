@@ -5,7 +5,7 @@ import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
+  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
   MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
@@ -64,11 +64,43 @@ const Seg = <T extends string>({ value, on, items }: { value: T; on: (v: T) => v
 
 /* ---------------------------------------------------------------- page */
 type Panel = null | { k: "new" } | { k: "edit"; id: string } | { k: "view"; id: string };
-type Dlg = null | "pack" | "share" | "assign" | "storage";
+type Dlg = null | "pack" | "share" | "assign" | "storage" | "cats" | "manage";
+const AssignCats = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.AssignCats));
+const ManageCats = lazy<{ onClose: () => void }>(() => import("./NexderCats").then((m) => m.ManageCats));
+
+/* ---- how the page is laid out and ordered (remembered on this device) ---- */
+type SortKey = "no" | "name" | "cat" | "price" | "size" | "g" | "min" | "added" | "files";
+const SORTS: [SortKey, string][] = [["no", "Number"], ["name", "Name"], ["cat", "Category"], ["price", "Price"], ["size", "Size (mm)"], ["g", "Weight"], ["min", "Print time"], ["added", "Date added"], ["files", "File size"]];
+type Prefs = { layout: "cards" | "list"; sort: SortKey; dir: 1 | -1; group: boolean };
+const PREFS = "nexderView";
+const loadPrefs = (): Prefs => { const d: Prefs = { layout: "cards", sort: "no", dir: 1, group: true }; try { const x = JSON.parse(localStorage.getItem(PREFS) ?? "{}"); return { layout: x.layout === "list" ? "list" : "cards", sort: SORTS.some(([k]) => k === x.sort) ? x.sort : d.sort, dir: x.dir === -1 ? -1 : 1, group: x.group !== false }; } catch { return d; } };
+const top = (n: (number | undefined)[]) => { const v = n.filter((x): x is number => !!x); return v.length ? Math.max(...v) : undefined; };
+/** What a design is ordered by. Several sizes count as the largest one. */
+const metric = (d: NxDesign, k: SortKey): number | string | undefined => {
+  switch (k) {
+    case "no": return d.no; case "name": return d.name.toLowerCase(); case "added": return d.created; case "price": return d.price || undefined;
+    case "cat": return catsOf(d).map(catName).sort((a, b) => a.localeCompare(b))[0]?.toLowerCase();
+    case "size": return top(d.sizes?.map((s) => s.mm) ?? []); case "g": return top(d.sizes?.map((s) => s.g) ?? []); case "min": return top(d.sizes?.map((s) => s.min) ?? []);
+    case "files": return d.files.reduce((a, f) => a + f.size, 0) || undefined;
+  }
+};
+/** Missing values go last whichever way the list is turned, like a file manager. */
+const order = (k: SortKey, dir: 1 | -1) => (a: NxDesign, b: NxDesign) => {
+  const x = metric(a, k), y = metric(b, k);
+  if (x === undefined || y === undefined) return x === y ? a.no.localeCompare(b.no) : x === undefined ? 1 : -1;
+  const r = typeof x === "string" ? x.localeCompare(y as string, undefined, { numeric: true }) : x - (y as number);
+  return dir * r || a.no.localeCompare(b.no);
+};
+const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`);
+const LIST_COLS = "grid-cols-[44px_minmax(0,1fr)] md:grid-cols-[44px_64px_minmax(0,2fr)_minmax(0,1.4fr)_76px_80px_88px] xl:grid-cols-[44px_64px_minmax(0,2fr)_minmax(0,1.4fr)_76px_80px_80px_88px_92px]";
 
 export default function Nexder() {
   const designs = nexderDesignsSig.value, cats = nexderCatsSig.value;
   const [q, setQ] = useState(""), [cat, setCat] = useState(""), [view, setView] = useState<"all" | "shared">("all");
+  const [pf, setPf] = useState<Prefs>(loadPrefs);
+  const setPrefs = (p: Partial<Prefs>) => setPf((o) => { const n = { ...o, ...p }; try { localStorage.setItem(PREFS, JSON.stringify(n)); } catch { /* private mode: the choice just isn't remembered */ } return n; });
+  /** Clicking a column: same column flips the direction, another column starts ascending. */
+  const sortBy = (k: SortKey) => setPrefs(pf.sort === k ? { dir: (pf.dir * -1) as 1 | -1 } : { sort: k, dir: 1 });
   const [panel, setPanel] = useState<Panel>(null), [dlg, setDlg] = useState<Dlg>(null);
   /** off → pick (tapping cards ticks them, nothing is lost by searching or changing category) → act (Finish selection: share, pack, assign) */
   const [mode, setMode] = useState<"off" | "pick" | "act">("off"), [sel, setSel] = useState<string[]>([]);
@@ -78,7 +110,7 @@ export default function Nexder() {
   useEffect(() => { if (nexderReady) { syncTrash(); if (can("nexder", "full")) sweepOrphans(); } }, []);
   useEffect(() => { if (view === "shared") markSeen(); }, [view, shared.length]);
   const pool = view === "shared" ? designs.filter((d) => shared.some((s) => s.designIds.includes(d.id))) : designs;
-  const list = pool.filter((d) => (!cat || d.catId === cat) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim())));
+  const list = pool.filter((d) => (!cat || catsOf(d).includes(cat)) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim())));
   const by = (id: string) => designs.find((d) => d.id === id);
   const picked = sel.map(by).filter(Boolean) as NxDesign[];
   const open = panel && panel.k !== "new" ? by(panel.id) : undefined;
@@ -86,8 +118,12 @@ export default function Nexder() {
   const stopSelect = () => { setMode("off"); setSel([]); };
   const flip = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const tap = (d: NxDesign) => (selecting ? flip(d.id) : setPanel({ k: "view", id: d.id }));
-  /* designs by category, every category open, the way the Filament tab groups by material */
-  const groups = cats.map((c) => ({ c, ds: list.filter((d) => d.catId === c.id).sort((a, b) => a.no.localeCompare(b.no)) })).filter((g) => g.ds.length).sort((a, b) => a.c.name.localeCompare(b.c.name));
+  /* designs by category, every category open, the way the Filament tab groups by material. A design in two categories shows in both. */
+  const sorted = [...list].sort(order(pf.sort, pf.dir));
+  const named = cats.filter((c) => !cat || c.id === cat).map((c) => ({ c: c as { id: string; name: string } | null, ds: sorted.filter((d) => catsOf(d).includes(c.id)) })).sort((a, b) => a.c!.name.localeCompare(b.c!.name) * (pf.sort === "cat" ? pf.dir : 1));
+  const loose = cat ? [] : sorted.filter((d) => !catsOf(d).length);
+  const groups = (pf.group ? [...named, { c: null, ds: loose }] : [{ c: { id: "all", name: "All designs" }, ds: sorted }]).filter((g) => g.ds.length);
+  const allIds = sorted.map((d) => d.id), everyShown = allIds.length > 0 && allIds.every((id) => sel.includes(id));
 
   const detail = !panel ? null : panel.k === "view" && open
     ? <ViewPanel d={open} writable={writable} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
@@ -97,14 +133,18 @@ export default function Nexder() {
 
   return (
     <Page title="Nexder" sub="Designs, photos and files. Photos and files are kept in Google Drive; Emerald shows small copies."
-      actions={<>{nexderReady && designs.length > 0 && <Button variant="outline" icon="archive" onClick={() => setDlg("storage")}>Storage</Button>}
+      actions={<>{writable && <Button variant="outline" icon="folder" onClick={() => setDlg("manage")}>Categories</Button>}{nexderReady && designs.length > 0 && <Button variant="outline" icon="archive" onClick={() => setDlg("storage")}>Storage</Button>}
         {designs.length > 0 && (mode === "off" ? <Button variant="outline" onClick={() => { setMode("pick"); setPanel(null); }}>Select</Button> : <Button variant="outline" onClick={stopSelect}>Cancel selection</Button>)}
         {writable && <Button icon="plus" onClick={() => { setPanel({ k: "new" }); }}>New design</Button>}</>}
       toolbar={<>
         <label class="relative w-full md:w-[260px]"><span class="sr-only">Search designs</span><span class="absolute left-3 top-2.5 text-c2 pointer-events-none"><Icon name="search" size={13} /></span>
           <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Name or number" class={`${inputCls} !pl-8`} /></label>
         <select aria-label="Category" value={cat} onChange={(e) => setCat((e.target as HTMLSelectElement).value)} class={`${inputCls} !w-auto cursor-pointer`}>
-          <option value="">All categories</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name} · {designs.filter((d) => d.catId === c.id).length}</option>)}</select>
+          <option value="">All categories</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name} · {designs.filter((d) => catsOf(d).includes(c.id)).length}</option>)}</select>
+        <select aria-label="Sort by" value={pf.sort} onChange={(e) => setPrefs({ sort: (e.target as HTMLSelectElement).value as SortKey, dir: 1 })} class={`${inputCls} !w-auto cursor-pointer`}>{SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}</select>
+        <button type="button" aria-label={pf.dir === 1 ? "Ascending. Press for descending" : "Descending. Press for ascending"} title={pf.dir === 1 ? "Ascending (A→Z, low→high, old→new)" : "Descending (Z→A, high→low, new→old)"} onClick={() => setPrefs({ dir: (pf.dir * -1) as 1 | -1 })} class="h-8 w-8 !min-h-0 shrink-0 rounded-lg border border-line bg-c0 inline-flex items-center justify-center cursor-pointer"><span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={14} /></span></button>
+        <select aria-label="Group by" value={pf.group ? "cat" : "none"} onChange={(e) => setPrefs({ group: (e.target as HTMLSelectElement).value === "cat" })} class={`${inputCls} !w-auto cursor-pointer`}><option value="cat">Group: Category</option><option value="none">Group: None</option></select>
+        <Seg value={pf.layout} on={(v) => setPrefs({ layout: v })} items={[["cards", "Cards"], ["list", "List"]]} />
         {shared.length > 0 && <Seg value={view} on={setView} items={[["all", "All"], ["shared", `Shared with me${unseen ? ` · ${unseen} new` : ""}`]]} />}
       </>}
       detail={detail}>
@@ -115,33 +155,62 @@ export default function Nexder() {
       {!designs.length
         ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="No designs yet" action={writable ? <Button icon="plus" class="mt-2" onClick={() => setPanel({ k: "new" })}>New design</Button> : undefined} /></div>
         : !list.length ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="Nothing matches" action={<button class="underline text-[13px]" onClick={() => { setQ(""); setCat(""); setView("all"); }}>Clear filters</button>} /></div>
-        : <div class="grid gap-6">{groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)); return (
-          <section key={c.id} aria-label={c.name} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
+        : <div class="grid gap-6">
+          {pf.layout === "list" && <div role="row" class={`hidden md:grid ${LIST_COLS} items-center gap-3 px-3 -mb-3 text-[12px] font-semibold text-c3`}>
+            <span />
+            {([["no", "No.", ""], ["name", "Name", ""], ["cat", "Categories", ""], ["price", "Price", "text-right"], ["size", "Size", "text-right hidden xl:flex"], ["g", "Weight", "text-right"], ["min", "Time", "text-right"], ["added", "Added", "text-right hidden xl:flex"]] as [SortKey, string, string][]).map(([k, l, x]) => (
+              <button key={k} type="button" onClick={() => sortBy(k)} aria-label={`Sort by ${l}`} class={`!min-h-0 h-7 inline-flex items-center gap-1 cursor-pointer hover:text-c4 ${x.includes("right") ? "justify-end" : ""} ${x.replace("text-right", "")} ${pf.sort === k ? "text-c4" : ""}`}>{l}{pf.sort === k && <span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={11} /></span>}</button>))}
+          </div>}
+          {groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)); return (
+          <section key={c?.id ?? "none"} aria-label={c?.name ?? "No category"} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
             <div class="flex items-center gap-2 pb-2 border-b-2 border-c4/25">
-              <b class="text-[14px] tracking-[0.04em]">{c.name}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
+              <b class="text-[14px] tracking-[0.04em]">{c?.name ?? "No category"}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
               {selecting && <button type="button" onClick={() => setSel((x) => (all ? x.filter((id) => !ds.some((d) => d.id === id)) : [...new Set([...x, ...ds.map((d) => d.id)])]))} class="ml-auto text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{all ? "Unselect category" : "Select category"}</button>}
             </div>
-            <div class="grid gap-3 items-start grid-cols-[repeat(auto-fill,minmax(160px,1fr))] mt-3">{ds.map((d) => {
-              const on = sel.includes(d.id), cur = open?.id === d.id;
-              return (
-                <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={mode !== "off" ? on : undefined} aria-label={`${d.name}, ${d.no}`}
-                  class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
-                  <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
-                  {incomplete(d).length > 0 && <span class="absolute top-2.5 right-2.5 rounded-full bg-amb-bg text-amb text-[11px] font-semibold px-2 h-5 inline-flex items-center">Upload incomplete</span>}
-                  {mode !== "off" && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
-                  <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span></span></span>
-                </button>);
-            })}</div>
+            {pf.layout === "list"
+              ? <div class="mt-2 grid divide-y divide-line rounded-2xl bg-c0 overflow-hidden">{ds.map((d) => {
+                  const on = sel.includes(d.id), cur = open?.id === d.id, ids = catsOf(d), mm = top(d.sizes?.map((x) => x.mm) ?? []), gr = top(d.sizes?.map((x) => x.g) ?? []), mn = top(d.sizes?.map((x) => x.min) ?? []);
+                  const chips = ids.map((id) => <span key={id} class={`${chipCls} bg-c1 text-c3 max-w-full truncate`}>{catName(id)}</span>);
+                  return (
+                    <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={mode !== "off" ? on : undefined} aria-label={`${d.name}, ${d.no}`}
+                      class={`grid ${LIST_COLS} items-center gap-3 px-3 py-2 text-left cursor-pointer !min-h-0 ${on ? "bg-c1" : cur ? "bg-c1/60" : ""}`}>
+                      <span class="relative block w-11 h-11 rounded-lg overflow-hidden bg-c1"><Pic id={d.photos[0]?.id} alt="" />
+                        {mode !== "off" && <span class={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={10} />}</span>}</span>
+                      <span class="hidden md:block num text-[13px] text-c3">{d.no}</span>
+                      <span class="min-w-0"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b>
+                        <span class="md:hidden block t-meta mt-0.5"><span class="num">{d.no}</span>{d.price ? ` · ${inr(d.price)}` : ""}{gr ? ` · ${gr} g` : ""}{mn ? ` · ${mins(mn)}` : ""}</span>
+                        {incomplete(d).length > 0 && <span class={`${chipCls} bg-amb-bg text-amb mt-1`}>Upload incomplete</span>}
+                        <span class="md:hidden flex flex-wrap gap-1 mt-1">{chips}</span></span>
+                      <span class="hidden md:flex flex-wrap gap-1 min-w-0">{chips.length ? chips : <span class="t-meta">—</span>}</span>
+                      <span class="hidden md:block text-right num text-[13px]">{d.price ? inr(d.price) : "—"}</span>
+                      <span class="hidden xl:block text-right num text-[13px]">{mm ? `${mm} mm` : "—"}</span>
+                      <span class="hidden md:block text-right num text-[13px]">{gr ? `${gr} g` : "—"}</span>
+                      <span class="hidden md:block text-right num text-[13px]">{mn ? mins(mn) : "—"}</span>
+                      <span class="hidden xl:block text-right t-meta">{shortDate(d.created)}</span>
+                    </button>);
+                })}</div>
+              : <div class="grid gap-3 items-start grid-cols-[repeat(auto-fill,minmax(160px,1fr))] mt-3">{ds.map((d) => {
+                  const on = sel.includes(d.id), cur = open?.id === d.id;
+                  return (
+                    <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={mode !== "off" ? on : undefined} aria-label={`${d.name}, ${d.no}`}
+                      class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
+                      <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
+                      {incomplete(d).length > 0 && <span class="absolute top-2.5 right-2.5 rounded-full bg-amb-bg text-amb text-[11px] font-semibold px-2 h-5 inline-flex items-center">Upload incomplete</span>}
+                      {mode !== "off" && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
+                      <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span>{catsOf(d).length > 1 ? ` · ${catsOf(d).length} categories` : ""}</span></span>
+                    </button>);
+                })}</div>}
           </section>); })}</div>}
       {mode !== "off" && (
         <div class="sticky bottom-2 flex justify-center pointer-events-none z-20">
           <div class="pointer-events-auto inline-flex flex-wrap justify-center items-center gap-1 min-h-12 pl-4 pr-1.5 py-1 rounded-3xl bg-c4 text-c0 shadow-xl max-w-full">
             <span class="text-[13px] font-semibold mr-2 whitespace-nowrap">{sel.length} selected{mode === "pick" ? " · tap cards, search and filter freely" : ""}</span>
             {mode === "pick" ? <>
+              <button type="button" onClick={() => setSel(everyShown ? sel.filter((id) => !allIds.includes(id)) : [...new Set([...sel, ...allIds])])} class="h-9 px-3 !min-h-0 rounded-full text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer">{everyShown ? "Unselect shown" : `Select all shown (${allIds.length})`}</button>
               {sel.length > 0 && <button type="button" onClick={() => setSel([])} class="h-9 px-3 !min-h-0 rounded-full text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer">Clear</button>}
               <button type="button" disabled={!sel.length} onClick={() => setMode("act")} class="h-9 px-4 !min-h-0 rounded-full bg-c0 text-c4 text-[13px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"><Icon name="check" size={14} /> Finish selection</button>
             </> : <>
-              {([["share", "Share", "share"], ["zip", "Client pack", "pack"], ["link", "Assign to order", "assign"]] as const).filter(([, , k]) => k === "share" || writable).map(([i, l, k]) => (
+              {([["share", "Share", "share"], ["zip", "Client pack", "pack"], ["link", "Assign to order", "assign"], ["folder", "Categories", "cats"]] as const).filter(([, , k]) => k === "share" || writable).map(([i, l, k]) => (
                 <button key={k} type="button" onClick={() => setDlg(k as Dlg)} class="h-9 px-3 !min-h-0 rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer"><Icon name={i} size={15} />{l}</button>))}
               <button type="button" onClick={() => setMode("pick")} class="h-9 px-3 !min-h-0 rounded-full text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer">Change selection</button>
               <button type="button" aria-label="Clear selection" onClick={stopSelect} class="w-9 h-9 !min-h-0 rounded-full inline-flex items-center justify-center hover:bg-c0/15 cursor-pointer"><Icon name="close" size={14} /></button>
@@ -150,6 +219,8 @@ export default function Nexder() {
         </div>)}
       {dlg === "storage" && <StorageSheet writable={can("nexder", "full")} onClose={() => setDlg(null)} />}
       {windowOpen && <DesignWindow key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />}
+      {dlg === "manage" && <ManageCats onClose={() => setDlg(null)} />}
+      {dlg === "cats" && <AssignCats ds={picked} onClose={() => setDlg(null)} />}
       {dlg === "pack" && <PackModal initial={picked} onClose={() => setDlg(null)} />}
       {dlg === "share" && <ShareModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
       {dlg === "assign" && <AssignModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
@@ -181,7 +252,7 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
           <button key={p.id} type="button" onClick={() => setI(k)} aria-label={`Photo ${k + 1}`} aria-pressed={k === i} class={`w-11 h-11 !min-h-0 rounded-lg overflow-hidden bg-c1 p-0 cursor-pointer ${k === i ? "ring-2 ring-c4" : ""}`}><Pic id={p.id} alt="" /></button>))}</div>}
       </div>
       <div class="flex items-end gap-3 flex-wrap"><div class="min-w-0 flex-1"><div class="t-meta">Number</div><div class="num text-[24px] font-semibold leading-none mt-0.5">{d.no}</div></div>
-        <div class="text-right"><div class="t-meta">Category</div><div class="mt-1"><span class={`${chipCls} bg-c1 text-c3`}>{catName(d.catId)}</span></div></div></div>
+        <div class="text-right min-w-0"><div class="t-meta">{catsOf(d).length > 1 ? "Categories" : "Category"}</div><div class="mt-1 flex flex-wrap justify-end gap-1">{catsOf(d).length ? catsOf(d).map((id) => <span key={id} class={`${chipCls} bg-c1 text-c3`}>{catName(id)}</span>) : <span class="t-meta">None</span>}</div></div></div>
       {(d.price || d.sizes?.length) && <div class="grid gap-1 text-[13px]">
         {d.price ? <div class="flex justify-between gap-3"><span class="text-c3">Price</span><b class="num">{inr(d.price)}</b></div> : null}
         {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3">Size {s.label}{s.mm ? ` · ${s.mm} mm` : ""} <span class={`text-[11px] font-semibold ${s.sliced ? "text-grn" : "text-amb"}`}>{s.sliced ? "sliced" : "estimated"}</span></span><b class="num">{s.g} g{s.min ? ` · ${s.min >= 60 ? `${Math.floor(s.min / 60)} h ${s.min % 60} min` : `${s.min} min`}` : ""}</b></div>)}</div>}
@@ -235,6 +306,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   const base = editId ? nexderDesignsSig.value.find((d) => d.id === editId) : undefined;
   const [multi, setMulti] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>(() => [base ? draftOf(base) : blankDraft()]);
+  const [extra, setExtra] = useState<string[]>(() => (base ? catsOf(base).filter((id) => id !== base.catId) : []));
   const [cur, setCur] = useState(0), [catId, setCatId] = useState(base?.catId ?? (nexderCatsSig.value.some((c) => c.id === (presetCat || lastCat)) ? presetCat || lastCat : ""));
   const [adding, setAdding] = useState(!nexderCatsSig.value.length), [newCat, setNewCat] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [prog, setProg] = useState<Progress | null>(null);
   const [tab, setTab] = useState<"form" | "calc">("form"), [calcOpen, setCalcOpen] = useState(false), [seen, setSeen] = useState<string[]>([drafts[0].key]), [feed, setFeed] = useState<Record<string, { n: number; files: File[] }>>({});
@@ -253,7 +325,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   };
   const shown = multi ? drafts : drafts.slice(0, 1);
   const total = drafts.reduce((a, d) => a + newBytes(d), 0);
-  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)));
+  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && (JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)) || extra.join() !== catsOf(base).filter((id) => id !== base.catId).join())) || (!base && extra.length > 0);
   const pick = (k: number) => { setCur(k); setSeen((s) => (s.includes(drafts[k].key) ? s : [...s, drafts[k].key])); };
 
   /* closing never throws work away without asking, and never leaves an upload running behind the window */
@@ -271,7 +343,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
     let cid = catId; if (!cid && adding && newCat.trim()) { const c = mk(); if (!c) { setBusy(false); return; } cid = c.id; }
     const ac = (ctl.current = new AbortController()); let last: NxDesign | null = null;
     for (const d of drafts) {
-      const r = await saveDraft(d, cid, setProg, ac.signal);
+      const r = await saveDraft(d, cid, [...(base && !catsOf(base).includes(base.catId) ? [] : [cid]), ...extra.filter((x) => x !== cid)], setProg, ac.signal);
       if (typeof r === "string") { setErr(r); setBusy(false); setProg(null); return; }
       last = r; setDrafts((x) => x.filter((y) => y.key !== d.key));
     }
@@ -302,6 +374,9 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
         <span class="block t-meta mt-1">{base ? <>Number <b class="num text-c4">{base.no}</b> · the category is fixed once saved</> : adding && !cat ? <>A new category is created when you save{first ? <>. Numbers start at <b class="num text-c4">{first}</b></> : ""}</> : cat ? (first ? multi ? <>Numbers start at <b class="num text-c4">{first}</b></> : <>Number <b class="num text-c4">{first}</b> will be assigned</> : "This category is full (999 designs)") : "Numbers are grouped by category."}</span>
       </div>
       </div>
+      {cats.length > 1 && <div class="max-w-[640px]"><span class="block text-[11px] font-medium text-c3 mb-1">Also list in</span>
+        <div class="flex flex-wrap gap-1.5">{cats.filter((c) => c.id !== catId).map((c) => { const on = extra.includes(c.id); return (
+          <button key={c.id} type="button" aria-pressed={on} onClick={() => setExtra((x) => (on ? x.filter((i) => i !== c.id) : [...x, c.id]))} class={`h-7 px-3 !min-h-0 rounded-full border text-[12px] cursor-pointer ${on ? "bg-c4 text-c0 border-c4 font-semibold" : "border-line bg-c0 text-c3 font-medium"}`}>{on ? "✓ " : "+ "}{c.name}</button>); })}</div></div>}
       {shown.map((d, k) => (!multi || cur === k)
         ? <Product key={d.key} d={d} n={multi ? k + 1 : 0} set={(p) => set(k, p)} onCalc={(f) => calculate(k, f)} onRemove={multi && drafts.length > 1 ? () => { setDrafts((x) => x.filter((_, j) => j !== k)); setCur(0); } : undefined} />
         : <button type="button" key={d.key} onClick={() => pick(k)} class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left rounded-xl border border-line bg-c0 cursor-pointer !min-h-0">
@@ -432,7 +507,7 @@ function PackModal({ initial, onClose }: { initial: NxDesign[]; onClose: () => v
     <Sheet onClose={onClose} title="Client pack" footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button icon="in" disabled={busy || !nImg || tooBig} onClick={run}>{busy ? `Building ${done[0]} of ${done[1]}…` : "Download zip"}</Button></>}>
       <p class="t-meta mb-3">One zip: a folder per category, a folder per product, photos named after the product. Each photo is fetched from Google Drive in its original quality.</p>
       <div class="flex items-center gap-2 flex-wrap mb-3"><span class="t-meta">Designs</span><span class={`${chipCls} bg-c4 text-c0`}>{ds.length} selected</span>
-        <select aria-label="Add a whole category" value="" onChange={(e) => { const c = (e.target as HTMLSelectElement).value; if (c) setIds([...new Set([...ids, ...all.filter((d) => d.catId === c).map((d) => d.id)])]); }} class="h-7 px-2 rounded-full border border-line bg-c0 text-[12px] font-semibold cursor-pointer">
+        <select aria-label="Add a whole category" value="" onChange={(e) => { const c = (e.target as HTMLSelectElement).value; if (c) setIds([...new Set([...ids, ...all.filter((d) => catsOf(d).includes(c)).map((d) => d.id)])]); }} class="h-7 px-2 rounded-full border border-line bg-c0 text-[12px] font-semibold cursor-pointer">
           <option value="">+ Whole category</option>{nexderCatsSig.value.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
       {ds.length ? <div class="rounded-xl bg-c1/60 p-3 grid gap-2 mb-3">{cats.map((c) => (
         <div key={c}><div class="flex items-center gap-2 text-[13px] font-semibold py-0.5"><Icon name="folder" size={15} /><span class="break-words min-w-0">{c}</span></div>
