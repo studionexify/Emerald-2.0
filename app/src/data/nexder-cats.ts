@@ -1,7 +1,8 @@
 /** Bulk category edits for Nexder (loaded only by the categories windows, so the main bundle stays small). */
 import { log } from "./index";
 import { binSig } from "./inventory";
-import { addCategory, nexderCatsSig, nexderDesignsSig, type NxDesign } from "./nexder";
+import { today, uid } from "./store";
+import { addCategory, catsOf, draftOf, nexderCatsSig, nexderDesignsSig, saveDraft, type NxDesign } from "./nexder";
 
 const memberOf = (d: NxDesign, ids: string[]) => { const same = ids.length === 1 && ids[0] === d.catId; return same ? { ...d, cats: undefined } : { ...d, cats: ids }; };
 /** Bulk: lists every design in `ids` under the categories in `add`, and takes it out of those in `drop`. Returns how many designs changed. */
@@ -41,3 +42,51 @@ export function deleteCategory(id: string): string | null {
   nexderCatsSig.value = nexderCatsSig.value.filter((c) => c.id !== id); return null;
 }
 
+
+/* ---------------------------------------------------------------- archive and merge */
+/** Archived categories vanish from every list and picker; their designs keep them and they come back with Restore. */
+export const setArchived = (id: string, on: boolean) => { nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === id ? { ...c, archived: on || undefined } : c)); };
+/** Moves every design of `src` into `tgt`. The source is deleted when nothing was ever numbered from it, otherwise archived (its number block has to stay). */
+export function mergeCategories(src: string, tgt: string): { moved: number; gone: "deleted" | "archived" } {
+  let moved = 0;
+  nexderDesignsSig.value = nexderDesignsSig.value.map((d) => {
+    const cur = d.cats ?? [d.catId]; if (!cur.includes(src)) return d;
+    moved++; return memberOf(d, [...new Set(cur.map((c) => (c === src ? tgt : c)))]);
+  });
+  if (canDeleteCategory(src)) { deleteCategory(src); log("Merged categories", `${moved} design${moved === 1 ? "" : "s"} moved`, "order"); return { moved, gone: "deleted" }; }
+  setArchived(src, true); log("Merged categories", `${moved} design${moved === 1 ? "" : "s"} moved`, "order"); return { moved, gone: "archived" };
+}
+
+/* ---------------------------------------------------------------- bulk price */
+export type PriceMode = "set" | "pct" | "add" | "round";
+export const newPrice = (p: number | undefined, mode: PriceMode, v: number): number | undefined => {
+  const o = p ?? 0;
+  const n = mode === "set" ? v : mode === "pct" ? o * (1 + v / 100) : mode === "add" ? o + v : v > 0 ? Math.round(o / v) * v : o;
+  return Math.max(0, Math.round(n)) || undefined;
+};
+export function bulkPrice(ids: string[], mode: PriceMode, v: number): number {
+  const want = new Set(ids); let n = 0;
+  nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { if (!want.has(d.id)) return d; const p = newPrice(d.price, mode, v); if (p === d.price) return d; n++; return { ...d, price: p }; });
+  if (n) log("Bulk price change", `${n} design${n > 1 ? "s" : ""}`, "order"); return n;
+}
+
+/* ---------------------------------------------------------------- duplicate: the record, sizes and price; no photos or files */
+export async function duplicateDesigns(ds: NxDesign[]): Promise<string[]> {
+  const errs: string[] = [];
+  for (const d of ds) {
+    const dr = { ...draftOf(d), key: uid(), editId: undefined, name: `${d.name} copy`, photos: [], files: [] };
+    const r = await saveDraft(dr, d.catId, d.cats ? d.cats.filter((c) => nexderCatsSig.value.some((x) => x.id === c)) : undefined, () => {});
+    if (typeof r === "string") errs.push(`${d.name}: ${r}`);
+  }
+  return errs;
+}
+
+/* ---------------------------------------------------------------- CSV */
+const cell = (v: string | number | undefined) => { let t = String(v ?? ""); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+/** One row per design, ready for Excel (UTF-8 with a BOM so ₹ and names read correctly). */
+export function exportCsv(ds: NxDesign[]) {
+  const head = ["Number", "Name", "Categories", "Price", "Sizes", "Description", "Photos", "Files", "File bytes", "Added", "Added by"];
+  const rows = ds.map((d) => [d.no, d.name, catsOf(d).map((id) => nexderCatsSig.value.find((c) => c.id === id)?.name ?? "").join("; "), d.price, (d.sizes ?? []).map((s) => `${s.label}${s.mm ? ` ${s.mm}mm` : ""} ${s.g}g${s.min ? ` ${s.min}min` : ""}${s.sliced ? " sliced" : ""}`).join("; "), d.desc, d.photos.length, d.files.length, d.files.reduce((a, f) => a + f.size, 0), d.created, d.by]);
+  const blob = new Blob(["﻿" + [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `nexder-designs-${today()}.csv`; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
