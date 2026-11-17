@@ -1,6 +1,6 @@
 import { Thumb } from "../../ui/media";
 import { vOrders } from "../../data";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { ask, Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { openQuoteSig, quoteOf } from "../../data/quoting";
@@ -35,14 +35,23 @@ const leftLabel = (n: number) => (n === 0 ? "today" : n > 0 ? `${n}d left` : `${
 
 /** Row menu: client, value, edit, delete. */
 function RowMenu({ o, c, onOpen, onEdit }: { o: Order; c?: Client; onOpen: (o: Order) => void; onEdit: (o: Order) => void }) {
-  const [on, setOn] = useState(false);
-  useEffect(() => { if (!on) return; const f = () => setOn(false); addEventListener("click", f); return () => removeEventListener("click", f); }, [on]);
+  const [on, setOn] = useState(false), btn = useRef<HTMLButtonElement>(null), pop = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!on) return; const f = () => setOn(false); addEventListener("click", f); addEventListener("scroll", f, true); addEventListener("resize", f); return () => { removeEventListener("click", f); removeEventListener("scroll", f, true); removeEventListener("resize", f); }; }, [on]);
+  /* The menu lives in the browser's top layer, so no table, card or scroll area can crop it; it opens below the button, or above when there is no room. */
+  useLayoutEffect(() => {
+    const m = pop.current, b = btn.current; if (!on || !m || !b) return;
+    try { m.showPopover(); } catch { /* an old browser: it still shows, just inline */ }
+    const r = b.getBoundingClientRect(), h = m.offsetHeight, w = m.offsetWidth;
+    m.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+    m.style.top = `${r.bottom + 4 + h > innerHeight - 8 ? Math.max(8, r.top - h - 4) : r.bottom + 4}px`;
+    return () => { try { m.hidePopover(); } catch { /* already closed */ } };
+  }, [on]);
   const it = "w-full text-left px-3 h-9 !min-h-0 text-[13px] hover:bg-c1 cursor-pointer flex items-center gap-2";
   return (
     <div class="relative" onClick={(e) => e.stopPropagation()}>
-      <button aria-label="More" onClick={() => setOn(!on)} class="w-8 h-8 !min-h-0 rounded-lg grid place-items-center hover:bg-c1 cursor-pointer"><Icon name="more" size={16} /></button>
+      <button ref={btn} aria-label="More" onClick={() => setOn(!on)} class="w-8 h-8 !min-h-0 rounded-lg grid place-items-center hover:bg-c1 cursor-pointer"><Icon name="more" size={16} /></button>
       {on && (
-        <div class="absolute right-0 top-9 z-30 w-64 rounded-xl bg-c0 border border-line shadow-lg py-1 pop-in">
+        <div ref={pop} {...({ popover: "manual" } as object)} onClick={(e) => e.stopPropagation()} class="fixed m-0 inset-auto w-64 max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain rounded-xl bg-c0 text-c4 border border-line shadow-lg py-1">
           <div class="px-3 py-2 border-b border-line text-[12px]">
             <div class="font-semibold text-[13px]">{o.customer}</div>
             {c ? <div class="text-c3">{[c.phone, c.email, c.city].filter(Boolean).join(" · ") || "No contact saved"}{c.gstin && <span class="block">GSTIN {c.gstin}</span>}{c.address && <span class="block">{c.address}</span>}</div> : <div class="text-c3">Not in clients list</div>}

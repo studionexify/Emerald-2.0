@@ -238,8 +238,8 @@ function LineRow({ order, i, k, onOpen, filG, seg }: { order: Order; i: Order["i
       {seg === "client" && <span class="num text-sm text-right whitespace-nowrap">{i.price ? inr(i.price * i.qty) : "—"}</span>}
       <button class="w-7 h-7 !min-h-0 grid place-items-center rounded-lg text-c3 cursor-pointer" style={{ transform: open ? "rotate(90deg)" : undefined }} onClick={() => setOpen(!open)} aria-label="More"><Icon name="right" size={12} /></button>
     </div>
+    <div class="pb-2 flex"><PartsButton o={order} k={k} /></div>
     {open && <div class="pb-3 flex flex-col gap-2 text-xs pop-in">
-      <div class="flex"><PartsButton o={order} k={k} /></div>
       {seg === "bulk" && <PrintRuns order={order} item={i} onOpen={onOpen} />}
       {seg === "bulk" ? <details><summary class="cursor-pointer t-meta py-1">Product image</summary>
       <label class={`flex items-center gap-2 rounded-lg border border-dashed p-2 cursor-pointer ${drag ? "border-c4 bg-c1" : "border-line"}`}
