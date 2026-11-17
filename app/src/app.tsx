@@ -51,6 +51,7 @@ const routes: [string, any][] = [
   ["/workshop/printers", L(ws, "Printers")],
   ["/workshop/filament", L(ws, "Filament")], // old link
   ["/workshop/packing", L(ws, "PackStock")],
+  ["/nexder", D(() => import("./routes/Nexder"))],
   ["/calculator", L(calc, "Nexcal")],
   ["/calculator/nexres", L(calc, "NexRes")],
   ["/mauny", L(() => import("./routes/MaunyHome"), "MaunyHome")],

@@ -4,16 +4,16 @@ import { computed } from "@preact/signals";
 import { persisted } from "./store";
 
 export type Role = "owner" | "partner" | "manager" | "operator" | "accountant" | "ca";
-export type Module = "dashboard" | "work" | "workshop" | "calculator" | "mauny" | "books" | "gst" | "todo" | "logs" | "bin" | "settings" | "alerts" | "reports";
+export type Module = "dashboard" | "work" | "workshop" | "calculator" | "nexder" | "mauny" | "books" | "gst" | "todo" | "logs" | "bin" | "settings" | "alerts" | "reports";
 export type Level = "full" | "view" | "none";
 export type User = { id: string; name: string; email: string; role: Role; pass: string; active: boolean; login: boolean; job: string };
 
 export const MATRIX: Record<Role, Partial<Record<Module, Level>>> = {
-  owner: { dashboard: "full", work: "full", workshop: "full", calculator: "full", mauny: "full", books: "full", gst: "full", todo: "full", logs: "full", bin: "full", settings: "full", alerts: "full", reports: "full" },
-  partner: { dashboard: "full", work: "full", workshop: "full", calculator: "full", mauny: "full", books: "full", gst: "full", todo: "full", logs: "full", bin: "full", settings: "full", alerts: "full", reports: "full" },
-  manager: { dashboard: "full", work: "full", workshop: "full", calculator: "full", mauny: "none", books: "none", gst: "none", todo: "full", logs: "view", bin: "full", settings: "none", alerts: "full" },
-  operator: { dashboard: "view", work: "full", workshop: "full", calculator: "view", mauny: "none", books: "none", gst: "none", todo: "full", logs: "none", bin: "full", settings: "none", alerts: "view" },
-  accountant: { dashboard: "view", work: "view", workshop: "view", calculator: "view", mauny: "full", books: "full", gst: "full", todo: "full", logs: "view", bin: "full", settings: "none", alerts: "view", reports: "full" },
+  owner: { dashboard: "full", work: "full", workshop: "full", calculator: "full", nexder: "full", mauny: "full", books: "full", gst: "full", todo: "full", logs: "full", bin: "full", settings: "full", alerts: "full", reports: "full" },
+  partner: { dashboard: "full", work: "full", workshop: "full", calculator: "full", nexder: "full", mauny: "full", books: "full", gst: "full", todo: "full", logs: "full", bin: "full", settings: "full", alerts: "full", reports: "full" },
+  manager: { dashboard: "full", work: "full", workshop: "full", calculator: "full", nexder: "full", mauny: "none", books: "none", gst: "none", todo: "full", logs: "view", bin: "full", settings: "none", alerts: "full" },
+  operator: { dashboard: "view", work: "full", workshop: "full", calculator: "view", nexder: "view", mauny: "none", books: "none", gst: "none", todo: "full", logs: "none", bin: "full", settings: "none", alerts: "view" },
+  accountant: { dashboard: "view", work: "view", workshop: "view", calculator: "view", nexder: "view", mauny: "full", books: "full", gst: "full", todo: "full", logs: "view", bin: "full", settings: "none", alerts: "view", reports: "full" },
   ca: { gst: "full", bin: "none" },
 };
 export const ROLE_LABEL: Record<Role, string> = { owner: "Owner", partner: "Partner", manager: "Manager", operator: "Operator", accountant: "Accountant", ca: "CA (GST desk only)" };
@@ -59,5 +59,5 @@ export function moduleOf(path: string): Module {
   // Reports carry margin and order value: finance roles only (blueprint 14).
   if (path.startsWith("/mauny/reports")) return "reports";
   if (path.startsWith("/mauny/gst") || path.startsWith("/gst")) return "gst";
-  const seg = path.split("/")[1]; return (["work", "workshop", "calculator", "mauny", "todo", "logs", "bin", "settings", "alerts"].includes(seg) ? seg : "dashboard") as Module;
+  const seg = path.split("/")[1]; return (["work", "workshop", "calculator", "nexder", "mauny", "todo", "logs", "bin", "settings", "alerts"].includes(seg) ? seg : "dashboard") as Module;
 }

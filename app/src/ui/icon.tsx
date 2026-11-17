@@ -1,4 +1,9 @@
 const P: Record<string, string> = {
+  nexder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 11h18",
+  share: "M12 15V4M7 9l5-5 5 5M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5",
+  zip: "M5 3h14v18H5zM12 3v4M12 9v2M12 13v2M10 17h4v4h-4z",
+  folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  file: "M6 3h9l4 4v14H6zM14 3v5h5",
   info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01",
   image: "M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9h.01",
   star: "M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z",
