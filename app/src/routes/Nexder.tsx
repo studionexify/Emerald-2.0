@@ -108,7 +108,7 @@ export default function Nexder() {
         <div class="sticky bottom-2 flex justify-center pointer-events-none z-20">
           <div class="pointer-events-auto inline-flex flex-wrap justify-center items-center gap-1 min-h-12 pl-4 pr-1.5 py-1 rounded-3xl bg-c4 text-c0 shadow-xl max-w-full">
             <span class="text-[13px] font-semibold mr-2 whitespace-nowrap">{sel.length} selected</span>
-            {([["share", "Share", "share"], ["zip", "Client pack", "pack"], ["link", "Assign to order", "assign"]] as const).filter(([, , k]) => k !== "assign" || writable).map(([i, l, k]) => (
+            {([["share", "Share", "share"], ["zip", "Client pack", "pack"], ["link", "Assign to order", "assign"]] as const).filter(([, , k]) => k === "share" || writable).map(([i, l, k]) => (
               <button key={k} type="button" onClick={() => setDlg(k as Dlg)} class="h-9 px-3 !min-h-0 rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap hover:bg-c0/15 cursor-pointer"><Icon name={i} size={15} />{l}</button>))}
             <button type="button" aria-label="Clear selection" onClick={() => setSel([])} class="w-9 h-9 !min-h-0 rounded-full inline-flex items-center justify-center hover:bg-c0/15 cursor-pointer"><Icon name="close" size={14} /></button>
           </div>
@@ -151,13 +151,14 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
         {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3">Size {s.label}{s.mm ? ` · ${s.mm} mm` : ""}</span><b class="num">{s.g} g</b></div>)}</div>}
       {d.desc && <p class="text-[13px] text-c3 whitespace-pre-wrap break-words">{d.desc}</p>}
       <div>
-        <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
+        <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{writable && d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
         {d.files.length ? <div class="grid gap-1.5">{d.files.map((f) => (
           <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span>
             <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "original in Google Drive" : "not in Drive"}</span></span>
-            <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button></div>))}</div>
+            {writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
           : <p class="t-meta">No design file yet.{writable ? " Edit the design to add one." : ""}</p>}
-        {d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing photos…" : "Download original photos (zip)"}</button>}
+        {writable && d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing photos…" : "Download original photos (zip)"}</button>}
+        {!writable && d.files.length > 0 && <p class="t-meta mt-1.5">Your role can view designs but not download files.</p>}
         {missing && <p role="status" class="t-meta mt-1.5 text-amb">{missing}</p>}
       </div>
       <details class="rounded-xl border border-line bg-c0 min-w-0" open={usage.length > 0}>

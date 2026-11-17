@@ -52,29 +52,48 @@ async function push() {
     const c0 = await client();
     for (let i = 0; i < batch.length; i += 300) {
       const part = batch.slice(i, i + 300);
-      const rows = part.map((c) => ({ org, kind: c.kind, id: c.id, data: c.data ?? null, deleted: c.deleted }));
-      let { error } = await c0.from("records").upsert(rows, { onConflict: "org,kind,id" });
+      const rows = part.map((c) => ({ org, kind: c.kind, id: c.id, data: c.data ?? null, deleted: c.deleted, edited_at: c.at ? new Date(Math.min(c.at, Date.now())).toISOString() : null }));
+      const wrote = new Set<string>();
+      let { data: w0, error } = await c0.from("records").upsert(rows, { onConflict: "org,kind,id" }).select("kind,id");
+      (w0 ?? []).forEach((r) => wrote.add(r.kind + "/" + r.id));
       // The database refuses writes this role may not make (e.g. a manager editing money books). One refused row must not block the rest:
       // retry one by one, drop only the refused ones from the outbox and report them.
       if (error && (error.code === "42501" || /row-level security/i.test(error.message))) {
         const refused: Change[] = []; error = null;
         for (let k = 0; k < rows.length && !error; k++) {
-          const r = await c0.from("records").upsert(rows[k], { onConflict: "org,kind,id" });
-          if (!r.error) continue;
+          const r = await c0.from("records").upsert(rows[k], { onConflict: "org,kind,id" }).select("kind,id");
+          if (!r.error) { (r.data ?? []).forEach((x) => wrote.add(x.kind + "/" + x.id)); continue; }
           if (r.error.code === "42501" || /row-level security/i.test(r.error.message)) refused.push(part[k]); else error = r.error;
         }
         refused.forEach((c) => outbox.delete(keyOf(c)));
         if (refused.length) rejectedWrites.value = [...new Set([...rejectedWrites.value, ...refused.map((c) => c.kind)])];
-        if (!error) { for (const c of part) { markKnown(c); if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c)); } localSet("sync:outbox", [...outbox]); continue; }
+        if (!error) { await settle(part.filter((c) => !refused.includes(c)), wrote); continue; }
       }
       if (error) { localSet("sync:outbox", [...outbox]); syncState.value = navigator.onLine ? "error" : "offline"; return; }
-      for (const c of part) { markKnown(c); if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c)); }
-      localSet("sync:outbox", [...outbox]);
+      await settle(part, wrote);
     }
+    touch();
     syncState.value = "synced";
   })().finally(() => { sending = null; if (again) { again = false; push(); } });
   return sending;
 }
+/** The database keeps the newer edit when two devices changed the same record. Rows it refused here are older than the cloud copy: take the cloud copy. */
+async function settle(part: Change[], wrote: Set<string>) {
+  const lost: Change[] = [];
+  for (const c of part) { if (wrote.has(keyOf(c))) markKnown(c); else lost.push(c); if (outbox.get(keyOf(c)) === c) outbox.delete(keyOf(c)); }
+  localSet("sync:outbox", [...outbox]);
+  if (!lost.length) return;
+  const c0 = await client();
+  for (const c of lost) {
+    const { data } = await c0.from("records").select("kind,id,data,deleted,updated_at,edited_at").eq("org", org).eq("kind", c.kind).eq("id", c.id).maybeSingle();
+    if (data) { const ch = toChange(data as Row); applyRemote([ch]); markKnown(ch); }
+  }
+}
+/** When this device last talked to the cloud. Edits found later with no time of their own are dated from here. */
+let touched = 0;
+const touch = () => { if (Date.now() - touched > 30000) { touched = Date.now(); localSet("sync:contact", touched); } };
+/** The moment a record was last edited, wherever it was edited. */
+const editedAt = (r: Row) => Date.parse(r.edited_at ?? r.updated_at) || 0;
 let pushTimer: ReturnType<typeof setTimeout> | 0 = 0;
 function enqueue(changes: Change[]) {
   for (const c of changes) outbox.set(keyOf(c), strip(c));
@@ -82,19 +101,20 @@ function enqueue(changes: Change[]) {
   if (!pushTimer) pushTimer = setTimeout(() => { pushTimer = 0; push(); }, 300);
 }
 
-type Row = { kind: string; id: string; data: unknown; deleted: boolean; updated_at: string };
+type Row = { kind: string; id: string; data: unknown; deleted: boolean; updated_at: string; edited_at?: string | null };
 const toChange = (r: Row): Change => ({ kind: r.kind, id: r.id, data: r.data, deleted: r.deleted });
 async function catchUp() {
   const last = localGet<string>("sync:last", "1970-01-01T00:00:00Z");
   let newest = last, from = 0;
   for (;;) {
-    const { data, error } = await (await client()).from("records").select("kind,id,data,deleted,updated_at").eq("org", org).gt("updated_at", last).order("updated_at").range(from, from + 999);
+    const { data, error } = await (await client()).from("records").select("kind,id,data,deleted,updated_at,edited_at").eq("org", org).gt("updated_at", last).order("updated_at").range(from, from + 999);
     if (error) throw error;
     const rows = (data ?? []) as Row[];
     // Leftover demo rows (ids like s1, c4, o7) are removed from the cloud too, so no device ever shows them.
     const junk = rows.filter((r) => !r.deleted && isSample(r.kind, r.id)); if (junk.length) enqueue(junk.map((r) => ({ kind: r.kind, id: r.id, data: null, deleted: true })));
-    // Our own unsent edits win over older server copies.
-    const fresh = rows.filter((r) => !outbox.has(r.kind + "/" + r.id)).map(toChange);
+    // Whichever edit is newer wins: an unsent edit of ours stays only if it is newer than the cloud copy.
+    const fresh = rows.filter((r) => { const k = r.kind + "/" + r.id, o = outbox.get(k); if (!o) return true; if ((o.at ?? 0) >= editedAt(r)) return false; outbox.delete(k); return true; }).map(toChange);
+    localSet("sync:outbox", [...outbox]);
     applyRemote(fresh); fresh.forEach(markKnown);
     if (rows.length) newest = rows[rows.length - 1].updated_at;
     if (rows.length < 1000) break; from += 1000;
@@ -108,7 +128,9 @@ function listen() {
   channel = sb!.channel("records:" + org)
     .on("postgres_changes", { event: "*", schema: "public", table: "records", filter: `org=eq.${org}` }, (p: any) => {
       const r = p.new as Row; if (!r?.kind) return;
-      if (!outbox.has(r.kind + "/" + r.id)) { applyRemote([toChange(r)]); markKnown(toChange(r)); }
+      const o = outbox.get(r.kind + "/" + r.id);
+      if (!o || (o.at ?? 0) < editedAt(r)) { if (o) { outbox.delete(r.kind + "/" + r.id); localSet("sync:outbox", [...outbox]); } applyRemote([toChange(r)]); markKnown(toChange(r)); }
+      touch();
       if (r.updated_at > localGet("sync:last", "")) localSet("sync:last", r.updated_at);
     })
     .subscribe((s) => { if (s === "SUBSCRIBED") { syncState.value = outbox.size ? "sending" : "synced"; reconcile(); catchUp().then(push).catch(() => {}); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") syncState.value = "offline"; });
@@ -139,11 +161,11 @@ export async function loadMembers() {
 
 /** Queue every local record that differs from what the cloud last had: edits made offline, signed out, or before sync started. */
 function reconcile() {
-  const kinds = syncedKinds(), local = new Set<string>(), out: Change[] = [];
-  for (const c of allRecords()) { const k = keyOf(c); local.add(k); if (!outbox.has(k) && known.get(k) !== fingerprint(strip(c).data)) out.push(c); }
+  const kinds = syncedKinds(), local = new Set<string>(), out: Change[] = [], since = localGet<number>("sync:contact", 0);
+  for (const c of allRecords()) { const k = keyOf(c); local.add(k); if (!outbox.has(k) && known.get(k) !== fingerprint(strip(c).data)) out.push({ ...c, at: since || c.at }); }
   known.forEach((fp, k) => {
     const [kind, id] = [k.slice(0, k.indexOf("/")), k.slice(k.indexOf("/") + 1)];
-    if (fp !== "x" && id !== "_" && kinds.has(kind) && !local.has(k) && !outbox.has(k)) out.push({ kind, id, data: null, deleted: true });
+    if (fp !== "x" && id !== "_" && kinds.has(kind) && !local.has(k) && !outbox.has(k)) out.push({ kind, id, data: null, deleted: true, at: since || Date.now() });
   });
   if (out.length) enqueue(out);
 }
@@ -151,7 +173,7 @@ function reconcile() {
 async function fetchAll() {
   const all: Row[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await (await client()).from("records").select("kind,id,data,deleted,updated_at").eq("org", org).order("updated_at").range(from, from + 999);
+    const { data, error } = await (await client()).from("records").select("kind,id,data,deleted,updated_at,edited_at").eq("org", org).order("updated_at").range(from, from + 999);
     if (error) throw error;
     all.push(...((data ?? []) as Row[]));
     if ((data ?? []).length < 1000) return all;
@@ -160,26 +182,16 @@ async function fetchAll() {
 
 /**
  * Make this device and the cloud identical. "device": this device's data replaces the cloud copy on every device.
- * "cloud": this device takes the cloud copy. "ask": used once per device — if the two differ, the person chooses.
+ * "cloud": this device takes the cloud copy. "auto": first connection of a device, no question asked: everything the cloud has is taken (its edits are the newer ones, this device has no edit times yet) and anything only this device has is sent up.
  */
-export async function fullSync(mode: "ask" | "device" | "cloud") {
+export async function fullSync(mode: "auto" | "device" | "cloud") {
   const rows = await fetchAll();
   const kinds = syncedKinds();
   const local = new Map(allRecords().map((c) => [keyOf(c), c]));
   const remote = new Map(rows.map((r) => [r.kind + "/" + r.id, r]));
   const differs = (r: Row) => { const l = local.get(r.kind + "/" + r.id); return r.deleted ? !!l : !l ? kinds.has(r.kind) : fingerprint(strip(l).data) !== fingerprint(r.data); };
   const extra = [...local.keys()].filter((k) => !remote.has(k));
-  const changed = rows.filter(differs).length + extra.length;
-  let choice = mode;
-  if (mode === "ask") {
-    choice = "cloud";
-    if (!rows.length) choice = "device";
-    else if (changed && [...local.values()].some((c) => c.id !== "_")) {
-      const { ask } = await import("../ui");
-      const yes = await ask(`This device's data differs from the cloud copy (${changed} record${changed === 1 ? "" : "s"}). Keep THIS device's data and send it to every device? Choose Cancel to use the cloud copy here instead.`, { ok: "Keep this device's data" });
-      choice = yes ? "device" : "cloud";
-    }
-  }
+  const choice = mode === "auto" ? (rows.length ? "cloud-keep" : "device") : mode;
   known.clear();
   if (choice === "device") {
     const out: Change[] = [];
@@ -190,7 +202,8 @@ export async function fullSync(mode: "ask" | "device" | "cloud") {
     const ch = rows.map(toChange);
     outbox.clear(); localSet("sync:outbox", []);
     applyRemote(ch); ch.forEach(markKnown);
-    applyRemote(extra.map((k) => local.get(k)!).filter((c) => c.id !== "_").map((c) => ({ ...c, data: null, deleted: true })));
+    if (choice === "cloud") applyRemote(extra.map((k) => local.get(k)!).filter((c) => c.id !== "_").map((c) => ({ ...c, data: null, deleted: true })));
+    else if (extra.length) enqueue(extra.map((k) => local.get(k)!)); // only this device has them: send them up, drop nothing
   }
   if (rows.length) localSet("sync:last", rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), ""));
   localSet("sync:known", [...known]);
@@ -204,7 +217,7 @@ async function start(userId: string) {
   org = data.org; cloudUser.value = { id: userId, username: data.username, org, role: data.role };
   sessionSig.value = { userId, at: Date.now() };
   await loadMembers();
-  if (localGet("sync:known", null) === null) await fullSync("ask").catch(() => {});
+  if (localGet("sync:known", null) === null) await fullSync("auto").catch(() => {});
   else { reconcile(); await catchUp().catch(() => false); }
   setSyncSink(enqueue);
   memberChannel = c.channel("members:" + org).on("postgres_changes", { event: "*", schema: "public", table: "members", filter: `org=eq.${org}` }, () => loadMembers()).subscribe();

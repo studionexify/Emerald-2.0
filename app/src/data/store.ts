@@ -5,7 +5,8 @@ const PREFIX = "emerald:";
 /** Keys that belong to this device only and never leave it. */
 const LOCAL_ONLY = new Set(["session", "media:queue", "loginAttempts", "seedv", "sync:outbox", "sync:last"]);
 
-export type Change = { kind: string; id: string; data: unknown; deleted: boolean };
+/** `at` = when the edit was made on this device (ms). The newest edit wins when devices disagree. */
+export type Change = { kind: string; id: string; data: unknown; deleted: boolean; at?: number };
 type Sink = (changes: Change[]) => void;
 let sink: Sink | null = null;
 let applying = false;
@@ -31,14 +32,15 @@ export function persisted<T>(key: string, init: T): Signal<T> {
 const isList = (v: unknown): v is { id: string }[] => Array.isArray(v) && v.every((x) => x && typeof x === "object" && typeof (x as any).id === "string");
 /** Lists of {id} sync row by row; anything else syncs as one row named after its key. */
 function diff(kind: string, prev: unknown, next: unknown): Change[] {
+  const at = Date.now();
   if (isList(next) && (prev === undefined || isList(prev))) {
     const before = new Map((prev as { id: string }[] | undefined ?? []).map((r) => [r.id, r]));
     const out: Change[] = [];
-    for (const r of next) { const p = before.get(r.id); before.delete(r.id); if (p !== r && JSON.stringify(p) !== JSON.stringify(r)) out.push({ kind, id: r.id, data: r, deleted: false }); }
-    before.forEach((_r, id) => out.push({ kind, id, data: null, deleted: true })); // tombstone only: the Bin keeps its own copy
+    for (const r of next) { const p = before.get(r.id); before.delete(r.id); if (p !== r && JSON.stringify(p) !== JSON.stringify(r)) out.push({ kind, id: r.id, data: r, deleted: false, at }); }
+    before.forEach((_r, id) => out.push({ kind, id, data: null, deleted: true, at })); // tombstone only: the Bin keeps its own copy
     return out;
   }
-  return [{ kind, id: "_", data: next, deleted: false }];
+  return [{ kind, id: "_", data: next, deleted: false, at }];
 }
 
 /** Apply changes that came from another device or tab, without echoing them back out. */

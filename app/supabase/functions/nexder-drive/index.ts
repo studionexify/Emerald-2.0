@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
     const org = me.org as string, canWrite = WRITERS.includes(me.role);
     const b = await req.json().catch(() => ({}));
     const act = String(b.action ?? "");
+    const needDownload = () => { if (!canWrite) throw new Fail(403, "Your role can view Nexder but not download its files"); };
     const needWrite = () => { if (!canWrite) throw new Fail(403, "Your role can view Nexder but not change it"); };
     const referenced = async (id: string) => { const { data } = await admin.rpc("nexder_referenced", { p_org: org, p_id: id }); return !!data; };
 
@@ -122,7 +123,8 @@ Deno.serve(async (req) => {
       return json({ id: m.id, name: m.name, size: Number(m.size ?? 0), mime: m.mimeType });
     }
 
-    if (act === "ticket") {
+    if (act === "ticket") { // downloading is limited to the roles that may change Nexder (owner, partner, manager)
+      needDownload();
       const files = Array.isArray(b.files) ? b.files.slice(0, 50) : [];
       const t = await google(), out: string[] = [];
       for (const f of files) {

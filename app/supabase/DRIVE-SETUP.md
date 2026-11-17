@@ -46,3 +46,12 @@ Nexder reuses the same Google credential, but files never pass through Supabase 
 Deleting a design moves its Drive folder to Drive's trash (and the design to the Bin). Restoring from the Bin brings it back; deleting it from the Bin
 (or the 7-day expiry) deletes the folder and previews for good. The function only deletes what no record or Bin entry still points at,
 and clears abandoned uploads (older than a day, referenced by nothing) once a day.
+
+Roles: owner, partner and manager can add, change, download and delete. Operator and accountant can see designs and previews, and share them, but the
+function refuses to give them download links. The CA has no access.
+
+## Sync: the newest edit wins (no question asked)
+
+Every change carries the time it was made (`edited_at`, migration `0007_last_edit_wins.sql`). If a device was offline and another changed the same record
+meanwhile, the newer edit stays, whichever device reaches the cloud last; the other device then takes the cloud copy. Deleting counts as an edit too.
+A device's first connection takes what the cloud has and sends up anything only that device has. It no longer asks which copy to keep.
