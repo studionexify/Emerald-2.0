@@ -118,11 +118,18 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
 export const cancelRun = (id: string) => { batchesSig.value = batchesSig.value.filter((b) => b.id !== id); };
 
 /* ---------------------------------------------------------------- cut into parts */
-/** Cut a line into n parts, each starting from the line's own type and colour. Refused once prints are logged against the line's parts. */
-export function cutParts(o: Order, k: number, n: number): Order {
-  const i = o.items[k], count = Math.max(2, Math.min(24, Math.round(n) || 2));
-  const parts: LinePart[] = Array.from({ length: count }, (_, j) => ({ id: crypto.randomUUID(), name: `Part ${j + 1}`, material: i.material, colour: lineColours(i)[0] ?? i.colour, printer: i.machine?.split(" + ")[0] ?? "" }));
-  log("Cut into parts", `${o.no} · ${i.name} into ${count}`);
+export const MAX_PARTS = 200;
+/** Spreads parts over printers as equal blocks (12 parts on 3 printers: 4 each, in order). `ids` limits it to some parts. */
+export function allotParts(parts: LinePart[], printers: string[], ids?: string[]): LinePart[] {
+  if (!printers.length) return parts;
+  const hit = parts.filter((p) => !ids || ids.includes(p.id)), at = new Map(hit.map((p, j) => [p.id, printers[Math.min(printers.length - 1, Math.floor((j * printers.length) / hit.length))]]));
+  return parts.map((p) => (at.has(p.id) ? { ...p, printer: at.get(p.id)! } : p));
+}
+/** Cut a line into n parts, each starting from the line's own type and colour. With printers, the parts are shared equally between them. */
+export function cutParts(o: Order, k: number, n: number, printers: string[] = []): Order {
+  const i = o.items[k], count = Math.max(2, Math.min(MAX_PARTS, Math.round(n) || 2)), each = i.roughG ? Math.round((i.roughG / count) * 10) / 10 : undefined;
+  const parts: LinePart[] = allotParts(Array.from({ length: count }, (_, j) => ({ id: crypto.randomUUID(), name: `Part ${j + 1}`, material: i.material, colour: lineColours(i)[0] ?? i.colour, printer: i.machine?.split(" + ")[0] ?? "", ...(printers.length && each ? { g: each } : {}) })), printers);
+  log("Cut into parts", `${o.no} · ${i.name} into ${count}${printers.length ? ` on ${printers.length} printer${printers.length > 1 ? "s" : ""}` : ""}`);
   return setLine(o, k, { parts });
 }
 export const saveParts = (o: Order, k: number, parts: LinePart[] | undefined): Order => setLine(o, k, { parts: parts?.length ? parts : undefined });
