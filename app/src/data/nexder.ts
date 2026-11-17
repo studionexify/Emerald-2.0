@@ -33,10 +33,11 @@ export type NxPhoto = { id: string; name: string; size: number; mime: string; /*
 export type NxFile = { id: string; name: string; size: number; mime: string; drive?: string; pend?: boolean };
 /** One size of a design. `min` is print minutes per piece; `sliced` is true once the numbers come from the real slicer rather than the estimate. */
 export type NxSize = { label: string; mm?: number; g: number; min?: number; sliced?: boolean };
-export type NxCat = { id: string; name: string; /** two-digit block, 10–99 */ code: number; /** last number used (never goes down, so a deleted design's number is never reused) */ last: number };
+export type NxCat = { id: string; name: string; /** two-digit block, 10–99 */ code: number; /** last number used (never goes down, so a deleted design's number is never reused) */ last: number; /** hidden from every picker and list; its designs keep their numbers and come back with it */ archived?: boolean; /** numbers of designs that were used in orders and then deleted: never handed out again */ retired?: string[] };
 export type NxDesign = {
-  id: string; name: string; catId: string; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
-  photos: NxPhoto[]; files: NxFile[]; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string;
+  id: string; name: string; /** the category whose number block this design's number came from (fixed once saved) */ catId: string;
+  /** every category the design is listed in. Absent = just `catId`; empty = in none. */ cats?: string[]; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
+  photos: NxPhoto[]; files: NxFile[]; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string; /** set when it went to the Bin unused: its number was free at once, so Restore may have to renumber it */ freed?: boolean;
 };
 export type NxShare = { id: string; designIds: string[]; to: string[]; by: string; at: string; note?: string; seen?: string[] };
 /** A design in the Bin: its Drive folder sits in Drive's trash until the Bin entry is gone for good. */
@@ -46,11 +47,22 @@ export const nexderCatsSig = persisted<NxCat[]>("nexderCats", []);
 export const nexderDesignsSig = persisted<NxDesign[]>("nexderDesigns", []);
 export const nexderSharesSig = persisted<NxShare[]>("nexderShares", []);
 export const nexderTrashSig = persisted<NxTrash[]>("nexderTrash", []);
-registerBin("Design", nexderDesignsSig);
+/** A design coming back from the Bin takes a new number when someone else was given its number meanwhile (the live design always keeps its own). */
+registerBin("Design", nexderDesignsSig, (row: NxDesign, live: NxDesign[]) => {
+  const { freed, ...rest } = row;
+  if (!freed || !live.some((x) => x.no === row.no)) return rest;
+  const c = nexderCatsSig.value.find((x) => x.id === row.catId), n = c ? freeSeq(c) : null;
+  if (!c || !n) return rest;
+  nexderCatsSig.value = nexderCatsSig.value.map((x) => (x.id === c.id ? { ...x, last: Math.max(x.last, n) } : x));
+  return { ...rest, no: noOf(c, n) };
+});
 /* The first build kept a cover thumbnail inside each record; records must stay small (they live on every device), so drop it. */
 if (nexderDesignsSig.value.some((d) => "cover" in d)) nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { const { cover: _c, ...rest } = d as NxDesign & { cover?: string }; return rest; });
 
 export const catOf = (d: NxDesign) => nexderCatsSig.value.find((c) => c.id === d.catId);
+/** Ids of the categories a design is listed in (only ones that still exist). */
+export const catsOf = (d: NxDesign, withArchived = false): string[] => { const all = nexderCatsSig.value; return (d.cats ?? [d.catId]).filter((id) => all.some((c) => c.id === id && (withArchived || !c.archived))); };
+
 export const catName = (id: string) => nexderCatsSig.value.find((c) => c.id === id)?.name ?? "—";
 
 /* ---------------------------------------------------------------- backend (Google Drive + Supabase; a fake one for tests only) */
@@ -81,7 +93,13 @@ export const MAX_PER_CAT = 999;
 /** Next block for a new category: the largest block ever used + 1 (10–99). */
 export const nextCode = () => Math.max(9, ...nexderCatsSig.value.map((c) => c.code)) + 1;
 export const noOf = (c: NxCat, seq: number) => String(c.code * 1000 + seq);
-export const nextNo = (catId: string) => { const c = nexderCatsSig.value.find((x) => x.id === catId); return c && c.last < MAX_PER_CAT ? noOf(c, c.last + 1) : null; };
+/** Lowest sequence in a category's block that no design holds. A design in the Bin that was deleted unused has let go of its number; one that was used keeps it (retired). */
+export function freeSeq(c: NxCat): number | null {
+  const used = new Set([...nexderDesignsSig.value.map((d) => d.no), ...(c.retired ?? []), ...binSig.value.filter((x) => x.kind === "Design" && !(x.data as { freed?: boolean } | undefined)?.freed).map((x) => (x.data as { no?: string } | undefined)?.no)]);
+  for (let i = 1; i <= MAX_PER_CAT; i++) if (!used.has(noOf(c, i))) return i;
+  return null;
+}
+export const nextNo = (catId: string) => { const c = nexderCatsSig.value.find((x) => x.id === catId), n = c ? freeSeq(c) : null; return c && n ? noOf(c, n) : null; };
 /** Adds a category; returns an error text instead when it can't. */
 export function addCategory(name: string): { cat?: NxCat; error?: string } {
   const n = name.trim().replace(/\s+/g, " ");
@@ -129,12 +147,12 @@ async function makePreview(f: File): Promise<Blob> {
  * Saves the design at once: the record, the Drive folder and the small previews. The originals are queued and go to Drive in the background
  * (see nexder-queue). If the previews or the record fail, what was made is deleted again.
  */
-export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
+export async function saveDraft(d: Draft, catId: string, listed: string[] | undefined, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
   const cat = nexderCatsSig.value.find((c) => c.id === catId); if (!cat) return "Choose a category";
   if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
   const prev = d.editId ? nexderDesignsSig.value.find((x) => x.id === d.editId) : undefined;
   let no = prev?.no, last = cat.last;
-  if (!prev || prev.catId !== catId) { if (cat.last >= MAX_PER_CAT) return `${cat.name} is full (999 designs)`; last = cat.last + 1; no = noOf(cat, last); }
+  if (!prev || prev.catId !== catId) { const n = freeSeq(cat); if (!n) return `${cat.name} is full (999 designs)`; last = Math.max(cat.last, n); no = noOf(cat, n); }
   const b = await backend();
   const addP = d.photos.filter((p) => p.file), addF = d.files.filter((f) => f.file), bytes = newBytes(d);
   /* free space, before a single byte is sent */
@@ -153,7 +171,7 @@ export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progres
     for (const [k, p] of addP.entries()) { onProgress({ label: "Previews", sent: k, total: addP.length }); if (signal?.aborted) throw new Error("cancelled"); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
     const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0, min: Number(s.min) > 0 ? Math.round(Number(s.min)) : undefined, sliced: s.sliced || undefined })).filter((s) => s.label && s.g > 0);
     const row: NxDesign = {
-      id: prev?.id ?? uid(), name: d.name.trim(), catId, no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
+      id: prev?.id ?? uid(), name: d.name.trim(), catId, ...(listed && !(listed.length === 1 && listed[0] === catId) ? { cats: listed } : {}), no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
       photos: d.photos.map((p) => ({ id: p.id, name: p.name, size: p.size, mime: p.mime, drive: p.drive ?? prev?.photos.find((x) => x.id === p.id)?.drive, psize: psize[p.id] ?? p.psize, ...(p.file || (p.pend && !p.drive && !prev?.photos.find((x) => x.id === p.id)?.drive) ? { pend: true } : {}) })),
       files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive ?? prev?.files.find((x) => x.id === f.id)?.drive, ...(f.file || (f.pend && !f.drive && !prev?.files.find((x) => x.id === f.id)?.drive) ? { pend: true } : {}) })),
       created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",
@@ -196,13 +214,22 @@ export function reupload(d: NxDesign, kind: "photo" | "file", itemId: string, fi
 }
 
 /* ---------------------------------------------------------------- delete, restore, clean-up */
-/** Moves the design to the Bin and its Drive folder to Drive's trash. */
+/** Order numbers that carry this design. A design used in any order, in any state, is "used". */
+export const usedIn = (d: NxDesign) => ordersSig.value.filter((o) => o.items.some((i) => i.designId === d.id)).map((o) => o.no);
+/** What deleting these would do to their numbers. */
+export const deletePlan = (ds: NxDesign[]) => ({ used: ds.filter((d) => usedIn(d).length), unused: ds.filter((d) => !usedIn(d).length) });
+/**
+ * Moves the design to the Bin and its Drive folder to Drive's trash.
+ * Unused: its number is free for the next design at once. Used in an order: the number is retired (left blank for good) so old paperwork never points at a different product.
+ */
 export async function deleteDesign(d: NxDesign): Promise<string | null> {
   cancelDesign(d.id);
+  const used = usedIn(d).length > 0;
   try { if (d.folder) { await (await backend()).trash(d.folder, true); nexderTrashSig.value = [...nexderTrashSig.value, { id: d.id, folder: d.folder, photoIds: d.photos.map((p) => p.id) }]; } }
   catch (e) { return `Could not move the files to Drive's trash: ${(e as Error).message}`; }
-  toBin("Design", d, `${d.name} · ${d.no}`, me.value?.name ?? "You");
-  log("Deleted design", `${d.name} · ${d.no}`);
+  if (used) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === d.catId && !(c.retired ?? []).includes(d.no) ? { ...c, retired: [...(c.retired ?? []), d.no] } : c));
+  toBin("Design", used ? d : { ...d, freed: true }, `${d.name} · ${d.no}${used ? " (number retired)" : ""}`, me.value?.name ?? "You");
+  log("Deleted design", `${d.name} · ${d.no}${used ? " · number retired" : " · number freed"}`);
   return null;
 }
 /**
