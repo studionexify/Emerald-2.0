@@ -1,7 +1,8 @@
 /** Files going to Google Drive in the background. Visible on every page, so a design can be saved and the person can move on. */
 import { useState } from "preact/hooks";
 import { Icon, ask } from "../ui";
-import { cancelJob, dismissJob, retryJob, uploadsSig } from "../data/nexder-queue";
+import { cancelJob, dismissJob, retryJob } from "../data/nexder-queue";
+import { uploadsSig } from "../data/upload-state";
 
 const mb = (n: number) => (n >= 1073741824 ? `${(n / 1073741824).toFixed(2)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 

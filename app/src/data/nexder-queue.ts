@@ -2,13 +2,9 @@
  * Background uploads for Nexder. Saving a design writes the record at once and puts every original on this queue;
  * the files go to Google Drive one after another while the person keeps working. Tiny on purpose: the dock in the frame reads it.
  */
-import { signal } from "@preact/signals";
+import { uploadsSig, type UpJob } from "./upload-state";
+export { uploadsSig, type UpJob };
 
-export type UpJob = {
-  id: string; designId: string; designName: string; itemId: string; kind: "photo" | "file"; name: string; size: number; sent: number;
-  state: "wait" | "run" | "done" | "fail"; err?: string; file: File;
-};
-export const uploadsSig = signal<UpJob[]>([]);
 /** Does the actual transfer and attaches the Drive id to the design. Set by the Nexder data module. */
 type Runner = (j: UpJob, signal: AbortSignal, progress: (n: number) => void) => Promise<void>;
 let runner: Runner | null = null, busy = false;

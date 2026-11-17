@@ -27,7 +27,7 @@ export function PartsSheet({ o, k, onClose }: { o: Order; k: number; onClose: ()
     <div class="max-w-[820px] mx-auto">
       {!parts.length ? <div class="rounded-2xl bg-c1 p-4 grid gap-3">
         <b class="text-[14px]">Cut this into how many parts?</b>
-        <p class="t-meta">Big pieces are cut so several printers print them at the same time. Each part gets its own type, colour, printer, weight and time, and each one is started and finished on its own.</p>
+        <p class="t-meta">Big pieces are cut so several printers print them at the same time. Each part gets its own type, colour, printer, weight and time, and each one is started and finished on its own. A piece is counted automatically once every part of it has printed good.</p>
         <div class="flex flex-wrap items-center gap-2">
           <input type="number" min={2} max={24} value={n} onInput={(e) => setN(Math.max(2, Math.min(24, Number((e.target as HTMLInputElement).value) || 2)))} class={`${inp} !w-20`} aria-label="Number of parts" />
           {[2, 3, 4, 6].map((x) => <button key={x} type="button" onClick={() => setN(x)} class={`h-9 w-9 !min-h-0 rounded-full text-[13px] font-semibold cursor-pointer ${n === x ? "bg-c4 text-c0" : "bg-c0 border border-line"}`}>{x}</button>)}

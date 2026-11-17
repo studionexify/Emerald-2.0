@@ -1,6 +1,6 @@
 /** Floor sheet (bulk work sheet): colour stock, grams needed, and logging plates per line item. */
 import type { LinePart } from "../mock/types";
-import { batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
+import { applyPartDelta, partPieces, batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
 import { filMasterSig, spoolsSig } from "./inventory";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -95,6 +95,7 @@ export const pendingWeigh = (o: Order, i: LineItem) => batchesSig.value.filter((
 export const pendingOn = (o: Order, i: LineItem, spoolIds: string[], self?: string) => pendingWeigh(o, i).filter((b) => b.id !== self && b.spoolIds?.some((id) => spoolIds.includes(id)));
 export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean; hours?: number }): Order {
   const i = o.items[k], p = lineProgress(o, i), b = batchesSig.value.find((x) => x.id === runId);
+  const asPart = !!b?.part && !!i.parts?.length, was = asPart ? partPieces(i, batchesSig.value, o.no) : null;
   const pcs = d.plates * d.perPlate, bad = Math.min(d.wasted, pcs), grams: Record<string, number> = {}, cons: string[] = [];
   // Weighing now also covers every earlier run printed from these loaded spools.
   const prior = d.later ? [] : pendingOn(o, i, Object.values(d.spools), runId), allPlates = d.plates + prior.reduce((a, x) => a + (x.plates ?? 1), 0);
@@ -110,6 +111,7 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
   const priorIds = new Set(prior.map((x) => x.id));
   batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, hours: d.hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
   log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${d.later ? "weigh at the end" : `${Object.values(grams).reduce((a, x) => a + x, 0)} g over ${allPlates} plate${allPlates > 1 ? "s" : ""}`}`);
+  if (asPart) return applyPartDelta(o, i.name, was, partPieces(i, batchesSig.value, o.no));
   return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, ...(b?.part ? {} : { perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } }) });
 }
 /** Cancel a run that never finished. */
