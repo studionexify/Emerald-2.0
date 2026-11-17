@@ -190,9 +190,11 @@ export function gramsPerPiece(item: string, batches = batchesSig.value) {
  * A line cut into parts: a piece counts once EVERY part of it is printed good, so the pieces done are the fewest good prints of any part,
  * and the pieces failed are the most failed prints of any part. Runs not tied to a part count as before.
  */
+/** The parts of a cut piece this run printed (one, or several together on one plate). */
+export const onParts = (b: { part?: string; partsOn?: string[] }) => b.partsOn ?? (b.part ? [b.part] : []);
 export function partPieces(i: Order["items"][number], batches: Batch[], orderNo: string) {
   if (!i.parts?.length) return null;
-  const per = i.parts.map((p) => { const rs = batches.filter((b) => b.orderNo === orderNo && b.name === i.name && b.part === p.name && !b.running); return { good: rs.reduce((a, b) => a + (b.done || 0), 0), bad: rs.reduce((a, b) => a + (b.failed ?? 0), 0) }; });
+  const per = i.parts.map((p) => { const rs = batches.filter((b) => b.orderNo === orderNo && b.name === i.name && onParts(b).includes(p.name) && !b.running); return { good: rs.reduce((a, b) => a + (b.done || 0), 0), bad: rs.reduce((a, b) => a + (b.failed ?? 0), 0) }; });
   return { printed: Math.min(...per.map((x) => x.good)), failed: Math.max(...per.map((x) => x.bad)) };
 }
 /** Move a part line's counts by what one run changed (before and after the run's state flipped). */

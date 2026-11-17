@@ -1,6 +1,6 @@
 /** Floor sheet (bulk work sheet): colour stock, grams needed, and logging plates per line item. */
 import type { LinePart } from "../mock/types";
-import { applyPartDelta, partPieces, batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
+import { applyPartDelta, onParts, type Batch, partPieces, batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
 import { filMasterSig, spoolsSig } from "./inventory";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -79,12 +79,12 @@ export const orderById = (id: string) => ordersSig.value.find((x) => x.id === id
 export const lineRun = (o: Order, i: LineItem) => batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running);
 
 /** Start plates: remember machine, plates, copies and the spool picked for each colour. */
-export function startPlates(o: Order, k: number, d: { machine?: string; plates: number; perPlate: number; spools: Record<string, string>; part?: string; /** the machine(s) to show on the line when several runs start together */ lineMachine?: string }): Order {
+export function startPlates(o: Order, k: number, d: { machine?: string; plates: number; perPlate: number; spools: Record<string, string>; part?: string; /** several parts printed together on this plate */ partsOn?: string[]; /** the machine(s) to show on the line when several runs start together */ lineMachine?: string }): Order {
   const i = o.items[k], cs = Object.keys(d.spools);
   const ids = cs.map((c) => d.spools[c]);
   const labels = ids.map((id) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? spoolLabel(s) : id; });
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.plates * d.perPlate, done: 0, printer: d.machine, spool: labels.join(" + ") || undefined, spoolIds: ids, colours: cs, plates: d.plates, perPlate: d.perPlate, running: true, ...(d.part ? { part: d.part } : {}), at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
-  log("Started print", `${o.no} · ${d.plates * d.perPlate}× ${i.name}${d.part ? ` (${d.part})` : ""}${d.machine ? ` on ${d.machine}` : ""}`);
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.plates * d.perPlate, done: 0, printer: d.machine, spool: labels.join(" + ") || undefined, spoolIds: ids, colours: cs, plates: d.plates, perPlate: d.perPlate, running: true, ...(d.part ? { part: d.part } : {}), ...(d.partsOn && d.partsOn.length > 1 ? { partsOn: d.partsOn } : {}), at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
+  log("Started print", `${o.no} · ${d.plates * d.perPlate}× ${i.name}${d.partsOn && d.partsOn.length > 1 ? ` (${d.partsOn.join(" + ")} together)` : d.part ? ` (${d.part})` : ""}${d.machine ? ` on ${d.machine}` : ""}`);
   return setLine(o, k, { machine: d.lineMachine ?? d.machine ?? i.machine, ...(d.part ? {} : { perPlate: d.perPlate }) });
 }
 
@@ -135,13 +135,14 @@ export function cutParts(o: Order, k: number, n: number, printers: string[] = []
 export const saveParts = (o: Order, k: number, parts: LinePart[] | undefined): Order => setLine(o, k, { parts: parts?.length ? parts : undefined });
 /** Everything printed so far for a line, failed prints included: grams that left the spools and hours on the machines. */
 export function runTotals(o: Order, i: LineItem, part?: string) {
-  const runs = batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && (part === undefined || (b.part ?? "") === part));
+  const runs = batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && (part === undefined || (part === "" ? !b.part : onParts(b).includes(part))));
+  const share = (b: Batch) => (part ? 1 / Math.max(1, onParts(b).length) : 1);
   const done = runs.filter((b) => !b.running);
   return {
     runs: runs.length, running: runs.length - done.length,
     good: done.reduce((a, b) => a + (b.done || 0), 0), failed: done.reduce((a, b) => a + (b.failed ?? 0), 0),
-    g: Math.round(done.reduce((a, b) => a + Object.values(b.grams ?? {}).reduce((x, y) => x + y, 0), 0)),
-    h: Math.round(done.reduce((a, b) => a + (b.hours ?? 0), 0) * 10) / 10,
+    g: Math.round(done.reduce((a, b) => a + Object.values(b.grams ?? {}).reduce((x, y) => x + y, 0) * share(b), 0)),
+    h: Math.round(done.reduce((a, b) => a + (b.hours ?? 0) * share(b), 0) * 10) / 10,
     /** runs printed with the spools still loaded: their grams arrive at the final weigh */
     toWeigh: done.filter((b) => b.weighLater).length,
   };
