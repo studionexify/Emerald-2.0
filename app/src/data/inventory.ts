@@ -59,13 +59,15 @@ export function b2bFor(name: string): { size: "b2b"; b2b: string } | null {
 
 /** Bin registry: kind → list it came from, so Restore puts it back. */
 const REG: Record<string, Signal<{ id: string }[]>> = {};
-export function registerBin(kind: string, sig: Signal<any[]>) { REG[kind] = sig; }
+const FIX: Record<string, (row: any, live: any[]) => any> = {};
+/** `fix` may adjust a row on its way back (for example a number someone else took meanwhile). */
+export function registerBin(kind: string, sig: Signal<any[]>, fix?: (row: any, live: any[]) => any) { REG[kind] = sig; if (fix) FIX[kind] = fix; }
 export function toBin(kind: string, row: { id: string }, label: string, by: string) {
   const sig = REG[kind]; if (sig) sig.value = sig.value.filter((r) => r.id !== row.id);
   binSig.value = [{ id: uid(), kind, label, deletedAt: today(), by, data: row }, ...binSig.value];
 }
 export function restoreBin(b: Binned) {
-  const sig = REG[b.kind]; if (sig && b.data) sig.value = [b.data as { id: string }, ...sig.value];
+  const sig = REG[b.kind]; if (sig && b.data) sig.value = [FIX[b.kind] ? FIX[b.kind](b.data, sig.value) : (b.data as { id: string }), ...sig.value];
   binSig.value = binSig.value.filter((x) => x.id !== b.id);
 }
 export const purgeBin = (b: Binned) => (binSig.value = binSig.value.filter((x) => x.id !== b.id));

@@ -5,7 +5,7 @@ import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, LIMITS, markSeen, materialUsage,
+  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, usedIn, LIMITS, markSeen, materialUsage,
   MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
@@ -279,7 +279,7 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
           : <p class="t-meta">No live order uses this design. Assign it to an order and the grams still to print show here, from the same numbers as the filament panel.</p>}</div>
       </details>
       <div class="t-meta">Added {shortDate(d.created)} by {d.by}</div>
-      {writable && <button type="button" onClick={async () => { if (await ask(`Delete “${d.name}”? It goes to the Bin, and its files to Google Drive's trash until the Bin is emptied.`, { ok: "Delete design" })) { const e = await deleteDesign(d); if (e) setMissing(e); else onClose(); } }} class="self-start text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}
+      {writable && <button type="button" onClick={async () => { if (await ask(`Delete “${d.name}”? It goes to the Bin, and its files to Google Drive's trash until the Bin is emptied. ${usedIn(d).length ? `It is used in ${usedIn(d).join(", ")}, so the number ${d.no} is retired: it stays blank and is never given to another design.` : `It is not used anywhere, so the number ${d.no} goes to the next design added.`}`, { ok: "Delete design" })) { const e = await deleteDesign(d); if (e) setMissing(e); else onClose(); } }} class="self-start text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}
       <div class="sticky -bottom-4 -mx-4 -mb-4 mt-auto border-t border-line bg-c0 px-4 py-3 flex gap-2 [&>*]:flex-1">
         <Button variant="outline" icon="share" onClick={onShare}>Share</Button>
         {writable && <Button variant="outline" icon="edit" onClick={onEdit}>Edit</Button>}

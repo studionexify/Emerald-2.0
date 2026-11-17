@@ -33,10 +33,10 @@ export function renameCategory(id: string, name: string): string | null {
   if (nexderCatsSig.value.some((c) => c.id !== id && c.name.toLowerCase() === n.toLowerCase())) return "Another category already has that name";
   nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === id ? { ...c, name: n } : c)); return null;
 }
-/** A category can be deleted once no design (in the list or the Bin) was numbered from it. */
-export const canDeleteCategory = (id: string) => !nexderDesignsSig.value.some((d) => d.catId === id) && !binSig.value.some((x) => x.kind === "Design" && (x.data as { catId?: string } | undefined)?.catId === id);
+/** A category can be deleted only when nothing was ever numbered from it: no design in the list or the Bin, and no retired number (its block could be handed out again). */
+export const canDeleteCategory = (id: string) => !nexderDesignsSig.value.some((d) => d.catId === id) && !binSig.value.some((x) => x.kind === "Design" && (x.data as { catId?: string } | undefined)?.catId === id) && !(nexderCatsSig.value.find((c) => c.id === id)?.retired?.length);
 export function deleteCategory(id: string): string | null {
-  if (!canDeleteCategory(id)) return "Designs numbered in this category are still in the list or the Bin, so it has to stay. Delete or empty the Bin of them first, or rename it.";
+  if (!canDeleteCategory(id)) return "Numbers were issued from this category (designs, the Bin or retired numbers), so it can't be deleted. Archive it to hide it.";
   nexderDesignsSig.value = nexderDesignsSig.value.map((d) => (d.cats?.includes(id) ? { ...d, cats: d.cats.filter((c) => c !== id) } : d));
   nexderCatsSig.value = nexderCatsSig.value.filter((c) => c.id !== id); return null;
 }
