@@ -4,6 +4,7 @@ import { Button, Field, inputCls, Sheet } from "../../ui";
 import { navigate } from "../../router";
 import { accountsSig, addMoney, consume, inr, invDue, invoicesSig, log, me, orderProgress, orderTotal, packRecSig, packSig, patchOrder, qcSig, shipmentsSig, today, uid, updateInvoice, vMoney, batchSet, addBatch, type Batch, type Order } from "../../data";
 
+import { approveOrder } from "../../data/quoting";
 const val = (e: Event) => (e.target as HTMLInputElement).value;
 const who = () => me.value?.name ?? "You";
 type Props = { order: Order; field: string; onClose: () => void; onDone: (o: Order) => void };
@@ -26,7 +27,7 @@ export function RecordSheet({ order: o, field, onClose, onDone }: Props) {
   if (field === "approved") {
     title = o.type === "inhouse" ? "Approve job card" : "Quotation approved";
     body = <Field label="How was it approved? (optional)"><input class={inputCls} placeholder="e.g. WhatsApp OK from client" value={g("note")} onInput={set("note")} /></Field>;
-    save = () => done({ approved: true }, `Approved${g("note") ? ` (${g("note")})` : ""}`); label = "Mark approved";
+    save = () => { if (o.type === "inhouse") return done({ approved: true }, `Approved${g("note") ? ` (${g("note")})` : ""}`); onDone(approveOrder(o, { note: g("note") })); onClose(); }; label = o.type === "inhouse" ? "Mark approved" : "Approve and send to Production";
   } else if (field === "po") {
     title = "PO received";
     body = <Field label="PO number"><input class={inputCls} value={g("po")} onInput={set("po")} /></Field>;

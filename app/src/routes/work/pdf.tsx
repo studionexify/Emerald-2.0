@@ -10,12 +10,12 @@ import {invTax, type Party} from "../../data";
 import type { Biz } from "../../data/biz";
 import { amt, longDate, words, type DocData } from "./Doc";
 
-const FONTS: [string, string, string][] = [
+export const FONTS: [string, string, string][] = [
   ["Montserrat-Regular.ttf", "Montserrat", "normal"], ["Montserrat-Bold.ttf", "Montserrat", "bold"],
   ["Comfortaa-Regular.ttf", "Comfortaa", "normal"], ["Comfortaa-Bold.ttf", "Comfortaa", "bold"], ["DancingScript-SemiBold.ttf", "DancingScript", "normal"],
 ];
 const cache = new Map<string, string>();
-async function b64(url: string, image = false) {
+export async function b64(url: string, image = false) {
   if (cache.has(url)) return cache.get(url)!;
   const r = await fetch(url); if (!r.ok) throw new Error(`Could not load ${url}`);
   const buf = new Uint8Array(await r.arrayBuffer());

@@ -164,7 +164,6 @@ export function DocSheet({ d, copy }: { d: DocData; copy?: string }) {
 }
 
 function QuoteSheet({ d, b, t }: { d: DocData; b: Biz; t: ReturnType<typeof invTax> }) {
-  const g = d.gstRate / 100;
   return (
     <article class="print-area bg-white text-black rounded-xl p-4 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] @container overflow-x-auto [&_td.text-right]:whitespace-nowrap">
       <h1 class="text-2xl font-bold mb-3">QUOTATION</h1>
@@ -172,7 +171,7 @@ function QuoteSheet({ d, b, t }: { d: DocData; b: Biz; t: ReturnType<typeof invT
       <div class="flex flex-wrap justify-between gap-3 mb-3"><span>To: <b>{d.party}</b></span>{d.address && <span>Address: {d.address}</span>}</div>
       <table class="w-full border-collapse mb-3 [&_td]:px-1 [&_th]:px-1">
         <thead><tr class="border-y border-black text-left"><th class="py-1 w-12">Sr. No</th><th>Description</th><th class="text-right">Price</th><th class="text-right">QTY</th><th class="text-right">GST ({d.gstRate}%)</th><th class="text-right">Amount</th></tr></thead>
-        <tbody>{d.lines.map((l, i) => { const v = l.qty * l.rate; return <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td class="text-right">{rs(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{rs(v * g)}</td><td class="text-right">{rs(v * (1 + g))}</td></tr>; })}</tbody>
+        <tbody>{d.lines.map((l, i) => { const v = l.qty * l.rate, lg = Math.round(v * d.gstRate) / 100; return <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td class="text-right">{rs(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{rs(lg)}</td><td class="text-right">{rs(v + lg)}</td></tr>; })}</tbody>
       </table>
       <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6">
         <div>
@@ -182,7 +181,8 @@ function QuoteSheet({ d, b, t }: { d: DocData; b: Biz; t: ReturnType<typeof invT
         <table class="w-full @lg:w-64 h-fit whitespace-nowrap [&_td]:pl-3 [&_td:first-child]:pl-0"><tbody>
           <tr><td>Sub-Total</td><td class="text-right">{rs(t.taxable)}</td></tr>
           <tr><td>GST ({d.gstRate}%)</td><td class="text-right">{rs(t.cgst + t.sgst + t.igst)}</td></tr>
-          <tr class="border-t-2 border-black font-bold"><td class="py-1">Total</td><td class="text-right">{rs(t.taxable + t.cgst + t.sgst + t.igst)}</td></tr>
+          {t.roundOff !== 0 && <tr><td>Round-off</td><td class="text-right">{(t.roundOff < 0 ? "−" : "") + amt(t.roundOff)}</td></tr>}
+          <tr class="border-t-2 border-black font-bold"><td class="py-1">Total</td><td class="text-right">{rs(t.total)}</td></tr>
         </tbody></table>
       </section>
       <footer class="mt-4 flex justify-between items-end gap-4"><Contact b={b} /><PayInfo b={b} /></footer>

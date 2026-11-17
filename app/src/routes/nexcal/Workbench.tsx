@@ -5,8 +5,9 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Button, Field, Icon, inputCls } from "../../ui";
-import { createOrder, inr } from "../../data";
+import { createOrder, inr, patchOrder } from "../../data";
 import { navigate } from "../../router";
+import { openQuoteSig } from "../../data/quoting";
 import { nexcalSig } from "../../data/pricing";
 import {
   aggregateUploadedParts, applyAggregateToInputs, buildBulkPriceTable, calculateNexcal, ceilToNearest, emptyNexcalInputs, estimatorParams, getPartsPerSpool, longestDimensionMm,
@@ -170,9 +171,11 @@ export function Workbench({ mode, onUse, onFiles: told, feed }: WorkbenchProps) 
   const copy = async () => { try { await navigator.clipboard.writeText(summary()); setToast("Summary copied"); } catch { setToast("Could not copy — clipboard blocked"); } };
   const quote = () => {
     const qty = result.orderQty;
-    createOrder({ type: "client", customer: "New client", item: q.item.trim() || "Calculated item", qty, price: Math.round(result.finalPriceRounded / qty), medium: "Instagram", due: "",
+    const o = createOrder({ type: "client", customer: "New client", item: q.item.trim() || "Calculated item", qty, price: Math.round(result.finalPriceRounded / qty), medium: "Instagram", due: "",
       supports: files.some((f) => f.supportEnabled) || sheets.some((s) => s.support), material: q.material ?? inputs.material, colour: q.colour });
-    navigate("/work/orders");
+    /* the print planner needs the weight and size the calculator just worked out */
+    if (inputs.filamentGrams > 0) patchOrder(o, { items: o.items.map((i, k) => (k ? i : { ...i, roughG: Math.round(inputs.filamentGrams * 10) / 10, ...(sizeMm > 0 ? { heightMm: sizeMm } : {}) })) });
+    openQuoteSig.value = o.id; navigate("/work");
   };
 
   /* ---------------------------------------------------------------- the price */

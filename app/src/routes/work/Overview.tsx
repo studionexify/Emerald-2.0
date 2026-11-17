@@ -3,10 +3,12 @@ import { vOrders } from "../../data";
 import { useEffect, useState } from "preact/hooks";
 import { ask, Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
+import { openQuoteSig, quoteOf } from "../../data/quoting";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
 import { lazy } from "../../router";
 const StockPanel = lazy(() => import("./StockPanel").then((m) => m.StockPanel));
+const QuoteFlow = lazy(() => import("./ClientFlow").then((m) => m.QuoteFlow));
 const Floor = lazy(() => import("./Floor").then((m) => m.Floor));
 const QuickCreate = lazy(() => import("./InHouseParts").then((m) => m.QuickCreate));
 const InHouseCard = lazy(() => import("./InHouseParts").then((m) => m.InHouseCard));
@@ -69,7 +71,7 @@ const tint = (h: string) => ({ color: h, background: `color-mix(in srgb, ${h} 13
 const HEAD = "hidden @lg:grid gap-x-4 px-4 h-10 items-center bg-c1 rounded-t-[var(--radius-card)] border-b border-line text-[11px] font-bold uppercase tracking-[0.06em] text-c3";
 const ROW = "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 py-3 px-4 border-t border-line first:border-0 hover:bg-c1/60 cursor-pointer !min-h-0";
 const SEG_COLS: Record<Segment, { cols: string; head: string[] }> = {
-  client: { cols: "@lg:grid-cols-[minmax(140px,1.2fr)_minmax(170px,1.6fr)_96px_110px_120px_84px_28px]", head: ["Client", "Items", "Amount", "Payment", "Stage", "Deadline", ""] },
+  client: { cols: "@lg:grid-cols-[minmax(120px,1.1fr)_minmax(140px,1.5fr)_92px_108px_72px_116px_28px] !gap-x-3", head: ["Client", "Items", "Amount", "Stage", "Deadline", "Next step", ""] },
   bulk: { cols: "@lg:grid-cols-[minmax(150px,0.7fr)_minmax(150px,1.2fr)_minmax(200px,2fr)_110px_minmax(150px,170px)]", head: ["Type", "Client", "Print progress", "Deadline", ""] },
   inhouse: { cols: "@lg:grid-cols-[minmax(150px,1.3fr)_minmax(170px,1.6fr)_minmax(120px,0.9fr)_120px_84px_28px]", head: ["Build", "Items", "Machine", "Stage", "Due", ""] },
 };
@@ -101,18 +103,25 @@ function Progress({ o }: { o: Order }) {
     <div class="text-[11px] font-medium mt-1 whitespace-nowrap"><span class="text-grn">{t.printed}</span><span class="text-c3">/{t.qty} printed</span> · <span class="text-red">{t.failed} wasted</span> · <span class="text-c3">{t.pending} pending</span></div>
   </div>;
 }
-function SegRow({ seg, o, onOpen, onEdit, onFloor }: { seg: Segment; o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void; onFloor: (o: Order) => void }) {
+function SegRow({ seg, o, onOpen, onEdit, onFloor, onQuote }: { seg: Segment; o: Order; onOpen: (o: Order) => void; onEdit: (o: Order) => void; onFloor: (o: Order) => void; onQuote: (o: Order) => void }) {
   const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
   const kind = kindOf(o, c);
   const open = { role: "button" as const, tabIndex: 0, onClick: () => onOpen(o), onKeyDown: (e: KeyboardEvent) => e.key === "Enter" && onOpen(o), class: `${ROW} ${SEG_COLS[seg].cols}` };
   const menu = <div class="@max-lg:hidden"><RowMenu o={o} c={c} onOpen={onOpen} onEdit={onEdit} /></div>;
-  if (seg === "client") return <div {...open}>
-    <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug truncate">{o.customer}</div><div class="t-meta truncate">{[c?.city, c?.phone || o.medium].filter(Boolean).join(" · ")}</div></div>
-    <Items o={o} seg={seg} />
-    <span class="@max-lg:hidden num text-[13px] font-semibold">{inr(orderTotal(o))}</span>
-    <span class="@max-lg:hidden"><span class="inline-flex px-2 h-6 items-center rounded-md text-[12px] font-semibold" style={tint(o.paid ? STAGE_HUE.shipping : STAGE_HUE.qc)}>{o.paid ? "Paid" : "Unpaid"}</span></span>
-    <StagePill o={o} /><Due o={o} />{menu}
-  </div>;
+  if (seg === "client") {
+    const q = quoteOf(o), p = orderProgress(o), prod = o.stage === "production";
+    const act = o.stage === "quotation"
+      ? { label: !q ? "Create quote" : q.outcome === "lost" ? "Declined" : q.sent ? "Awaiting client" : "Send quote", sub: q ? q.no : "Quotation", cls: q?.sent && q.outcome !== "lost" ? "bg-amb-bg text-amb" : "bg-c4 text-c0", run: () => onQuote(o) }
+      : prod ? { label: "FLOOR", sub: p.pending ? `${p.printed}/${p.qty} printed` : "all printed", cls: "bg-grn text-c0", run: () => onFloor(o) } : null;
+    return <div {...open}>
+      <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug break-words">{o.customer}</div><div class="t-meta break-words">{[c?.city, c?.phone || o.medium].filter(Boolean).join(" · ")}</div></div>
+      <Items o={o} seg={seg} />
+      <span class="@max-lg:hidden"><span class="block num text-[13px] font-semibold">{inr(orderTotal(o))}</span><span class="block text-[11px] font-semibold" style={{ color: o.paid ? STAGE_HUE.shipping : STAGE_HUE.qc }}>{o.paid ? "Paid" : "Unpaid"}</span></span>
+      <StagePill o={o} /><Due o={o} />
+      <div class="@max-lg:col-span-2">{act && <button type="button" onClick={(e) => { e.stopPropagation(); act.run(); }} class={`w-full !min-h-0 rounded-xl py-1.5 px-2.5 text-center cursor-pointer hover:opacity-90 ${act.cls}`}><span class="block text-[13px] font-bold leading-tight">{act.label}</span><span class="block text-[10.5px] opacity-80 leading-tight">{act.sub}</span></button>}</div>
+      {menu}
+    </div>;
+  }
   if (seg === "inhouse") { const ms = [...new Set(o.items.flatMap((i) => lineMachines(o, i).map((m) => m.name)))]; return <div {...open}>
     <div class="min-w-0"><div class="text-[14px] font-semibold leading-snug truncate">{o.customer}</div><div class="t-meta font-mono">{o.no}</div></div>
     <Items o={o} seg={seg} />
@@ -231,7 +240,10 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
   const [f, setF] = useState<string>("all");
   const [open, setOpen] = useOpenOrder();
   const [edit, setEdit] = useState<Order | null>(null);
-  const [floor, setFloor] = useState<Order | null>(null), [quick, setQuick] = useState(false);
+  const [floor, setFloor] = useState<Order | null>(null), [quick, setQuick] = useState(false), [quote, setQuote] = useState<Order | null>(null);
+  /* "Use in quotation" in Nexcal lands here with the order open and its quotation step showing */
+  const wantQuote = openQuoteSig.value;
+  useEffect(() => { if (!wantQuote) return; const o = ordersSig.value.find((x) => x.id === wantQuote); openQuoteSig.value = null; if (o && segmentOf(o) === seg) { setQuote(o); setOpen(o); } }, [wantQuote]);
   /* Filament stock drawer: same on Client, Bulk & B2B and In-house. Open state is remembered on this device. */
   const [stock, setStock] = useState(() => { try { return localStorage.getItem("emerald:stock:drawer") === "1"; } catch { return false; } });
   const flipStock = () => { const v = !stock; setStock(v); try { localStorage.setItem("emerald:stock:drawer", v ? "1" : "0"); } catch {} };
@@ -263,7 +275,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
     : [["To print", all.reduce((t, o) => t + orderProgress(o).pending, 0), "hourglass"], ["Printing now", myJobs.filter((j) => j.status === "printing").length + batchesSig.value.filter((b) => b.running && nos.has(b.orderNo)).length, "printer"]];
   kpis.push(["Queue", queued, "list"]);
   return (
-    <div class="relative flex h-full min-h-0">{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{quick && <QuickCreate onClose={() => setQuick(false)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<div class="flex-1 min-w-0 h-full"><WorkShell actions={<Button variant="outline" onClick={flipStock} aria-pressed={stock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>} detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+    <div class="relative flex h-full min-h-0">{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{quote && <QuoteFlow order={quote} onClose={() => setQuote(null)} />}{quick && <QuickCreate onClose={() => setQuick(false)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<div class="flex-1 min-w-0 h-full"><WorkShell actions={<Button variant="outline" onClick={flipStock} aria-pressed={stock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>} detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Summary kpis={kpis} list={list} active={st} onPick={setSt} stages={stages} />
 
       {seg === "inhouse" && <button type="button" onClick={() => setQuick(true)} class="self-start !min-h-0 h-11 px-5 rounded-xl bg-grn text-c0 inline-flex items-center gap-2 text-[15px] font-bold tracking-wide cursor-pointer hover:opacity-90"><Icon name="plus" size={18} />Create</button>}
@@ -276,7 +288,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
           </div>
           <div class="@container rounded-[var(--radius-card)] bg-c0 border border-line overflow-x-auto">
             {seg !== "inhouse" && <div class={`${HEAD} ${SEG_COLS[seg].cols}`}>{SEG_COLS[seg].head.map((h, i) => <span key={i}>{h}</span>)}</div>}
-            {live.slice(0, n).map((o) => seg === "inhouse" ? <InHouseCard key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} /> : <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} onFloor={(x) => setFloor(x)} />)}
+            {live.slice(0, n).map((o) => seg === "inhouse" ? <InHouseCard key={o.id} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} /> : <SegRow key={o.id} seg={seg} o={o} onOpen={(x) => { setEdit(null); setOpen(x); }} onEdit={(x) => setEdit(x)} onFloor={(x) => setFloor(x)} onQuote={(x) => setQuote(x)} />)}
             {live.length > n && <button onClick={() => setN(n + PAGE)} class="w-full h-9 border-t border-line text-[13px] font-medium text-c3 hover:bg-c1/60 cursor-pointer">Show {Math.min(PAGE, live.length - n)} more</button>}
           </div>
         </Section>
