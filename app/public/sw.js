@@ -15,6 +15,7 @@ async function trim(c) {
 self.addEventListener("fetch", (e) => {
   const r = e.request, u = new URL(r.url);
   if (r.method !== "GET" || u.origin !== location.origin) return;
+  if (u.pathname === "/nexder-dl") return; // file downloads stream straight from the Worker, never from this cache
   if (u.pathname.includes("/assets/")) {
     e.respondWith(caches.match(r).then((hit) => {
       if (hit && !isHtml(hit)) return hit;

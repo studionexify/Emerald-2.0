@@ -11,6 +11,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Operations", items: [
     { href: "/workshop", label: "Store", icon: "box" },
     { href: "/calculator", label: "Nexcal", icon: "calc" },
+    { href: "/nexder", label: "Nexder", icon: "nexder" },
     { href: "/mauny", label: "Mauny", icon: "money" },
     { href: "/work/invoice", label: "Invoice", icon: "receipt" },
   ] },
@@ -27,6 +28,7 @@ export const NAV: NavItem[] = [
   { href: "/work", label: "Production", icon: "work" },
   { href: "/workshop", label: "Store", icon: "box" },
   { href: "/calculator", label: "Nexcal", icon: "calc" },
+  { href: "/nexder", label: "Nexder", icon: "nexder" },
   { href: "/mauny", label: "Mauny", icon: "money" },
   { href: "/work/invoice", label: "Invoice", icon: "receipt" },
   { href: "/alerts", label: "Attention", icon: "bell" },
