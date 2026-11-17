@@ -18,7 +18,8 @@ vv?.addEventListener("scroll", syncKb);
 
 const FOCUSABLE = "a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex='-1'])";
 
-export function Sheet({ open = true, onClose, title, children, footer, full, wide, huge }: {
+export function Sheet({ open = true, onClose, title, children, footer, full, wide, huge, xl }: {
+  /** A working window that covers most of a desktop screen (calculator beside a form). Its body scrolls inside its own panes. */ xl?: boolean;
   /** Big editors: as wide as their content needs (up to 1100px), never wider: big editors. */ huge?: boolean;
   /** Wide, fixed-height dialog on desktop (settings). */ wide?: boolean;
   open?: boolean; onClose: () => void; title?: ComponentChildren; children: ComponentChildren;
@@ -28,6 +29,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
   const panel = useRef<HTMLDivElement>(null);
   const [dy, setDy] = useState(0);
   const drag = useRef<{ y: number; t: number } | null>(null);
+  const closeNow = useRef(onClose); closeNow.current = onClose; // the Escape handler below is set up once; it must call the latest onClose
 
   useEffect(() => {
     if (!open) return;
@@ -35,7 +37,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
     const p = panel.current!;
     (p.querySelector<HTMLElement>("[autofocus]") ?? p).focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      if (e.key === "Escape") { e.stopPropagation(); closeNow.current(); }
       if (e.key !== "Tab") return;
       const f = [...p.querySelectorAll<HTMLElement>(FOCUSABLE)];
       if (!f.length) return;
@@ -51,6 +53,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
 
   /* Drag from the handle/header always; from the body only when it is scrolled to the top. */
   const down = (e: PointerEvent) => {
+    if (xl && !(e.target as Element).closest("[data-sheet-grab]")) return; // a big working window is closed from its handle or its X, never by dragging inside it
     const body = (e.target as Element).closest("[data-sheet-body]") as HTMLElement | null;
     if (body && body.scrollTop > 0) return;
     if ((e.target as Element).closest("input,select,textarea,button,a")) return;
@@ -67,20 +70,20 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
   };
 
   return (
-    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide || huge ? "md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
+    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide || huge ? "md:justify-center" : ""} ${xl ? "md:items-center md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
       <div class="absolute inset-0 bg-black/40 sheet-fade" onClick={onClose} aria-hidden="true" />
       <div ref={panel} role="dialog" aria-modal="true" tabIndex={-1} aria-label={typeof title === "string" ? title : undefined}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 ${huge ? "" : "md:w-full"} ${huge ? "md:w-fit md:min-w-[min(560px,90vw)] md:max-w-[min(1100px,90vw)] md:max-h-[90dvh] max-h-[94dvh]" : wide ? "md:max-w-2xl md:max-h-[min(680px,84dvh)] max-h-[88dvh]" : "md:max-w-lg"} md:mx-auto ${wide || huge ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge ? "" : "max-h-[92dvh]"}`}
+        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 ${huge || xl ? "" : "md:w-full"} ${xl ? "md:w-[min(1640px,97vw)] md:h-[min(980px,95dvh)] h-[94dvh] max-h-[95dvh] md:mb-0" : ""} ${huge ? "md:w-fit md:min-w-[min(560px,90vw)] md:max-w-[min(1100px,90vw)] md:max-h-[90dvh] max-h-[94dvh]" : wide ? "md:max-w-2xl md:max-h-[min(680px,84dvh)] max-h-[88dvh]" : xl ? "" : "md:max-w-lg"} md:mx-auto ${wide || huge || xl ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge || xl ? "" : "max-h-[92dvh]"}`}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dy ? "none" : undefined, touchAction: "pan-y" }}>
-        <div class="shrink-0 pt-2 pb-1 flex justify-center cursor-grab" aria-hidden="true"><span class="w-9 h-1.5 rounded-full bg-c1" /></div>
+        <div data-sheet-grab class="shrink-0 pt-2 pb-1 flex justify-center cursor-grab" aria-hidden="true"><span class="w-9 h-1.5 rounded-full bg-c1" /></div>
         {title && (
           <div class="shrink-0 flex items-center gap-2 px-4 pb-2">
             <h2 class="flex-1 min-w-0 text-[17px] font-semibold tracking-tight truncate">{title}</h2>
             <button onClick={onClose} aria-label="Close" class="w-11 h-11 -mr-2 rounded-full flex items-center justify-center cursor-pointer"><span class="w-7 h-7 rounded-full bg-c1 flex items-center justify-center"><Icon name="close" size={14} /></span></button>
           </div>
         )}
-        <div data-sheet-body class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">{children}</div>
+        <div data-sheet-body class={`flex-1 min-h-0 ${xl ? "overflow-hidden" : "overflow-y-auto overscroll-contain px-4 pb-4"}`}>{children}</div>
         {footer && <div class="shrink-0 border-t border-line px-4 pt-2 flex gap-2 [&>*]:flex-1 [&_button]:h-12" style={{ paddingBottom: kb.value ? 8 : "max(8px, env(safe-area-inset-bottom))" }}>{footer}</div>}
         {!footer && <div class="shrink-0 h-[env(safe-area-inset-bottom)]" />}
       </div>
