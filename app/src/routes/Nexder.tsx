@@ -1,30 +1,22 @@
-/** Nexder: the studio's library of designs. Photos and design files are kept in Google Drive (single-device mode: on this device); Emerald shows small copies. */
+/** Nexder: the studio's library of designs. Originals live in Google Drive, previews in Supabase Storage; Emerald keeps no files. */
 import type { ComponentChildren } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import { calculateNexcal, emptyNexcalInputs, NEXCAL_MATERIALS } from "../data/nexcal/engine";
 import { nexcalSig } from "../data/pricing";
 import {
-  addCategory, assignable, whereIs, whereText, assignToOrder, blankDraft, blobStore, buildPack, catName, deleteDesign, downloadFile, draftOf, draftReady, markSeen, materialUsage, nexderCatsSig, nexderDesignsSig,
-  nextNo, packBytes, packPlan, saveBlob, saveDraft, sharedWithMe, shareDesigns, unseenShares, type Draft, type DraftItem, type NxDesign, type NxSize, MAX_PER_CAT,
+  addCategory, assignable, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
+  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
+  type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
 import { uid } from "../data/store";
 
 /* ---------------------------------------------------------------- small helpers */
-const urls = new Map<string, string>();
-/** Object URL for a stored blob ("" until it is read, or when it is not on this device). */
-function useStored(id?: string): string {
-  const [u, setU] = useState(id ? urls.get(id) ?? "" : "");
-  const onDrive = id ? whereIs(id) === "drive" : false; // re-read once the Drive id has synced in from another device
-  useEffect(() => {
-    let live = true;
-    if (!id) { setU(""); return; }
-    const c = urls.get(id); if (c) { setU(c); return; }
-    setU("");
-    blobStore.get(id).then((b) => { if (!live || !b) return; const url = URL.createObjectURL(b); urls.set(id, url); setU(url); });
-    return () => { live = false; };
-  }, [id, onDrive]);
+/** Object URL of one photo's small preview ("" until it arrives). */
+function usePreview(id?: string): string {
+  const [u, setU] = useState("");
+  useEffect(() => { let live = true; setU(""); if (id) previewUrl(id).then((x) => live && setU(x)); return () => { live = false; }; }, [id]);
   return u;
 }
 const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -33,16 +25,15 @@ const g = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(2)} kg` : 
 const chipCls = "inline-flex items-center rounded-full px-2 h-5 text-[11px] font-semibold whitespace-nowrap";
 const Ph = () => <span class="w-full h-full flex items-center justify-center text-c2"><Icon name="image" size={22} /></span>;
 
-/** A stored photo: the small copy, else the inline cover (other devices), else a placeholder. */
-function Pic({ id, cover, alt, class: cls = "" }: { id?: string; cover?: string; alt: string; class?: string }) {
-  const u = useStored(id ? id + "-s" : undefined), src = u || cover;
+/** A stored photo's small preview, or a placeholder. */
+function Pic({ id, alt, class: cls = "" }: { id?: string; alt: string; class?: string }) {
+  const src = usePreview(id);
   return src ? <img src={src} alt={alt} loading="lazy" class={`w-full h-full object-cover ${cls}`} /> : <Ph />;
 }
 function Local({ item, alt }: { item: DraftItem; alt: string }) {
   const url = useMemo(() => (item.file ? URL.createObjectURL(item.file) : ""), [item.file]);
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
-  const stored = useStored(item.file ? undefined : item.id + "-s");
-  const src = url || stored;
+  const stored = usePreview(item.file ? undefined : item.id), src = url || stored;
   return src ? <img src={src} alt={alt} class="w-full h-full object-cover" /> : <Ph />;
 }
 const Row = ({ title, meta, open, children }: { title: string; meta?: ComponentChildren; open?: boolean; children: ComponentChildren }) => (
@@ -64,8 +55,9 @@ export default function Nexder() {
   const [q, setQ] = useState(""), [cat, setCat] = useState(""), [view, setView] = useState<"all" | "shared">("all");
   const [panel, setPanel] = useState<Panel>(null), [dlg, setDlg] = useState<Dlg>(null);
   const [selecting, setSelecting] = useState(false), [sel, setSel] = useState<string[]>([]);
-  const writable = can("nexder", "full");
+  const writable = can("nexder", "full") && nexderReady;
   const shared = sharedWithMe(), unseen = unseenShares().length;
+  useEffect(() => { if (nexderReady) { syncTrash(); if (can("nexder", "full")) sweepOrphans(); } }, []);
   useEffect(() => { if (view === "shared") markSeen(); }, [view, shared.length]);
   const pool = view === "shared" ? designs.filter((d) => shared.some((s) => s.designIds.includes(d.id))) : designs;
   const list = pool.filter((d) => (!cat || d.catId === cat) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim())));
@@ -97,6 +89,7 @@ export default function Nexder() {
       detail={detail}>
       {view === "shared" && shared.length > 0 && <div class="grid gap-1.5">{shared.map((s) => (
         <p key={s.id} class="rounded-xl bg-c0 px-3 py-2 text-[13px] break-words"><b>{usersSig.value.find((u) => u.id === s.by)?.name ?? "Someone"}</b> shared {s.designIds.length} design{s.designIds.length > 1 ? "s" : ""} · {shortDate(s.at)}{s.note ? <span class="text-c3"> · “{s.note}”</span> : null}</p>))}</div>}
+      {!nexderReady && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Nexder keeps its files in Google Drive, so it needs cloud sync. Sign in to cloud sync to add or open files.</p>}
       {!designs.length
         ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="No designs yet" action={writable ? <Button icon="plus" class="mt-2" onClick={() => setPanel({ k: "new" })}>New design</Button> : undefined} /></div>
         : !list.length ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="Nothing matches" action={<button class="underline text-[13px]" onClick={() => { setQ(""); setCat(""); setView("all"); }}>Clear filters</button>} /></div>
@@ -105,7 +98,7 @@ export default function Nexder() {
           return (
             <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={selecting ? on : undefined} aria-label={`${d.name}, ${d.no}`}
               class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
-              <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} cover={d.cover} alt="" /></span>
+              <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
               {selecting && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
               <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span> · {catName(d.catId)}</span></span>
             </button>
@@ -120,6 +113,7 @@ export default function Nexder() {
             <button type="button" aria-label="Clear selection" onClick={() => setSel([])} class="w-9 h-9 !min-h-0 rounded-full inline-flex items-center justify-center hover:bg-c0/15 cursor-pointer"><Icon name="close" size={14} /></button>
           </div>
         </div>)}
+      {designs.length > 0 && nexderReady && <Storage writable={can("nexder", "full")} />}
       {dlg === "pack" && <PackModal initial={picked} onClose={() => setDlg(null)} />}
       {dlg === "share" && <ShareModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
       {dlg === "assign" && <AssignModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
@@ -133,13 +127,20 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
   const ph = d.photos[Math.min(i, d.photos.length - 1)];
   const usage = materialUsage(d.id), total = usage.reduce((a, u) => a + u.total, 0);
   useEffect(() => { setI(0); setMissing(""); }, [d.id]);
-  const get = async (f: { id: string; name: string }) => { setBusy(f.id); setMissing(""); if (!(await downloadFile(f))) setMissing(whereIs(f.id) === "device" ? `${f.name} is only on the device that uploaded it. Sign in to cloud sync to keep it in Google Drive.` : `${f.name} could not be fetched from Google Drive. Check your connection and try again.`); setBusy(""); };
-  const all = async () => { for (const f of d.files) await get(f); };
+  const get = async (f: { id: string; name: string; drive?: string }) => { setBusy(f.id); setMissing(""); setMissing((await downloadFile(f)) ?? ""); setBusy(""); };
+  const all = async () => { for (const f of d.files) { await get(f); await new Promise((r) => setTimeout(r, 600)); } };
+  /* the browser asks where to save first (needs the click), then the photos are fetched from Drive one by one into the zip */
+  const zipPhotos = async () => {
+    const sink = await openSink(`${d.name} photos.zip`); if (!sink) return;
+    setBusy("zip"); setMissing("");
+    try { const r = await buildPack([d], { images: "all" }, sink, () => {}); if (r.missing) setMissing(`${r.missing} photo${r.missing > 1 ? "s" : ""} could not be fetched from Google Drive.`); } catch (e) { setMissing((e as Error).message); }
+    setBusy("");
+  };
   return (
     <div class="flex flex-col min-h-full gap-3.5">
       <DetailHead title={d.name} onClose={onClose} />
       <div>
-        <div class="aspect-[5/3] rounded-2xl overflow-hidden bg-c1"><Pic id={ph?.id} cover={d.cover} alt={d.name} /></div>
+        <div class="aspect-[5/3] rounded-2xl overflow-hidden bg-c1"><Pic id={ph?.id} alt={d.name} /></div>
         {d.photos.length > 1 && <div class="flex gap-2 mt-2 flex-wrap">{d.photos.map((p, k) => (
           <button key={p.id} type="button" onClick={() => setI(k)} aria-label={`Photo ${k + 1}`} aria-pressed={k === i} class={`w-11 h-11 !min-h-0 rounded-lg overflow-hidden bg-c1 p-0 cursor-pointer ${k === i ? "ring-2 ring-c4" : ""}`}><Pic id={p.id} alt="" /></button>))}</div>}
       </div>
@@ -153,10 +154,10 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
         <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
         {d.files.length ? <div class="grid gap-1.5">{d.files.map((f) => (
           <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span>
-            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {whereText(whereIs(f.id))}</span></span>
+            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "original in Google Drive" : "not in Drive"}</span></span>
             <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button></div>))}</div>
           : <p class="t-meta">No design file yet.{writable ? " Edit the design to add one." : ""}</p>}
-        {d.photos.length > 0 && <button type="button" onClick={async () => { for (const p of d.photos) await downloadFile(p); }} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download original photos</button>}
+        {d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing photos…" : "Download original photos (zip)"}</button>}
         {missing && <p role="status" class="t-meta mt-1.5 text-amb">{missing}</p>}
       </div>
       <details class="rounded-xl border border-line bg-c0 min-w-0" open={usage.length > 0}>
@@ -167,7 +168,7 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
           : <p class="t-meta">No live order uses this design. Assign it to an order and the grams still to print show here, from the same numbers as the filament panel.</p>}</div>
       </details>
       <div class="t-meta">Added {shortDate(d.created)} by {d.by}</div>
-      {writable && <button type="button" onClick={async () => { if (await ask(`Delete “${d.name}”? It goes to the Bin.`, { ok: "Delete design" })) { deleteDesign(d); onClose(); } }} class="self-start text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}
+      {writable && <button type="button" onClick={async () => { if (await ask(`Delete “${d.name}”? It goes to the Bin, and its files to Google Drive's trash until the Bin is emptied.`, { ok: "Delete design" })) { const e = await deleteDesign(d); if (e) setMissing(e); else onClose(); } }} class="self-start text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}
       <div class="sticky -bottom-4 -mx-4 -mb-4 mt-auto border-t border-line bg-c0 px-4 py-3 flex gap-2 [&>*]:flex-1">
         <Button variant="outline" icon="share" onClick={onShare}>Share</Button>
         {writable && <Button variant="outline" icon="edit" onClick={onEdit}>Edit</Button>}
@@ -185,7 +186,8 @@ function FormPanel({ editId, presetCat, onClose, onSaved }: { editId?: string; p
   const [multi, setMulti] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>(() => [base ? draftOf(base) : blankDraft()]);
   const [cur, setCur] = useState(0), [catId, setCatId] = useState(base?.catId ?? (nexderCatsSig.value.some((c) => c.id === (presetCat || lastCat)) ? presetCat || lastCat : ""));
-  const [adding, setAdding] = useState(!nexderCatsSig.value.length), [newCat, setNewCat] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(!nexderCatsSig.value.length), [newCat, setNewCat] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [prog, setProg] = useState<Progress | null>(null);
+  const ctl = useRef<AbortController | null>(null);
   const [priceFor, setPriceFor] = useState<number | null>(null);
   const cats = nexderCatsSig.value, cat = cats.find((c) => c.id === catId);
   const set = (k: number, p: Partial<Draft>) => setDrafts((ds) => ds.map((d, j) => (j === k ? { ...d, ...p } : d)));
@@ -193,11 +195,17 @@ function FormPanel({ editId, presetCat, onClose, onSaved }: { editId?: string; p
   const mk = () => { const r = addCategory(newCat); if (r.error) return setErr(r.error); setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); };
   const ready = drafts.every(draftReady) && !!cat;
   const go = (m: boolean) => { setMulti(m); if (m && drafts.length < 2) setDrafts((d) => [...d, blankDraft()]); setCur(0); };
+  const total = drafts.reduce((a, d) => a + newBytes(d), 0);
   const save = async () => {
-    setBusy(true); setErr(""); let last: NxDesign | null = null;
-    for (const d of drafts) { const r = await saveDraft(d, catId); if (typeof r === "string") { setErr(r); setBusy(false); return; } last = r; setDrafts((x) => x.filter((y) => y.key !== d.key)); }
-    setBusy(false); lastCat = catId; if (last) onSaved(last);
+    setBusy(true); setErr(""); const ac = (ctl.current = new AbortController()); let last: NxDesign | null = null;
+    for (const d of drafts) {
+      const r = await saveDraft(d, catId, setProg, ac.signal);
+      if (typeof r === "string") { setErr(r); setBusy(false); setProg(null); return; }
+      last = r; setDrafts((x) => x.filter((y) => y.key !== d.key));
+    }
+    setBusy(false); setProg(null); lastCat = catId; if (last) onSaved(last);
   };
+  const stop = () => { ctl.current?.abort(); onClose(); };
   if (priceFor !== null) return <PricePanel grams={Number(drafts[priceFor].sizes[0]?.g) || 0} current={Number(drafts[priceFor].price) || 0} onBack={() => setPriceFor(null)} onUse={(v) => { set(priceFor, { price: v ? String(v) : "" }); setPriceFor(null); }} />;
   return (
     <div class="flex flex-col min-h-full gap-3.5">
@@ -220,8 +228,13 @@ function FormPanel({ editId, presetCat, onClose, onSaved }: { editId?: string; p
             <span class="min-w-0 flex-1"><b class="block text-[13px] font-semibold break-words">{d.name || "Untitled"}</b><span class="t-meta">{d.photos.length} photo{d.photos.length === 1 ? "" : "s"} · {d.files.length} file{d.files.length === 1 ? "" : "s"}</span></span><span class="text-c3"><Icon name="down" size={14} /></span></button>)}
       {multi && <button type="button" onClick={() => { setDrafts((x) => [...x, blankDraft()]); setCur(drafts.length); }} class="h-9 px-3 rounded-xl border border-dashed border-c2 text-[12px] font-medium text-c3 inline-flex items-center gap-1.5 justify-center cursor-pointer"><Icon name="plus" size={13} /> Add another product</button>}
       {err && <p role="alert" class="text-[12.5px] text-red">{err}</p>}
+      {busy && prog && <div role="status" class="rounded-xl bg-c1/60 px-3 py-2.5 grid gap-1.5">
+        <div class="flex justify-between gap-3 text-[12.5px]"><span class="min-w-0 break-all">{prog.label === "Previews" ? "Preparing previews…" : `Uploading ${prog.label}`}</span><span class="num whitespace-nowrap">{prog.total ? Math.min(100, Math.round((prog.sent / prog.total) * 100)) : 0}%</span></div>
+        <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-acc" style={{ width: `${prog.total ? Math.min(100, (prog.sent / prog.total) * 100) : 0}%` }} /></div>
+        <div class="t-meta">{fmtBytes(prog.sent)} of {fmtBytes(prog.total)} · straight to Google Drive. Keep this tab open until it finishes.</div></div>}
+      {!busy && total > 0 && <p class="t-meta">{fmtBytes(total)} will be uploaded to Google Drive{total > 50 * 1048576 ? ". Keep this tab open while it uploads." : "."}</p>}
       <div class="sticky -bottom-4 -mx-4 -mb-4 mt-auto border-t border-line bg-c0 px-4 py-3 flex gap-2 justify-end">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button variant="outline" onClick={busy ? stop : onClose}>{busy ? "Stop upload" : "Cancel"}</Button>
         <Button disabled={!ready || busy} onClick={save}>{busy ? "Saving…" : base ? "Save changes" : multi ? `Save ${drafts.length} designs` : "Save design"}</Button>
       </div>
     </div>
@@ -307,35 +320,60 @@ function PricePanel({ grams, current, onBack, onUse }: { grams: number; current:
 
 /* ---------------------------------------------------------------- client pack */
 function PackModal({ initial, onClose }: { initial: NxDesign[]; onClose: () => void }) {
-  const [ids, setIds] = useState(initial.map((d) => d.id)), [images, setImages] = useState<"all" | "first3" | "cover">("all"), [files, setFiles] = useState(false), [busy, setBusy] = useState(false), [note, setNote] = useState("");
+  const [ids, setIds] = useState(initial.map((d) => d.id)), [images, setImages] = useState<"all" | "first3" | "cover">("all"), [busy, setBusy] = useState(false), [note, setNote] = useState(""), [done, setDone] = useState<[number, number]>([0, 0]);
   const all = nexderDesignsSig.value, ds = ids.map((id) => all.find((d) => d.id === id)).filter(Boolean) as NxDesign[];
-  const o = { images, files }, plan = packPlan(ds, o), nImg = plan.reduce((a, p) => a + p.photos.length, 0);
-  const cats = [...new Set(plan.map((p) => p.cat))];
+  const o = { images }, plan = packPlan(ds, o), nImg = plan.reduce((a, p) => a + p.photos.length, 0), bytes = packBytes(ds, o);
+  const cats = [...new Set(plan.map((p) => p.cat))], tooBig = !canStream && bytes > MEMORY_ZIP;
   const run = async () => {
-    setBusy(true); setNote("");
-    const r = await buildPack(ds, o); setBusy(false);
-    if (!r.blob) return setNote("Could not fetch these from Google Drive. Check your connection and try again.");
-    saveBlob(r.blob, `client-pack-${new Date().toISOString().slice(0, 10)}.zip`); log("Client pack", `${ds.length} designs`);
-    if (r.missing) setNote(`${r.missing} file${r.missing > 1 ? "s were" : " was"} not available from Google Drive and left out.`); else onClose();
+    setNote("");
+    const sink = await openSink(`client-pack-${new Date().toISOString().slice(0, 10)}.zip`); if (!sink) return; // asks where to save, straight from the click
+    setBusy(true);
+    try {
+      const r = await buildPack(ds, o, sink, (a, b) => setDone([a, b])); log("Client pack", `${ds.length} designs`);
+      if (r.missing) setNote(`${r.missing} photo${r.missing > 1 ? "s were" : " was"} not available from Google Drive and left out.`); else onClose();
+    } catch (e) { setNote((e as Error).message || "Could not build the zip"); }
+    setBusy(false);
   };
   return (
-    <Sheet onClose={onClose} title="Client pack" footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button icon="in" disabled={busy || !nImg && !files} onClick={run}>{busy ? "Building…" : "Download zip"}</Button></>}>
-      <p class="t-meta mb-3">One zip: a folder per category, a folder per product, photos named after the product.</p>
+    <Sheet onClose={onClose} title="Client pack" footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button icon="in" disabled={busy || !nImg || tooBig} onClick={run}>{busy ? `Building ${done[0]} of ${done[1]}…` : "Download zip"}</Button></>}>
+      <p class="t-meta mb-3">One zip: a folder per category, a folder per product, photos named after the product. Each photo is fetched from Google Drive in its original quality.</p>
       <div class="flex items-center gap-2 flex-wrap mb-3"><span class="t-meta">Designs</span><span class={`${chipCls} bg-c4 text-c0`}>{ds.length} selected</span>
         <select aria-label="Add a whole category" value="" onChange={(e) => { const c = (e.target as HTMLSelectElement).value; if (c) setIds([...new Set([...ids, ...all.filter((d) => d.catId === c).map((d) => d.id)])]); }} class="h-7 px-2 rounded-full border border-line bg-c0 text-[12px] font-semibold cursor-pointer">
           <option value="">+ Whole category</option>{nexderCatsSig.value.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
       {ds.length ? <div class="rounded-xl bg-c1/60 p-3 grid gap-2 mb-3">{cats.map((c) => (
         <div key={c}><div class="flex items-center gap-2 text-[13px] font-semibold py-0.5"><Icon name="folder" size={15} /><span class="break-words min-w-0">{c}</span></div>
           <div class="ml-[7px] pl-4 border-l border-line grid gap-0.5">{plan.filter((p) => p.cat === c).map((p) => (
-            <div key={p.d.id} class="flex items-center gap-2 text-[13px] py-0.5"><span class="text-c3"><Icon name="folder" size={14} /></span><span class="flex-1 min-w-0 break-words">{p.name}</span><span class="t-meta whitespace-nowrap">{p.photos.length} photo{p.photos.length === 1 ? "" : "s"}{p.files.length ? ` + ${p.files.length} file${p.files.length > 1 ? "s" : ""}` : ""}</span>
+            <div key={p.d.id} class="flex items-center gap-2 text-[13px] py-0.5"><span class="text-c3"><Icon name="folder" size={14} /></span><span class="flex-1 min-w-0 break-words">{p.name}</span><span class="t-meta whitespace-nowrap">{p.photos.length} photo{p.photos.length === 1 ? "" : "s"}</span>
               <button type="button" aria-label={`Remove ${p.name}`} onClick={() => setIds(ids.filter((x) => x !== p.d.id))} class="w-6 h-6 !min-h-0 rounded-full flex items-center justify-center text-c3 cursor-pointer"><Icon name="close" size={12} /></button></div>))}</div></div>))}</div>
         : <p class="t-meta mb-3">Nothing selected.</p>}
-      <Row title="Options" meta={`${images === "all" ? "all photos" : images === "first3" ? "first 3 photos" : "cover only"}${files ? " · with design files" : ""}`}>
+      <Row title="Options" meta={images === "all" ? "all photos" : images === "first3" ? "first 3 photos" : "cover only"}>
         <div><span class="block t-meta mb-1">Photos per product</span><Seg value={images} on={setImages} items={[["all", "All"], ["first3", "First 3"], ["cover", "Cover only"]]} /></div>
-        <label class="flex items-center gap-2 text-[13px] cursor-pointer"><input type="checkbox" checked={files} onChange={(e) => setFiles((e.target as HTMLInputElement).checked)} />Include design files (STL, 3MF…)</label></Row>
-      <p class="t-meta mt-3">{nImg} photo{nImg === 1 ? "" : "s"} · about {mb(packBytes(ds, o))} · original quality</p>
+        <p class="t-meta">Design files (STL, 3MF…) are not put in the zip, because they can be gigabytes. Download them one by one from each design.</p></Row>
+      <p class="t-meta mt-3">{nImg} photo{nImg === 1 ? "" : "s"} · about {mb(bytes)}</p>
+      {tooBig && <p role="status" class="text-[12.5px] text-amb mt-1.5">This browser cannot save big zips to disk. Pick fewer photos (under {mb(MEMORY_ZIP)}) or use Chrome or Edge on a computer.</p>}
       {note && <p role="status" class="text-[12.5px] text-amb mt-1.5">{note}</p>}
     </Sheet>
+  );
+}
+
+/* ---------------------------------------------------------------- storage meter and Drive check */
+function Storage({ writable }: { writable: boolean }) {
+  const [sp, setSp] = useState<Space | null>(null), [err, setErr] = useState(""), [res, setRes] = useState<Check[] | null>(null), [busy, setBusy] = useState(false);
+  const pv = previewBytes();
+  const load = () => driveSpace().then(setSp).catch((e) => setErr((e as Error).message));
+  const bar = (v: number, max: number) => <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class={`h-full ${v / max > 0.9 ? "bg-red" : "bg-acc"}`} style={{ width: `${Math.min(100, (v / max) * 100)}%` }} /></div>;
+  return (
+    <details class="rounded-[var(--radius-card)] bg-c0 min-w-0" onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open && !sp) load(); }}>
+      <summary class="flex items-center gap-2 min-h-10 px-3 py-2 select-none"><span class="chev text-c2 inline-flex"><Icon name="right" size={12} /></span><span class="text-[13px] font-semibold">Storage</span><span class="ml-auto t-meta text-right">Google Drive and previews</span></summary>
+      <div class="px-3 pb-3 grid gap-3">
+        <div class="grid gap-1"><div class="flex justify-between gap-3 text-[13px]"><span>Google Drive</span><span class="num">{sp ? `${fmtBytes(sp.usage)}${sp.limit ? ` of ${fmtBytes(sp.limit)}` : ""}` : err ? "unavailable" : "…"}</span></div>
+          {sp?.limit ? bar(sp.usage, sp.limit) : null}
+          <span class="t-meta">{err || `Shared with Gmail and Docs on the same account. Uploads stop ${fmtBytes(LIMITS.driveReserve)} before it is full.`}</span></div>
+        <div class="grid gap-1"><div class="flex justify-between gap-3 text-[13px]"><span>Previews (Supabase)</span><span class="num">{fmtBytes(pv)} of {fmtBytes(LIMITS.previewBytes)}</span></div>{bar(pv, LIMITS.previewBytes)}</div>
+        {writable && <div class="grid gap-2"><div><Button variant="outline" disabled={busy} onClick={async () => { setBusy(true); setRes(null); setRes(await checkDrive().catch((e) => [{ step: "Check", ok: false, note: (e as Error).message }])); setBusy(false); load(); }}>{busy ? "Checking…" : "Check Google Drive"}</Button></div>
+          {res && <ul class="grid gap-1">{res.map((c) => <li key={c.step} class="text-[12.5px] break-words"><b class={c.ok ? "text-grn" : "text-red"}>{c.ok ? "OK" : "Failed"}</b> · {c.step}{c.note ? <span class="text-c3"> · {c.note}</span> : null}</li>)}</ul>}</div>}
+      </div>
+    </details>
   );
 }
 

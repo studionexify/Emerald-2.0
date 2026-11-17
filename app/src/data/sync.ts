@@ -222,6 +222,28 @@ export async function mediaUpload(body: { id: string; name: string; mime: string
   const { data, error } = await (await client()).functions.invoke("drive-media", { body });
   return error || !(data as any)?.drive ? null : (data as any).drive;
 }
+/** Calls an Edge Function as the signed-in member. Returns the JSON answer, or the function's own error text. */
+export async function callFn<T>(name: string, body: unknown): Promise<{ data?: T; error?: string }> {
+  const { data, error } = await (await client()).functions.invoke(name, { body: body as Record<string, unknown> });
+  if (!error) return { data: data as T };
+  let msg = error.message;
+  try { const j = await (error as any).context?.json?.(); if (j?.error) msg = String(j.error); } catch {}
+  return { error: msg };
+}
+/** Private Supabase Storage bucket for the small Nexder preview pictures (files themselves live in Google Drive). */
+export const PREVIEW_BUCKET = "nexder-previews";
+export const previewPath = (id: string) => `${org}/${id}.jpg`;
+export async function previewPut(id: string, blob: Blob): Promise<string | null> {
+  const { error } = await (await client()).storage.from(PREVIEW_BUCKET).upload(previewPath(id), blob, { contentType: "image/jpeg", upsert: true, cacheControl: "31536000" });
+  return error ? error.message : null;
+}
+export async function previewGet(id: string): Promise<Blob | null> {
+  const { data } = await (await client()).storage.from(PREVIEW_BUCKET).download(previewPath(id));
+  return data ?? null;
+}
+export async function previewDel(ids: string[]) {
+  if (ids.length) await (await client()).storage.from(PREVIEW_BUCKET).remove(ids.map(previewPath));
+}
 export async function mediaDownload(driveId: string): Promise<Blob | null> {
   const { data: s } = await (await client()).auth.getSession(); if (!s.session) return null;
   const r = await fetch(`${URL_}/functions/v1/drive-media?drive=${encodeURIComponent(driveId)}`, { headers: { Authorization: "Bearer " + s.session.access_token, apikey: KEY! } }).catch(() => null);

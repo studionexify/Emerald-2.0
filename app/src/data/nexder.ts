@@ -1,106 +1,78 @@
 /**
  * Nexder: the studio's library of designs (photos + any files such as STL, 3MF, STEP).
  *
- * Records (designs, categories, shares) hold only metadata and ONE tiny inline cover. Original photos, the small preview
- * copies and design files are blobs behind `blobStore`.
- * Signed in to the cloud: every blob is also sent to Google Drive through the drive-media Edge Function (the same pipeline
- * as order photos, see data/media.ts and supabase/DRIVE-SETUP.md). The Drive file id is kept in the synced `mediaSig`, so
- * other devices can fetch it. Originals are always downloaded from Drive; this device keeps a cache for the small previews.
- * Without cloud sync (single-device mode) everything stays in IndexedDB on this device.
+ * Emerald keeps NOTHING of the files. Where things live:
+ *  - records (name, number, Drive ids, sizes): Supabase database, through the normal record sync
+ *  - the original photos and design files: Google Drive, uploaded straight from the browser to Google (no bytes pass through
+ *    Supabase or Cloudflare) and downloaded through the small /nexder-dl Worker, which streams them to the browser
+ *  - one small preview picture per photo: private Supabase Storage bucket (a disposable browser cache only avoids repeat egress)
+ * Every limit that could cost money is checked here before an upload starts (LIMITS), and the server checks it again.
  */
-import { zipSync } from "fflate";
-import { effect, signal } from "@preact/signals";
-import { localGet, localSet, persisted, today, uid } from "./store";
-import { mediaSig } from "./media";
+import { Zip, ZipPassThrough } from "fflate";
+import { persisted, today, uid } from "./store";
 import { binSig, jobSpool, registerBin, toBin } from "./inventory";
 import { me, usersSig } from "./auth";
 import { batchesSig, jobsSig, log, ordersSig, patchOrder, lineProgress, spoolsSig, type LineItem, type Order } from "./index";
 import { buildDemand } from "./stockPlan";
 import { shrinkImage } from "./image";
+import { cloudEnabled } from "./sync";
+
+/* ---------------------------------------------------------------- limits (free plans: Google Drive 15 GB, Supabase Storage 1 GB) */
+export const LIMITS = {
+  /** Supabase Storage free plan is 1 GB; stop well before it. */
+  previewBytes: 900 * 1024 * 1024,
+  /** Each preview is a JPEG at most this big (the bucket refuses more). */
+  previewMax: 300 * 1024,
+  /** Space always left free in Google Drive (the function enforces it too). */
+  driveReserve: 1024 ** 3,
+};
 
 /* ---------------------------------------------------------------- types */
-export type NxPhoto = { id: string; name: string; size: number; mime: string };
-export type NxFile = { id: string; name: string; size: number; mime: string };
+export type NxPhoto = { id: string; name: string; size: number; mime: string; /** Drive file id (absent on designs saved by the first build) */ drive?: string; /** preview size in bytes */ psize?: number };
+export type NxFile = { id: string; name: string; size: number; mime: string; drive?: string };
 export type NxSize = { label: string; mm?: number; g: number };
 export type NxCat = { id: string; name: string; /** two-digit block, 10–99 */ code: number; /** last number used (never goes down, so a deleted design's number is never reused) */ last: number };
 export type NxDesign = {
-  id: string; name: string; catId: string; /** five-digit number: category block + 3-digit sequence */ no: string;
-  photos: NxPhoto[]; /** small inline copy of the first photo (a few KB) so every device can show the card */ cover?: string;
-  files: NxFile[]; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string;
+  id: string; name: string; catId: string; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
+  photos: NxPhoto[]; files: NxFile[]; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string;
 };
 export type NxShare = { id: string; designIds: string[]; to: string[]; by: string; at: string; note?: string; seen?: string[] };
+/** A design in the Bin: its Drive folder sits in Drive's trash until the Bin entry is gone for good. */
+export type NxTrash = { id: string; folder: string; photoIds: string[] };
 
 export const nexderCatsSig = persisted<NxCat[]>("nexderCats", []);
 export const nexderDesignsSig = persisted<NxDesign[]>("nexderDesigns", []);
 export const nexderSharesSig = persisted<NxShare[]>("nexderShares", []);
+export const nexderTrashSig = persisted<NxTrash[]>("nexderTrash", []);
 registerBin("Design", nexderDesignsSig);
+/* The first build kept a cover thumbnail inside each record; records must stay small (they live on every device), so drop it. */
+if (nexderDesignsSig.value.some((d) => "cover" in d)) nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { const { cover: _c, ...rest } = d as NxDesign & { cover?: string }; return rest; });
 
 export const catOf = (d: NxDesign) => nexderCatsSig.value.find((c) => c.id === d.catId);
 export const catName = (id: string) => nexderCatsSig.value.find((c) => c.id === id)?.name ?? "—";
 
-/* ---------------------------------------------------------------- blob store (IndexedDB now, Drive later) */
-const DB = "emerald-nexder";
-let dbp: Promise<IDBDatabase> | null = null;
-const db = () => dbp ??= new Promise<IDBDatabase>((ok, bad) => {
-  const r = indexedDB.open(DB, 1);
-  r.onupgradeneeded = () => r.result.createObjectStore("blobs");
-  r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error);
-});
-const tx = async <T,>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>) => { const d = await db(); return new Promise<T>((ok, bad) => { const r = f(d.transaction("blobs", mode).objectStore("blobs")); r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error); }); };
-const cloud = !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.MODE !== "artifact";
-/** The drive-media function refuses bigger files (supabase/functions/drive-media). */
-export const DRIVE_MAX = 8 * 1024 * 1024;
-type Wait = { name: string; mime: string; big?: boolean };
-const queue = signal<Record<string, Wait>>(localGet("nexder:queue", {}));
-const saveQueue = () => localSet("nexder:queue", queue.value);
-const driveOf = (id: string) => mediaSig.value.find((m) => m.id === id)?.drive;
-/** Where a stored blob lives right now. */
-export type Where = "drive" | "uploading" | "toobig" | "device";
-export const whereIs = (id: string): Where => (driveOf(id) ? "drive" : !cloud ? "device" : queue.value[id]?.big ? "toobig" : "uploading");
-export const whereText = (w: Where) => ({ drive: "on Google Drive", uploading: "uploading to Google Drive…", toobig: "over 8 MB, kept on this device only", device: "this device only" })[w];
-const b64 = async (b: Blob) => { const u = new Uint8Array(await b.arrayBuffer()); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
-let sending = false;
-/** Sends waiting blobs to Drive. Safe to call any time: offline or signed out it does nothing and nothing is lost. */
-export async function syncUp() {
-  if (!cloud || sending || !Object.keys(queue.value).length) return;
-  const sync = await import("./sync"); if (!sync.cloudUser.value) return;
-  sending = true;
-  try {
-    for (const [id, w] of Object.entries(queue.value)) {
-      if (w.big) continue;
-      const blob = await tx<Blob | undefined>("readonly", (st) => st.get(id)).catch(() => undefined);
-      if (!blob) { const { [id]: _x, ...rest } = queue.value; queue.value = rest; saveQueue(); continue; }
-      if (blob.size > DRIVE_MAX) { queue.value = { ...queue.value, [id]: { ...w, big: true } }; saveQueue(); continue; }
-      const drive = await sync.mediaUpload({ id, name: w.name, mime: w.mime, data: await b64(blob) });
-      if (!drive) break; // offline or failing: try again later
-      if (!mediaSig.value.some((m) => m.id === id)) mediaSig.value = [...mediaSig.value, { id, drive, mime: w.mime }];
-      const { [id]: _done, ...rest } = queue.value; queue.value = rest; saveQueue();
-    }
-  } finally { sending = false; }
+/* ---------------------------------------------------------------- backend (Google Drive + Supabase; a fake one for tests only) */
+export type Space = { limit: number | null; usage: number };
+export interface Backend {
+  quota(): Promise<Space>;
+  folder(cat: string, label: string): Promise<string>;
+  /** Uploads one file straight to Drive; resolves with its Drive id. */
+  upload(file: File, folder: string, onSent: (bytes: number) => void, signal?: AbortSignal): Promise<string>;
+  /** One download URL per file (the Worker streams it from Drive). */
+  links(files: { drive: string; name: string }[]): Promise<string[]>;
+  trash(id: string, on: boolean): Promise<void>;
+  /** Really deletes (the server refuses anything a record still points at). */
+  purge(ids: string[]): Promise<void>;
+  sweep(): Promise<number>;
+  previewPut(id: string, blob: Blob): Promise<void>;
+  previewGet(id: string): Promise<Blob | null>;
+  previewDel(ids: string[]): Promise<void>;
 }
-if (cloud) {
-  addEventListener("online", () => syncUp());
-  import("./sync").then((sync) => effect(() => { if (sync.cloudUser.value) syncUp(); }));
-}
-const fromDrive = async (id: string) => { const d = driveOf(id); if (!d || !cloud) return null; return (await (await import("./sync")).mediaDownload(d)) ?? null; };
-export const blobStore = {
-  /** Keeps the blob on this device at once, then sends it to Drive in the background. */
-  put: async (id: string, b: Blob, name = id, mime = b.type || "application/octet-stream") => {
-    await tx("readwrite", (st) => st.put(b, id));
-    if (cloud) { queue.value = { ...queue.value, [id]: { name, mime } }; saveQueue(); syncUp(); }
-  },
-  /** For showing: this device first, then Drive (and keep a copy here). */
-  get: async (id: string) => {
-    const l = await tx<Blob | undefined>("readonly", (st) => st.get(id)).catch(() => undefined); if (l) return l;
-    const r = await fromDrive(id); if (r) tx("readwrite", (st) => st.put(r, id)).catch(() => undefined);
-    return r;
-  },
-  /** For downloading: always from Google Drive once it is there; this device's copy only while the upload is still waiting. */
-  original: async (id: string) => (await fromDrive(id)) ?? (await tx<Blob | undefined>("readonly", (st) => st.get(id)).catch(() => undefined)) ?? null,
-  del: (id: string) => { if (queue.value[id]) { const { [id]: _x, ...rest } = queue.value; queue.value = rest; saveQueue(); } return tx("readwrite", (st) => st.delete(id)).then(() => undefined).catch(() => undefined); },
-};
-const small = (id: string) => id + "-s";
-const toBlob = (dataUrl: string) => fetch(dataUrl).then((r) => r.blob());
+const FAKE = !!import.meta.env.VITE_NEXDER_FAKE;
+/** Nexder works only with cloud sync (that is where the files go). */
+export const nexderReady = cloudEnabled || FAKE;
+let be: Promise<Backend> | null = null;
+const backend = () => be ??= FAKE ? import("./nexder-fake").then((m) => m.fake) : import("./nexder-drive").then((m) => m.real);
 
 /* ---------------------------------------------------------------- numbers */
 export const MAX_PER_CAT = 999;
@@ -118,86 +90,210 @@ export function addCategory(name: string): { cat?: NxCat; error?: string } {
   nexderCatsSig.value = [...nexderCatsSig.value, cat]; return { cat };
 }
 
+/* ---------------------------------------------------------------- previews (private Supabase bucket; the browser cache is disposable) */
+const urls = new Map<string, string>();
+const CACHE = "emerald-nexder-previews";
+/** Object URL of one photo's preview, or "" when it is not there. */
+export async function previewUrl(id: string): Promise<string> {
+  const have = urls.get(id); if (have) return have;
+  const cache = "caches" in self ? await caches.open(CACHE).catch(() => null) : null, key = new Request(location.origin + "/__nexder/" + id);
+  let blob = await (await cache?.match(key))?.blob();
+  if (!blob) {
+    blob = (await (await backend()).previewGet(id).catch(() => null)) ?? undefined; if (!blob) return "";
+    await cache?.put(key, new Response(blob, { headers: { "Content-Type": "image/jpeg" } })).catch(() => {});
+  }
+  const u = URL.createObjectURL(blob); urls.set(id, u); return u;
+}
+export const previewBytes = () => nexderDesignsSig.value.reduce((a, d) => a + d.photos.reduce((s, p) => s + (p.psize ?? 0), 0), 0);
+
 /* ---------------------------------------------------------------- saving */
 /** An item in the form: already stored (no `file`) or newly picked (`file`). */
-export type DraftItem = { id: string; name: string; size: number; mime: string; file?: File };
+export type DraftItem = { id: string; name: string; size: number; mime: string; file?: File; drive?: string; psize?: number };
 export type Draft = { key: string; editId?: string; name: string; desc: string; price: string; sizes: { label: string; mm: string; g: string }[]; photos: DraftItem[]; files: DraftItem[] };
 export const blankDraft = (): Draft => ({ key: uid(), name: "", desc: "", price: "", sizes: [], photos: [], files: [] });
 export const draftOf = (d: NxDesign): Draft => ({ key: d.id, editId: d.id, name: d.name, desc: d.desc ?? "", price: d.price ? String(d.price) : "", sizes: (d.sizes ?? []).map((s) => ({ label: s.label, mm: s.mm ? String(s.mm) : "", g: String(s.g) })), photos: d.photos.map((p) => ({ ...p })), files: d.files.map((f) => ({ ...f })) });
 export const draftReady = (d: Draft) => !!d.name.trim();
+export const newBytes = (d: Draft) => [...d.photos, ...d.files].reduce((a, x) => a + (x.file ? x.size : 0), 0);
+export type Progress = { label: string; sent: number; total: number };
+export const fmtBytes = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+const toBlob = (dataUrl: string) => fetch(dataUrl).then((r) => r.blob());
+async function makePreview(f: File): Promise<Blob> {
+  let b = await toBlob(await shrinkImage(f, 640, 0.7));
+  if (b.size > LIMITS.previewMax) b = await toBlob(await shrinkImage(f, 420, 0.55));
+  return b;
+}
 
-export async function saveDraft(d: Draft, catId: string): Promise<NxDesign | string> {
+/** Uploads everything new, then writes the record. If anything fails or is cancelled, what was already sent is deleted again. */
+export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
   const cat = nexderCatsSig.value.find((c) => c.id === catId); if (!cat) return "Choose a category";
+  if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
   const prev = d.editId ? nexderDesignsSig.value.find((x) => x.id === d.editId) : undefined;
   let no = prev?.no, last = cat.last;
   if (!prev || prev.catId !== catId) { if (cat.last >= MAX_PER_CAT) return `${cat.name} is full (999 designs)`; last = cat.last + 1; no = noOf(cat, last); }
-  /* blobs first: if storing fails nothing is half-saved */
+  const b = await backend();
+  const addP = d.photos.filter((p) => p.file), addF = d.files.filter((f) => f.file), bytes = newBytes(d);
+  /* free space, before a single byte is sent */
   try {
-    for (const p of d.photos) if (p.file) {
-      await blobStore.put(p.id, p.file, p.name, p.mime);
-      await blobStore.put(small(p.id), await toBlob(await shrinkImage(p.file, 640, 0.7)), `preview-${p.name}.jpg`, "image/jpeg");
-    }
-    for (const f of d.files) if (f.file) await blobStore.put(f.id, f.file, f.name, f.mime);
-  } catch { return "This device could not store the files (storage full or blocked)"; }
-  const keep = (a: DraftItem[]) => new Set(a.map((x) => x.id));
-  if (prev) {
-    const kp = keep(d.photos), kf = keep(d.files);
-    for (const p of prev.photos) if (!kp.has(p.id)) { blobStore.del(p.id); blobStore.del(small(p.id)); }
-    for (const f of prev.files) if (!kf.has(f.id)) blobStore.del(f.id);
-  }
-  const first = d.photos[0];
-  const cover = first ? (first.file ? await shrinkImage(first.file, 360, 0.6) : prev?.photos[0]?.id === first.id ? prev.cover : await blobStore.get(small(first.id)).then((b) => (b ? blobToDataUrl(b) : undefined))) : undefined;
-  const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0 })).filter((s) => s.label && s.g > 0);
-  const row: NxDesign = {
-    id: prev?.id ?? uid(), name: d.name.trim(), catId, no: no!, cover, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
-    photos: d.photos.map(({ id, name, size, mime }) => ({ id, name, size, mime })), files: d.files.map(({ id, name, size, mime }) => ({ id, name, size, mime })),
-    created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",
-  };
-  if (!prev || prev.catId !== catId) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === cat.id ? { ...c, last } : c));
-  nexderDesignsSig.value = prev ? nexderDesignsSig.value.map((x) => (x.id === row.id ? row : x)) : [row, ...nexderDesignsSig.value];
-  log(prev ? "Edited design" : "Added design", `${row.name} · ${row.no}`, "order");
-  return row;
-}
-const blobToDataUrl = (b: Blob) => new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.readAsDataURL(b); });
+    const sp = await b.quota();
+    if (sp.limit !== null && sp.usage + bytes + LIMITS.driveReserve > sp.limit) return `Not enough space in Google Drive: ${fmtBytes(Math.max(0, sp.limit - sp.usage - LIMITS.driveReserve))} free, this design needs ${fmtBytes(bytes)}.`;
+  } catch (e) { return (e as Error).message; }
+  if (previewBytes() + addP.length * LIMITS.previewMax > LIMITS.previewBytes) return "The preview storage is nearly full. Delete designs you no longer need first.";
 
-export function deleteDesign(d: NxDesign) {
+  const made = { drive: [] as string[], previews: [] as string[] };
+  let folder = prev?.folder, newFolder = false, sent = 0;
+  const upload = async (it: DraftItem) => {
+    const base = sent;
+    const id = await b.upload(it.file!, folder!, (n) => onProgress({ label: it.name, sent: base + n, total: bytes }), signal);
+    made.drive.push(id); sent = base + it.size; it.drive = id;
+  };
+  try {
+    if (!folder) { folder = await b.folder(cat.name, `${no} ${d.name.trim()}`.slice(0, 120)); newFolder = true; }
+    const psize: Record<string, number> = {};
+    for (const p of addP) { onProgress({ label: "Previews", sent, total: bytes }); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
+    for (const p of addP) await upload(p);
+    for (const f of addF) await upload(f);
+    const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0 })).filter((s) => s.label && s.g > 0);
+    const row: NxDesign = {
+      id: prev?.id ?? uid(), name: d.name.trim(), catId, no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
+      photos: d.photos.map((p) => ({ id: p.id, name: p.name, size: p.size, mime: p.mime, drive: p.drive, psize: psize[p.id] ?? p.psize })),
+      files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive })),
+      created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",
+    };
+    if (!prev || prev.catId !== catId) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === cat.id ? { ...c, last } : c));
+    nexderDesignsSig.value = prev ? nexderDesignsSig.value.map((x) => (x.id === row.id ? row : x)) : [row, ...nexderDesignsSig.value];
+    log(prev ? "Edited design" : "Added design", `${row.name} · ${row.no}`, "order");
+    /* what the user took out of an existing design is deleted from Drive and from the previews */
+    if (prev) {
+      const keepP = new Set(d.photos.map((p) => p.id)), keepF = new Set(d.files.map((f) => f.id));
+      const gone = [...prev.photos.filter((p) => !keepP.has(p.id)), ...prev.files.filter((f) => !keepF.has(f.id))];
+      await b.purge(gone.map((x) => x.drive).filter(Boolean) as string[]).catch(() => {});
+      await b.previewDel(prev.photos.filter((p) => !keepP.has(p.id)).map((p) => p.id)).catch(() => {});
+    }
+    return row;
+  } catch (e) {
+    await b.purge([...made.drive, ...(newFolder && folder ? [folder] : [])]).catch(() => {});
+    await b.previewDel(made.previews).catch(() => {});
+    return signal?.aborted ? "Cancelled. Nothing was kept." : (e as Error).message || "Upload failed";
+  }
+}
+
+/* ---------------------------------------------------------------- delete, restore, clean-up */
+/** Moves the design to the Bin and its Drive folder to Drive's trash. */
+export async function deleteDesign(d: NxDesign): Promise<string | null> {
+  try { if (d.folder) { await (await backend()).trash(d.folder, true); nexderTrashSig.value = [...nexderTrashSig.value, { id: d.id, folder: d.folder, photoIds: d.photos.map((p) => p.id) }]; } }
+  catch (e) { return `Could not move the files to Drive's trash: ${(e as Error).message}`; }
   toBin("Design", d, `${d.name} · ${d.no}`, me.value?.name ?? "You");
   log("Deleted design", `${d.name} · ${d.no}`);
+  return null;
 }
-/** Blobs are only removed when the Bin entry is purged for good; Restore needs them. Nothing to do here on delete. */
-export const binHasBlobs = () => binSig.value.some((b) => b.kind === "Design");
+/**
+ * Keeps Drive in step with the Bin. Runs whenever Nexder opens:
+ * restored from the Bin → folder comes back out of Drive's trash; Bin entry deleted or expired → folder and previews deleted for good.
+ */
+export async function syncTrash() {
+  if (!nexderReady || !nexderTrashSig.value.length) return;
+  const b = await backend(), left: NxTrash[] = [];
+  for (const t of nexderTrashSig.value) {
+    try {
+      if (nexderDesignsSig.value.some((d) => d.id === t.id)) await b.trash(t.folder, false);
+      else if (binSig.value.some((x) => x.kind === "Design" && (x.data as { id?: string } | undefined)?.id === t.id)) left.push(t);
+      else { await b.purge([t.folder]); await b.previewDel(t.photoIds); }
+    } catch { left.push(t); } // try again next time
+  }
+  nexderTrashSig.value = left;
+}
+/** Once a day (writers only): delete Drive files nothing refers to any more, such as an upload whose tab was closed before saving. */
+export async function sweepOrphans() {
+  if (!nexderReady) return;
+  try { const k = "emerald:nexder:sweep"; if (Date.now() - Number(localStorage.getItem(k) || 0) < 864e5) return; localStorage.setItem(k, String(Date.now())); await (await backend()).sweep(); } catch { /* next time */ }
+}
+
+/* ---------------------------------------------------------------- space meter and self-test */
+export const driveSpace = async () => (await backend()).quota();
+export type Check = { step: string; ok: boolean; note?: string };
+/** Opens a session, uploads 1 KB, confirms, downloads it back through the Worker, compares, deletes. Leaves nothing behind. */
+export async function checkDrive(): Promise<Check[]> {
+  const out: Check[] = [], ok = (step: string, note?: string) => out.push({ step, ok: true, note }), no = (step: string, e: unknown) => { out.push({ step, ok: false, note: (e as Error)?.message ?? String(e) }); return out; };
+  const b = await backend(); let folder = "", file = "";
+  const body = new File([new Uint8Array(1024).map((_, i) => i % 251)], "nexder-check.bin", { type: "application/octet-stream" });
+  try { const q = await b.quota(); ok("Google Drive reachable", q.limit ? `${fmtBytes(q.usage)} of ${fmtBytes(q.limit)} used` : `${fmtBytes(q.usage)} used`); } catch (e) { return no("Google Drive reachable", e); }
+  try { folder = await b.folder("_check", "check " + Date.now()); ok("Folder created"); } catch (e) { return no("Folder created", e); }
+  try { file = await b.upload(body, folder, () => {}); ok("Browser uploaded straight to Google"); } catch (e) { await b.purge([folder]).catch(() => {}); return no("Browser uploaded straight to Google", e); }
+  try {
+    const [url] = await b.links([{ drive: file, name: "nexder-check.bin" }]);
+    const r = await fetch(url); if (!r.ok) throw new Error(`The download Worker answered ${r.status}: ${await r.text().catch(() => "")}`);
+    const got = new Uint8Array(await r.arrayBuffer()), want = new Uint8Array(await body.arrayBuffer());
+    if (got.length !== want.length || got.some((v, i) => v !== want[i])) throw new Error("Downloaded bytes differ from what was uploaded");
+    ok("Downloaded back through the Worker, identical");
+  } catch (e) { out.push({ step: "Downloaded back through the Worker", ok: false, note: (e as Error).message }); }
+  try { await b.purge([file, folder]); ok("Deleted again"); } catch (e) { no("Deleted again", e); }
+  return out;
+}
 
 /* ---------------------------------------------------------------- download */
-export function saveBlob(b: Blob, name: string) {
-  const a = document.createElement("a"), u = URL.createObjectURL(b); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+/** Starts a download of one original from Drive. Returns an error text, or null when the browser took over. */
+export async function downloadFile(f: { drive?: string; name: string }): Promise<string | null> {
+  if (!f.drive) return "This file was saved before Nexder used Google Drive. Edit the design and add it again.";
+  try { const [u] = await (await backend()).links([{ drive: f.drive, name: f.name }]); const a = document.createElement("a"); a.href = u; a.rel = "noopener"; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); return null; }
+  catch (e) { return (e as Error).message; }
 }
-/** Fetches the original from Google Drive (this device's copy only while the upload is still waiting), never a preview. */
-export async function downloadFile(f: { id: string; name: string }): Promise<boolean> { const b = await blobStore.original(f.id); if (!b) return false; saveBlob(b, f.name); return true; }
+export function saveBlob(b: Blob, name: string) { const a = document.createElement("a"), u = URL.createObjectURL(b); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
 
-/* ---------------------------------------------------------------- client pack */
+/* ---------------------------------------------------------------- client pack (photos only, streamed into a zip) */
 const clean = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().replace(/^\.+|\.+$/g, "").slice(0, 80) || "Untitled";
 const ext = (p: { name: string; mime: string }) => { const m = /\.([A-Za-z0-9]{1,5})$/.exec(p.name); return m ? m[1].toLowerCase() : p.mime.split("/")[1]?.replace("jpeg", "jpg") || "bin"; };
-export type PackOpts = { images: "all" | "first3" | "cover"; files: boolean };
+export type PackOpts = { images: "all" | "first3" | "cover" };
 export function packPlan(ds: NxDesign[], o: PackOpts) {
   /* folder names: category, then product; two products with the same name get their number appended */
   const seen = new Map<string, number>(); for (const d of ds) seen.set(clean(d.name).toLowerCase(), (seen.get(clean(d.name).toLowerCase()) ?? 0) + 1);
   return ds.map((d) => {
     const base = clean(d.name), name = (seen.get(base.toLowerCase()) ?? 0) > 1 ? `${base} ${d.no}` : base;
     const photos = o.images === "all" ? d.photos : o.images === "first3" ? d.photos.slice(0, 3) : d.photos.slice(0, 1);
-    return { d, cat: clean(catName(d.catId)), name, photos, files: o.files ? d.files : [] };
+    return { d, cat: clean(catName(d.catId)), name, photos };
   });
 }
-export const packBytes = (ds: NxDesign[], o: PackOpts) => packPlan(ds, o).reduce((a, p) => a + p.photos.reduce((s, x) => s + x.size, 0) + p.files.reduce((s, x) => s + x.size, 0), 0);
-export async function buildPack(ds: NxDesign[], o: PackOpts): Promise<{ blob?: Blob; missing: number }> {
-  const out: Record<string, Uint8Array> = {}; let missing = 0;
-  for (const p of packPlan(ds, o)) {
-    let n = 0;
-    for (const ph of p.photos) { const b = await blobStore.original(ph.id); if (!b) { missing++; continue; } n++; out[`${p.cat}/${p.name}/${p.name}-${n}.${ext(ph)}`] = new Uint8Array(await b.arrayBuffer()); }
-    for (const f of p.files) { const b = await blobStore.original(f.id); if (!b) { missing++; continue; } out[`${p.cat}/${p.name}/files/${clean(f.name)}`] = new Uint8Array(await b.arrayBuffer()); }
+export const packBytes = (ds: NxDesign[], o: PackOpts) => packPlan(ds, o).reduce((a, p) => a + p.photos.reduce((s, x) => s + x.size, 0), 0);
+
+/** Where a download is written. A real file when the browser allows it (nothing held in memory), else memory. */
+export type Sink = { write(c: Uint8Array): Promise<void>; close(): Promise<void>; abort(): Promise<void> };
+type Writable = { write(c: Uint8Array): Promise<void>; close(): Promise<void>; abort(): Promise<void> };
+export const canStream = !FAKE && typeof (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker === "function";
+/** Must be called straight from the click (the browser asks where to save before any waiting). Returns null if the user cancelled. */
+export async function openSink(name: string, type = "application/zip"): Promise<Sink | null> {
+  if (canStream) {
+    try {
+      const h = await (window as unknown as { showSaveFilePicker: (o: unknown) => Promise<{ createWritable(): Promise<Writable> }> }).showSaveFilePicker({ suggestedName: name });
+      const w = await h.createWritable(); return { write: (c) => w.write(c), close: () => w.close(), abort: () => w.abort() };
+    } catch { return null; }
   }
-  if (!Object.keys(out).length) return { missing };
-  /* images and most design files are already compressed; store them as they are */
-  return { blob: new Blob([zipSync(out, { level: 0 }) as BlobPart], { type: "application/zip" }), missing };
+  const parts: BlobPart[] = [];
+  return { write: async (c) => { parts.push(c.slice()); }, close: async () => saveBlob(new Blob(parts, { type }), name), abort: async () => { parts.length = 0; } };
+}
+/** Biggest zip built in memory when the browser cannot save a stream to disk (photos are small, so this is rarely reached). */
+export const MEMORY_ZIP = 300 * 1024 * 1024;
+
+/** Zips the photos of the chosen designs (category folder → product folder → product-N.jpg), fetching each original from Drive one at a time. */
+export async function buildPack(ds: NxDesign[], o: PackOpts, sink: Sink, onProgress: (done: number, total: number) => void): Promise<{ missing: number }> {
+  const b = await backend(), all = packPlan(ds, o).flatMap((p) => p.photos.map((ph, i) => ({ p, ph, i })));
+  let missing = 0, end: () => void = () => {}, fail: (e: unknown) => void = () => {};
+  const finished = new Promise<void>((ok, bad) => { end = ok; fail = bad; });
+  let chain = Promise.resolve();
+  const zip = new Zip((err, chunk, final) => { if (err) return fail(err); chain = chain.then(() => sink.write(chunk)).then(() => (final ? sink.close().then(end) : undefined)).catch(fail); });
+  try {
+    const have = all.filter((x) => x.ph.drive), links: string[] = [];
+    for (let i = 0; i < have.length; i += 50) links.push(...(await b.links(have.slice(i, i + 50).map((x) => ({ drive: x.ph.drive!, name: x.ph.name })))));
+    let li = 0, n = 0;
+    for (const { p, ph, i } of all) {
+      onProgress(n++, all.length);
+      if (!ph.drive) { missing++; continue; }
+      const r = await fetch(links[li++]).catch(() => null);
+      if (!r || !r.ok) { missing++; continue; }
+      const f = new ZipPassThrough(`${p.cat}/${p.name}/${p.name}-${i + 1}.${ext(ph)}`); zip.add(f);
+      f.push(new Uint8Array(await r.arrayBuffer()), true); // one photo at a time, never the whole set
+    }
+    onProgress(all.length, all.length); zip.end(); await finished;
+  } catch (e) { await sink.abort().catch(() => {}); throw e; }
+  return { missing };
 }
 
 /* ---------------------------------------------------------------- share */
@@ -218,7 +314,7 @@ export const assignable = () => ordersSig.value.filter((o) => o.stage === "quota
 export function assignToOrder(o: Order, ds: NxDesign[], size: Record<string, NxSize | undefined> = {}) {
   const items: LineItem[] = ds.map((d) => {
     const s = size[d.id] ?? (d.sizes?.length === 1 ? d.sizes[0] : undefined);
-    return { name: d.name, material: "PLA", colour: "", qty: 1, price: d.price ?? 0, cost: 0, thumb: d.cover, designId: d.id, sku: d.no, ...(s ? { roughG: s.g, heightMm: s.mm, } : {}) };
+    return { name: d.name, material: "PLA", colour: "", qty: 1, price: d.price ?? 0, cost: 0, designId: d.id, sku: d.no, ...(s ? { roughG: s.g, heightMm: s.mm } : {}) };
   });
   patchOrder(o, { items: [...o.items, ...items] });
   log("Assigned designs", `${ds.map((d) => d.no).join(", ")} → ${o.no}`);
