@@ -32,10 +32,10 @@ export function renameCategory(id: string, name: string): string | null {
   if (nexderCatsSig.value.some((c) => c.id !== id && c.name.toLowerCase() === n.toLowerCase())) return "Another category already has that name";
   nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === id ? { ...c, name: n } : c)); return null;
 }
-/** A category can be deleted unless some design's number was issued from it (its Drive folder and number block live there). */
-export const canDeleteCategory = (id: string) => !nexderDesignsSig.value.some((d) => d.catId === id);
+/** A category can be deleted only if it never issued a number (even for a design since deleted), so a number block is never handed out twice. */
+export const canDeleteCategory = (id: string) => (nexderCatsSig.value.find((c) => c.id === id)?.last ?? 0) === 0 && !nexderDesignsSig.value.some((d) => d.catId === id);
 export function deleteCategory(id: string): string | null {
-  if (!canDeleteCategory(id)) return "Designs were numbered in this category, so it has to stay. Rename it instead.";
+  if (!canDeleteCategory(id)) return "Numbers were issued from this category, so it has to stay (a number is never reused). Rename it instead.";
   nexderDesignsSig.value = nexderDesignsSig.value.map((d) => (d.cats?.includes(id) ? { ...d, cats: d.cats.filter((c) => c !== id) } : d));
   nexderCatsSig.value = nexderCatsSig.value.filter((c) => c.id !== id); return null;
 }

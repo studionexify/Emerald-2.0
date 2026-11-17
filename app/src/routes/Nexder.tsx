@@ -158,14 +158,14 @@ export default function Nexder() {
         : <div class="grid gap-6">
           {pf.layout === "list" && <div role="row" class={`hidden md:grid ${LIST_COLS} items-center gap-3 px-3 -mb-3 text-[12px] font-semibold text-c3`}>
             <span />
-            {([["no", "No.", ""], ["name", "Name", ""], ["cat", "Categories", ""], ["price", "Price", "text-right"], ["size", "Size", "text-right hidden xl:flex"], ["g", "Weight", "text-right"], ["min", "Time", "text-right"], ["added", "Added", "text-right hidden xl:flex"]] as [SortKey, string, string][]).map(([k, l, x]) => (
-              <button key={k} type="button" onClick={() => sortBy(k)} aria-label={`Sort by ${l}`} class={`!min-h-0 h-7 inline-flex items-center gap-1 cursor-pointer hover:text-c4 ${x.includes("right") ? "justify-end" : ""} ${x.replace("text-right", "")} ${pf.sort === k ? "text-c4" : ""}`}>{l}{pf.sort === k && <span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={11} /></span>}</button>))}
+            {([["no", "No.", ""], ["name", "Name", ""], ["cat", "Categories", ""], ["price", "Price", "text-right"], ["size", "Size", "text-right xl"], ["g", "Weight", "text-right"], ["min", "Time", "text-right"], ["added", "Added", "text-right xl"]] as [SortKey, string, string][]).map(([k, l, x]) => (
+              <button key={k} type="button" onClick={() => sortBy(k)} aria-label={`Sort by ${l}`} class={`!min-h-0 h-7 items-center gap-1 cursor-pointer hover:text-c4 ${x.includes("xl") ? "hidden xl:inline-flex" : "inline-flex"} ${x.includes("right") ? "justify-end" : ""} ${pf.sort === k ? "text-c4" : ""}`}>{l}{pf.sort === k && <span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={11} /></span>}</button>))}
           </div>}
           {groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)); return (
           <section key={c?.id ?? "none"} aria-label={c?.name ?? "No category"} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
             <div class="flex items-center gap-2 pb-2 border-b-2 border-c4/25">
               <b class="text-[14px] tracking-[0.04em]">{c?.name ?? "No category"}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
-              {selecting && <button type="button" onClick={() => setSel((x) => (all ? x.filter((id) => !ds.some((d) => d.id === id)) : [...new Set([...x, ...ds.map((d) => d.id)])]))} class="ml-auto text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{all ? "Unselect category" : "Select category"}</button>}
+              {selecting && <button type="button" onClick={() => setSel((x) => (all ? x.filter((id) => !ds.some((d) => d.id === id)) : [...new Set([...x, ...ds.map((d) => d.id)])]))} class="ml-auto text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{all ? (c?.id === "all" ? "Unselect all" : "Unselect category") : (c?.id === "all" ? "Select all" : "Select category")}</button>}
             </div>
             {pf.layout === "list"
               ? <div class="mt-2 grid divide-y divide-line rounded-2xl bg-c0 overflow-hidden">{ds.map((d) => {
