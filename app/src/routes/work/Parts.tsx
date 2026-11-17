@@ -13,7 +13,7 @@ export function PartsButton({ o, k, compact }: { o: Order; k: number; compact?: 
   const t = batchesSig.value.length ? runTotals(cur, i) : null, n = i.parts?.length ?? 0;
   return <>
     <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }} class={`${compact ? "h-6 px-2 text-[11px]" : "h-7 px-2.5 text-[12px]"} !min-h-0 rounded-full border border-line bg-c0 font-semibold whitespace-nowrap cursor-pointer`} title="Cut this line into parts, each with its own printer, filament, weight and time">
-      ✂ {n ? `Parts · ${n}` : "Cut part"}{t && t.runs - t.running > 0 ? ` · ${t.g} g · ${hoursText(t.h)}` : ""}</button>
+      ✂ {n ? `Parts · ${n}` : "Split into parts"}{t && t.runs - t.running > 0 ? ` · ${t.g} g · ${hoursText(t.h)}` : ""}</button>
     {open && <PartsSheet o={cur} k={k} onClose={() => setOpen(false)} />}
   </>;
 }
