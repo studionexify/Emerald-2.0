@@ -85,7 +85,13 @@ export const MAX_PER_CAT = 999;
 /** Next block for a new category: the largest block ever used + 1 (10–99). */
 export const nextCode = () => Math.max(9, ...nexderCatsSig.value.map((c) => c.code)) + 1;
 export const noOf = (c: NxCat, seq: number) => String(c.code * 1000 + seq);
-export const nextNo = (catId: string) => { const c = nexderCatsSig.value.find((x) => x.id === catId); return c && c.last < MAX_PER_CAT ? noOf(c, c.last + 1) : null; };
+/** Lowest sequence in a category's block that no design holds, in the list or in the Bin (a Bin design keeps its number so Restore never clashes). */
+export function freeSeq(c: NxCat): number | null {
+  const used = new Set([...nexderDesignsSig.value.map((d) => d.no), ...binSig.value.filter((x) => x.kind === "Design").map((x) => (x.data as { no?: string } | undefined)?.no)]);
+  for (let i = 1; i <= MAX_PER_CAT; i++) if (!used.has(noOf(c, i))) return i;
+  return null;
+}
+export const nextNo = (catId: string) => { const c = nexderCatsSig.value.find((x) => x.id === catId), n = c ? freeSeq(c) : null; return c && n ? noOf(c, n) : null; };
 /** Adds a category; returns an error text instead when it can't. */
 export function addCategory(name: string): { cat?: NxCat; error?: string } {
   const n = name.trim().replace(/\s+/g, " ");
@@ -138,7 +144,7 @@ export async function saveDraft(d: Draft, catId: string, listed: string[] | unde
   if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
   const prev = d.editId ? nexderDesignsSig.value.find((x) => x.id === d.editId) : undefined;
   let no = prev?.no, last = cat.last;
-  if (!prev || prev.catId !== catId) { if (cat.last >= MAX_PER_CAT) return `${cat.name} is full (999 designs)`; last = cat.last + 1; no = noOf(cat, last); }
+  if (!prev || prev.catId !== catId) { const n = freeSeq(cat); if (!n) return `${cat.name} is full (999 designs)`; last = Math.max(cat.last, n); no = noOf(cat, n); }
   const b = await backend();
   const addP = d.photos.filter((p) => p.file), addF = d.files.filter((f) => f.file), bytes = newBytes(d);
   /* free space, before a single byte is sent */

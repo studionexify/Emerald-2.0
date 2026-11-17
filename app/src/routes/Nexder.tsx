@@ -5,7 +5,7 @@ import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
+  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, LIMITS, markSeen, materialUsage,
   MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
@@ -110,7 +110,7 @@ export default function Nexder() {
   useEffect(() => { if (nexderReady) { syncTrash(); if (can("nexder", "full")) sweepOrphans(); } }, []);
   useEffect(() => { if (view === "shared") markSeen(); }, [view, shared.length]);
   const pool = view === "shared" ? designs.filter((d) => shared.some((s) => s.designIds.includes(d.id))) : designs;
-  const list = pool.filter((d) => (!cat || catsOf(d).includes(cat)) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim())));
+  const list = pool.filter((d) => (!cat || (cat === "__none" ? !catsOf(d).length : catsOf(d).includes(cat))) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim())));
   const by = (id: string) => designs.find((d) => d.id === id);
   const picked = sel.map(by).filter(Boolean) as NxDesign[];
   const open = panel && panel.k !== "new" ? by(panel.id) : undefined;
@@ -121,7 +121,7 @@ export default function Nexder() {
   /* designs by category, every category open, the way the Filament tab groups by material. A design in two categories shows in both. */
   const sorted = [...list].sort(order(pf.sort, pf.dir));
   const named = cats.filter((c) => !cat || c.id === cat).map((c) => ({ c: c as { id: string; name: string } | null, ds: sorted.filter((d) => catsOf(d).includes(c.id)) })).sort((a, b) => a.c!.name.localeCompare(b.c!.name) * (pf.sort === "cat" ? pf.dir : 1));
-  const loose = cat ? [] : sorted.filter((d) => !catsOf(d).length);
+  const loose = cat && cat !== "__none" ? [] : sorted.filter((d) => !catsOf(d).length);
   const groups = (pf.group ? [...named, { c: null, ds: loose }] : [{ c: { id: "all", name: "All designs" }, ds: sorted }]).filter((g) => g.ds.length);
   const allIds = sorted.map((d) => d.id), everyShown = allIds.length > 0 && allIds.every((id) => sel.includes(id));
 
@@ -140,7 +140,7 @@ export default function Nexder() {
         <label class="relative w-full md:w-[260px]"><span class="sr-only">Search designs</span><span class="absolute left-3 top-2.5 text-c2 pointer-events-none"><Icon name="search" size={13} /></span>
           <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Name or number" class={`${inputCls} !pl-8`} /></label>
         <select aria-label="Category" value={cat} onChange={(e) => setCat((e.target as HTMLSelectElement).value)} class={`${inputCls} !w-auto cursor-pointer`}>
-          <option value="">All categories</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name} · {designs.filter((d) => catsOf(d).includes(c.id)).length}</option>)}</select>
+          <option value="">All categories</option><option value="__none">Uncategorized · {designs.filter((d) => !catsOf(d).length).length}</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name} · {designs.filter((d) => catsOf(d).includes(c.id)).length}</option>)}</select>
         <select aria-label="Sort by" value={pf.sort} onChange={(e) => setPrefs({ sort: (e.target as HTMLSelectElement).value as SortKey, dir: 1 })} class={`${inputCls} !w-auto cursor-pointer`}>{SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}</select>
         <button type="button" aria-label={pf.dir === 1 ? "Ascending. Press for descending" : "Descending. Press for ascending"} title={pf.dir === 1 ? "Ascending (A→Z, low→high, old→new)" : "Descending (Z→A, high→low, new→old)"} onClick={() => setPrefs({ dir: (pf.dir * -1) as 1 | -1 })} class="h-8 w-8 !min-h-0 shrink-0 rounded-lg border border-line bg-c0 inline-flex items-center justify-center cursor-pointer"><span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={14} /></span></button>
         <select aria-label="Group by" value={pf.group ? "cat" : "none"} onChange={(e) => setPrefs({ group: (e.target as HTMLSelectElement).value === "cat" })} class={`${inputCls} !w-auto cursor-pointer`}><option value="cat">Group: Category</option><option value="none">Group: None</option></select>
@@ -162,9 +162,9 @@ export default function Nexder() {
               <button key={k} type="button" onClick={() => sortBy(k)} aria-label={`Sort by ${l}`} class={`!min-h-0 h-7 items-center gap-1 cursor-pointer hover:text-c4 ${x.includes("xl") ? "hidden xl:inline-flex" : "inline-flex"} ${x.includes("right") ? "justify-end" : ""} ${pf.sort === k ? "text-c4" : ""}`}>{l}{pf.sort === k && <span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={11} /></span>}</button>))}
           </div>}
           {groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)); return (
-          <section key={c?.id ?? "none"} aria-label={c?.name ?? "No category"} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
+          <section key={c?.id ?? "none"} aria-label={c?.name ?? "Uncategorized"} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
             <div class="flex items-center gap-2 pb-2 border-b-2 border-c4/25">
-              <b class="text-[14px] tracking-[0.04em]">{c?.name ?? "No category"}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
+              <b class="text-[14px] tracking-[0.04em]">{c?.name ?? "Uncategorized"}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
               {selecting && <button type="button" onClick={() => setSel((x) => (all ? x.filter((id) => !ds.some((d) => d.id === id)) : [...new Set([...x, ...ds.map((d) => d.id)])]))} class="ml-auto text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{all ? (c?.id === "all" ? "Unselect all" : "Unselect category") : (c?.id === "all" ? "Select all" : "Select category")}</button>}
             </div>
             {pf.layout === "list"
@@ -313,7 +313,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   const ctl = useRef<AbortController | null>(null), asking = useRef(false), woke = useRef(false);
   const cats = nexderCatsSig.value, cat = cats.find((c) => c.id === catId);
   const set = (k: number, p: Partial<Draft>) => setDrafts((ds) => ds.map((d, j) => (j === k ? { ...d, ...p } : d)));
-  const first = cat ? (cat.last < MAX_PER_CAT ? nextNo(cat.id) : null) : adding && newCat.trim() ? String(nextCode() * 1000 + 1) : null;
+  const first = cat ? nextNo(cat.id) : adding && newCat.trim() ? String(nextCode() * 1000 + 1) : null;
   const mk = () => { const r = addCategory(newCat); if (r.error) { setErr(r.error); return null; } setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); return r.cat!; };
   const ready = drafts.every(draftReady) && (!!cat || (adding && !!newCat.trim()));
   const filled = (d: Draft) => !!(d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length);
