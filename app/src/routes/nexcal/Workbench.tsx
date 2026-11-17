@@ -28,7 +28,7 @@ const hm = (h: number) => { const t = Math.round(h * 60); return t >= 60 ? `${Ma
 const dims = (d?: { x: number; y: number; z: number }) => (d ? `${d.x.toFixed(1)} × ${d.y.toFixed(1)} × ${d.z.toFixed(1)} mm` : "");
 
 /** What the design window needs back from the calculator. */
-export type Use = { kind: "price"; price: number } | { kind: "size"; sizeMm: number; grams: number };
+export type Use = { kind: "price"; price: number } | { kind: "size"; sizeMm: number; grams: number; minutes: number };
 export interface WorkbenchProps {
   mode: "page" | "embed";
   onUse?: (u: Use) => void;
@@ -55,7 +55,12 @@ const Dot = ({ c }: { c: string }) => <span class="w-3.5 h-3.5 rounded-full shri
 const Tag = ({ tone, children }: { tone: "grn" | "amb" | "mute"; children: ComponentChildren }) => <span class={`inline-flex items-center rounded-full px-2 h-5 text-[11px] font-semibold whitespace-nowrap ${tone === "grn" ? "bg-grn-bg text-grn" : tone === "amb" ? "bg-amb-bg text-amb" : "bg-c1 text-c3"}`}>{children}</span>;
 
 /** A 3MF project on screen: its plates, and what the file says about the machine. */
-type SheetState = { id: number; name: string; data: File3MF; on: Record<number, boolean>; pieces: Record<number, number>; slicer: boolean; useFile: boolean; support: boolean };
+type SheetState = { id: number; name: string; data: File3MF; on: Record<number, boolean>; pieces: Record<number, number>; slicer: boolean; useFile: boolean; support: boolean;
+  /** which side of the model faces up, and its size as a percentage of the file (the file is already laid out on the plate: Z up, 100%) */ up: UpAxis; scale: number };
+const AXI = { X: 0, "-X": 0, Y: 1, "-Y": 1, Z: 2, "-Z": 2 } as const;
+/** An item of a 3MF as it would print with the chosen side up and the chosen size. */
+const reshape = (a: MeshAnalysis, up: UpAxis, pct: number): MeshAnalysis => { const r = pct === 100 ? a : scaleMeshAnalysis(a, pct / 100), h = r.dimensions[(["x", "y", "z"] as const)[AXI[up]]]; return h === r.height ? r : { ...r, height: h }; };
+const longestOf = (a: MeshAnalysis) => Math.max(a.dimensions.x, a.dimensions.y, a.dimensions.z);
 const fileParams = (m: File3MF["machine"]) => ({ ...(m.walls ? { wallLoops: m.walls } : {}), ...(m.infill !== undefined ? { infillPercent: m.infill } : {}), ...(m.layerHeight ? { layerHeight: m.layerHeight } : {}), ...(m.nozzle ? { nozzleDiameter: m.nozzle } : {}) });
 
 /* ---------------------------------------------------------------- workbench */
@@ -79,9 +84,9 @@ export function Workbench({ mode, onUse, onFiles: told, feed }: WorkbenchProps) 
     return { ...f, weightGrams: e.weightGrams, timeHours: e.timeHours };
   }), [files, inputs.material, settings]);
   const figures = useMemo(() => sheets.map((s) => s.data.plates.map((p) => {
-    if (s.slicer && p.slice) return { g: p.slice.grams, h: p.slice.seconds / 3600, from: "slicer" as const };
+    if (s.slicer && p.slice && s.up === "Z" && s.scale === 100) return { g: p.slice.grams, h: p.slice.seconds / 3600, from: "slicer" as const };
     const prm = estimatorParams(settings, { supportEnabled: s.support, ...(s.useFile ? fileParams(s.data.machine) : {}) });
-    let g = 0, h = 0; for (const it of p.items) { const e = estimatePart(it.analysis, inputs.material, prm); g += e.weightGrams; h += e.timeHours; }
+    let g = 0, h = 0; for (const it of p.items) { const e = estimatePart(reshape(it.analysis, s.up, s.scale), inputs.material, prm); g += e.weightGrams; h += e.timeHours; }
     return { g, h, from: "estimate" as const };
   })), [sheets, inputs.material, settings]);
   const plateParts = useMemo(() => sheets.flatMap((s, si) => s.data.plates.filter((p) => s.on[p.index]).map((p) => {
@@ -121,7 +126,7 @@ export function Workbench({ mode, onUse, onFiles: told, feed }: WorkbenchProps) 
       try {
         if (/\.3mf$/i.test(file.name)) {
           const data = await load3MF(file), first = data.plates[0];
-          sh.push({ id: rid(), name: file.name.replace(/\.3mf$/i, ""), data, on: first ? { [first.index]: true } : {}, pieces: {}, slicer: true, useFile: true, support: !!data.machine.support });
+          sh.push({ id: rid(), name: file.name.replace(/\.3mf$/i, ""), data, on: first ? { [first.index]: true } : {}, pieces: {}, slicer: true, useFile: true, support: !!data.machine.support, up: "Z", scale: 100 });
         } else { const t = await detectFormatAndParse(file); const id = rid(); tris.current.set(id, t); const b = newUploadedPart(id, file.name, settings); loose.push({ ...b, ...analyse(b) }); }
       } catch (e) { setToast((e as Error).message || `Could not read ${file.name}`); }
     }
@@ -153,7 +158,7 @@ export function Workbench({ mode, onUse, onFiles: told, feed }: WorkbenchProps) 
   /* ---- what the size of the thing is: the longest side of one piece */
   const sizeMm = useMemo(() => {
     const l = files.map((f) => longestDimensionMm(f) ?? 0);
-    for (const s of sheets) for (const p of s.data.plates) if (s.on[p.index]) for (const it of p.items) l.push(Math.max(it.analysis.dimensions.x, it.analysis.dimensions.y, it.analysis.dimensions.z));
+    for (const s of sheets) for (const p of s.data.plates) if (s.on[p.index]) for (const it of p.items) l.push(longestOf(it.analysis) * s.scale / 100);
     return l.length ? Math.round(Math.max(...l) * 10) / 10 : 0;
   }, [files, sheets]);
 
@@ -191,7 +196,7 @@ export function Workbench({ mode, onUse, onFiles: told, feed }: WorkbenchProps) 
           <span><b class="num">{inputs.filamentGrams || 0} g</b> <span class="text-c3">per piece</span> · <b class="num">{hm(inputs.printHours)}</b>{sizeMm > 0 && <> · <b class="num">{sizeMm} mm</b> <span class="text-c3">longest side</span></>}</span>
           <span class="flex gap-2 flex-wrap mt-1">
             <Button icon="check" disabled={!hasModel && !inputs.filamentGrams} onClick={() => onUse?.({ kind: "price", price: unit })}>Use {inr(unit)} as price</Button>
-            <Button variant="outline" icon="plus" disabled={!inputs.filamentGrams || !sizeMm} onClick={() => onUse?.({ kind: "size", sizeMm, grams: Math.round(inputs.filamentGrams * 10) / 10 })}>Save as a size</Button>
+            <Button variant="outline" icon="plus" disabled={!inputs.filamentGrams || !sizeMm} onClick={() => onUse?.({ kind: "size", sizeMm, grams: Math.round(inputs.filamentGrams * 10) / 10, minutes: Math.round(inputs.printHours * 60) })}>Save as a size</Button>
           </span>
         </div>}
       </div>
@@ -349,6 +354,8 @@ function PartRow({ p, upd, remove, openView, onSize, onUnit, onAxis, onReset }: 
 /* ---------------------------------------------------------------- one 3MF: plates to choose from, and what the file says */
 function SheetBlock({ s, figs, set, remove }: { s: SheetState; figs: { g: number; h: number; from: "slicer" | "estimate" }[]; set: (p: Partial<SheetState>) => void; remove: () => void }) {
   const d = s.data, m = d.machine, picked = d.plates.filter((p) => s.on[p.index]).length, anySlice = d.plates.some((p) => p.slice);
+  /** the longest side at the size stored in the file, over the plates that are chosen (or all when none is) */
+  const base = Math.max(0, ...d.plates.filter((p) => (picked ? s.on[p.index] : true)).flatMap((p) => p.items.map((it) => longestOf(it.analysis))));
   const toggle = (p: Plate) => set({ on: { ...s.on, [p.index]: !s.on[p.index] } });
   return (
     <div class="mt-3 rounded-2xl border border-line bg-c1/30 p-3">
@@ -371,7 +378,7 @@ function SheetBlock({ s, figs, set, remove }: { s: SheetState; figs: { g: number
                 <span class="min-w-0 flex-1">
                   <b class="block text-[13px] break-words">Plate {p.index}{p.name && p.name !== `Plate ${p.index}` ? ` · ${p.name}` : ""}</b>
                   <span class="block t-meta break-words">{p.objects.length ? p.objects.join(", ") : `${p.instances} object${p.instances === 1 ? "" : "s"}`}</span>
-                  {p.size && <span class="block t-meta num">{dims(p.size)}</span>}
+                  {p.size && <span class="block t-meta num">{dims({ x: p.size.x * s.scale / 100, y: p.size.y * s.scale / 100, z: p.size.z * s.scale / 100 })}</span>}
                 </span>
                 <span class={`w-5 h-5 rounded-md border shrink-0 flex items-center justify-center ${on ? "bg-c4 text-c0 border-c4" : "border-c2/50"}`}>{on && <Icon name="check" size={12} />}</span>
               </button>
@@ -381,6 +388,15 @@ function SheetBlock({ s, figs, set, remove }: { s: SheetState; figs: { g: number
             </div>
           );
         })}
+      </div>}
+      {d.plates.some((p) => p.items.length) && <div class="mt-3 rounded-xl border border-line bg-c0 p-2.5 grid gap-2.5 sm:grid-cols-[auto_minmax(0,1fr)] items-end" aria-label="Orientation and size">
+        <div role="group" aria-label="Orientation (which side faces up)"><span class="block t-meta mb-1">Orientation · side facing up</span>
+          <div class="flex flex-wrap gap-1">{UP_AXES.map((a) => <button key={a} type="button" aria-pressed={s.up === a} onClick={() => set({ up: a })} class={`h-7 min-w-9 px-2 !min-h-0 rounded-md text-[12px] font-semibold cursor-pointer ${s.up === a ? "bg-c4 text-c0" : "bg-c1/60 border border-line text-c3"}`}>{a}</button>)}</div></div>
+        <Field label="Size · longest side (mm)"><span class="flex items-center gap-1.5">
+          <input key={`${s.id}-${s.scale}-${picked}`} type="number" min={0.1} step={0.1} class={`${sm} !w-24`} aria-label="Longest side in mm" defaultValue={String(Math.round(base * s.scale) / 100)}
+            onBlur={(e) => { const mm = parseFloat((e.target as HTMLInputElement).value); if (isFinite(mm) && mm > 0 && base > 0) set({ scale: (mm / base) * 100 }); }} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
+          <button type="button" title="Back to the size in the file" disabled={s.scale === 100} onClick={() => set({ scale: 100 })} class="h-7 px-2 shrink-0 rounded-md border border-line text-[12px] text-c3 disabled:opacity-40 cursor-pointer !min-h-0">↺ Original</button>
+          {(s.up !== "Z" || s.scale !== 100) && <span class="t-meta">{anySlice ? "Changed, so the slicer's figures are replaced by an estimate. " : ""}{s.scale !== 100 && `${Math.round(s.scale)}% of the file`}</span>}</span></Field>
       </div>}
       <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
         {anySlice && <label class="flex items-center gap-1.5 text-[12px] text-c3 cursor-pointer"><input type="checkbox" checked={s.slicer} onChange={(e) => set({ slicer: (e.target as HTMLInputElement).checked })} />Use the slicer's weight and time when the file has them</label>}

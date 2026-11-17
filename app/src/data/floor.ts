@@ -1,4 +1,5 @@
 /** Floor sheet (bulk work sheet): colour stock, grams needed, and logging plates per line item. */
+import type { LinePart } from "../mock/types";
 import { batchesSig, consume, logMachineTime, log, me, ordersSig, patchOrder, spoolLabel, lineProgress, type Order, type LineItem } from "./index";
 import { filMasterSig, spoolsSig } from "./inventory";
 
@@ -78,25 +79,29 @@ export const orderById = (id: string) => ordersSig.value.find((x) => x.id === id
 export const lineRun = (o: Order, i: LineItem) => batchesSig.value.find((b) => b.orderNo === o.no && b.name === i.name && b.running);
 
 /** Start plates: remember machine, plates, copies and the spool picked for each colour. */
-export function startPlates(o: Order, k: number, d: { machine?: string; plates: number; perPlate: number; spools: Record<string, string> }): Order {
+export function startPlates(o: Order, k: number, d: { machine?: string; plates: number; perPlate: number; spools: Record<string, string>; part?: string; /** the machine(s) to show on the line when several runs start together */ lineMachine?: string }): Order {
   const i = o.items[k], cs = Object.keys(d.spools);
   const ids = cs.map((c) => d.spools[c]);
   const labels = ids.map((id) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? spoolLabel(s) : id; });
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.plates * d.perPlate, done: 0, printer: d.machine, spool: labels.join(" + ") || undefined, spoolIds: ids, colours: cs, plates: d.plates, perPlate: d.perPlate, running: true, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
-  log("Started print", `${o.no} · ${d.plates * d.perPlate}× ${i.name}${d.machine ? ` on ${d.machine}` : ""}`);
-  return setLine(o, k, { machine: d.machine ?? i.machine, perPlate: d.perPlate });
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.plates * d.perPlate, done: 0, printer: d.machine, spool: labels.join(" + ") || undefined, spoolIds: ids, colours: cs, plates: d.plates, perPlate: d.perPlate, running: true, ...(d.part ? { part: d.part } : {}), at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
+  log("Started print", `${o.no} · ${d.plates * d.perPlate}× ${i.name}${d.part ? ` (${d.part})` : ""}${d.machine ? ` on ${d.machine}` : ""}`);
+  return setLine(o, k, { machine: d.lineMachine ?? d.machine ?? i.machine, ...(d.part ? {} : { perPlate: d.perPlate }) });
 }
 
 /** Complete plates: good + wasted pieces, grams per plate per spool all consumed from those exact spools. */
 /** Runs of a line printed with spools still loaded, waiting for the final weigh. */
 export const pendingWeigh = (o: Order, i: LineItem) => batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && b.weighLater && !b.running);
+/** Of those, the ones that used one of these spools: only they are covered by a weigh of those spools (other machines have their own spools). */
+export const pendingOn = (o: Order, i: LineItem, spoolIds: string[], self?: string) => pendingWeigh(o, i).filter((b) => b.id !== self && b.spoolIds?.some((id) => spoolIds.includes(id)));
 export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean; hours?: number }): Order {
   const i = o.items[k], p = lineProgress(o, i), b = batchesSig.value.find((x) => x.id === runId);
   const pcs = d.plates * d.perPlate, bad = Math.min(d.wasted, pcs), grams: Record<string, number> = {}, cons: string[] = [];
   // Weighing now also covers every earlier run printed from these loaded spools.
-  const prior = d.later ? [] : pendingWeigh(o, i), allPlates = d.plates + prior.reduce((a, x) => a + (x.plates ?? 1), 0);
+  const prior = d.later ? [] : pendingOn(o, i, Object.values(d.spools), runId), allPlates = d.plates + prior.reduce((a, x) => a + (x.plates ?? 1), 0);
   if (!d.later) for (const [colour, id] of Object.entries(d.spools)) {
-    const qty = Math.round((d.gpp[colour] ?? 0) * allPlates); if (qty <= 0) continue;
+    /* only the earlier plates that used this very spool share its weigh */
+    const mine = d.plates + prior.filter((x) => x.spoolIds?.includes(id)).reduce((a, x) => a + (x.plates ?? 1), 0);
+    const qty = Math.round((d.gpp[colour] ?? 0) * mine); if (qty <= 0) continue;
     const sp = spoolsSig.value.find((s) => s.id === id);
     cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : colour, qty, orderNo: o.no, batch: i.name, printer: b?.printer ?? i.machine, spoolId: sp?.id }).id);
     grams[id] = (grams[id] ?? 0) + qty;
@@ -105,7 +110,31 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
   const priorIds = new Set(prior.map((x) => x.id));
   batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, hours: d.hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
   log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${d.later ? "weigh at the end" : `${Object.values(grams).reduce((a, x) => a + x, 0)} g over ${allPlates} plate${allPlates > 1 ? "s" : ""}`}`);
-  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } });
+  return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, ...(b?.part ? {} : { perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } }) });
 }
 /** Cancel a run that never finished. */
 export const cancelRun = (id: string) => { batchesSig.value = batchesSig.value.filter((b) => b.id !== id); };
+
+/* ---------------------------------------------------------------- cut into parts */
+/** Cut a line into n parts, each starting from the line's own type and colour. Refused once prints are logged against the line's parts. */
+export function cutParts(o: Order, k: number, n: number): Order {
+  const i = o.items[k], count = Math.max(2, Math.min(24, Math.round(n) || 2));
+  const parts: LinePart[] = Array.from({ length: count }, (_, j) => ({ id: crypto.randomUUID(), name: `Part ${j + 1}`, material: i.material, colour: lineColours(i)[0] ?? i.colour, printer: i.machine?.split(" + ")[0] ?? "" }));
+  log("Cut into parts", `${o.no} · ${i.name} into ${count}`);
+  return setLine(o, k, { parts });
+}
+export const saveParts = (o: Order, k: number, parts: LinePart[] | undefined): Order => setLine(o, k, { parts: parts?.length ? parts : undefined });
+/** Everything printed so far for a line, failed prints included: grams that left the spools and hours on the machines. */
+export function runTotals(o: Order, i: LineItem, part?: string) {
+  const runs = batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && (part === undefined || (b.part ?? "") === part));
+  const done = runs.filter((b) => !b.running);
+  return {
+    runs: runs.length, running: runs.length - done.length,
+    good: done.reduce((a, b) => a + (b.done || 0), 0), failed: done.reduce((a, b) => a + (b.failed ?? 0), 0),
+    g: Math.round(done.reduce((a, b) => a + Object.values(b.grams ?? {}).reduce((x, y) => x + y, 0), 0)),
+    h: Math.round(done.reduce((a, b) => a + (b.hours ?? 0), 0) * 10) / 10,
+    /** runs printed with the spools still loaded: their grams arrive at the final weigh */
+    toWeigh: done.filter((b) => b.weighLater).length,
+  };
+}
+export const hoursText = (h: number) => { const m = Math.round(h * 60); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };

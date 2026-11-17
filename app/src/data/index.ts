@@ -168,9 +168,9 @@ export function lineProgress(o: Order, i: Order["items"][number], batches = batc
   return { printed, failed, printing, pending: Math.max(0, i.qty - printed) };
 }
 /** Print runs: start a run of N units on a printer with a spool, then log good / failed when it comes off. */
-export function startRun(o: Order, item: string, units: number, printer: string, spools: { id: string; label: string }[]) {
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spools.map((x) => x.label).join(" + ") || undefined, spoolIds: spools.map((x) => x.id), running: true, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
-  log("Started print", `${o.no} · ${units}× ${item} on ${printer}`);
+export function startRun(o: Order, item: string, units: number, printer: string, spools: { id: string; label: string }[], part?: string) {
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: item, units, done: 0, printer, spool: spools.map((x) => x.label).join(" + ") || undefined, spoolIds: spools.map((x) => x.id), running: true, ...(part ? { part } : {}), at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
+  log("Started print", `${o.no} · ${units}× ${item}${part ? ` (${part})` : ""} on ${printer}`);
 }
 /** A run's spools as {id, label}: by id for new runs; older runs fall back to spool numbers in the label. */
 export function runSpools(b: Batch): { id: string; label: string }[] {

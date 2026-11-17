@@ -76,12 +76,20 @@ export function invTax(i: Invoice) {
 
 /** Taxable value already credited against an invoice by credit notes. */
 export const creditedOn = (no: string) => invoicesSig.value.filter((c) => c.kind === "credit" && c.status === "issued" && c.against === no).reduce((s, c) => s + invTax({ ...c, kind: "invoice" }).taxable, 0);
+/** Advances taken on an order, before or during production (any stage). Printing never waits for them. */
+export const advancesOf = (orderNo: string) => moneySig.value.filter((m) => m.ref === orderNo && m.kind === "advance" && m.amount > 0);
+export function recordAdvance(o: { no: string; customer: string }, a: { amount: number; account: string; date: string; note?: string }) {
+  moneySig.value = [...moneySig.value, { id: uid(), date: a.date, account: a.account, kind: "advance", amount: Math.round(a.amount * 100) / 100, cat: "Advance", note: a.note?.trim() || o.customer, ref: o.no, source: "order" }];
+}
+export const removeAdvance = (id: string) => { moneySig.value = moneySig.value.filter((m) => m.id !== id); };
 /** What the customer still owes on an invoice: total less credit notes (GST included, pro rata) and receipts booked against it. */
 export function invDue(i: Invoice) {
   if (i.kind !== "invoice" || i.status !== "issued" || i.paidOn) return 0;
   const t = invTax(i), credit = t.taxable ? (creditedOn(i.no) / t.taxable) * t.total : 0;
   const paid = moneySig.value.filter((m) => m.ref === i.no && m.kind === "receipt" && m.amount > 0).reduce((s, m) => s + m.amount, 0);
-  return Math.max(0, r2(t.total - credit - paid));
+  /* money taken in advance on the order this invoice is for counts as already received */
+  const adv = i.orderNo ? advancesOf(i.orderNo).reduce((s, m) => s + m.amount, 0) : 0;
+  return Math.max(0, r2(t.total - credit - paid - adv));
 }
 
 /** Financial-year letter: Apr 2025–Mar 2026 = A, Apr 2026–Mar 2027 = B (the studio's existing series). */
