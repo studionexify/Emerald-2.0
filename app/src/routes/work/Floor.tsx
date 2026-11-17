@@ -1,5 +1,6 @@
 import { sortAbc } from "../../mock/types";
 /** Floor: the internal bulk work sheet. Opens at 95% of the screen from an order's FLOOR button. */
+import { Fragment } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
 import { Button, Sheet } from "../../ui";
@@ -7,7 +8,7 @@ import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate,
 import { StockPanel } from "./StockPanel";
 import { PartsButton } from "./Parts";
 import { pieceGrams, loggedPc } from "../../data/stockPlan";
-import { cancelRun, colourHex, colourStore, finishPlates, floorColumns, floorLine, gramsFor, lineColours, logPlates, pendingOn, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
+import { cancelRun, colourHex, runTotals, colourStore, finishPlates, floorColumns, floorLine, gramsFor, lineColours, logPlates, pendingOn, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 const n0 = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
@@ -29,8 +30,8 @@ type SortKey = "sr" | "name" | "qty" | "printed" | "wasted" | "remaining" | "ext
 export function Floor({ order, onClose }: { order: Order; onClose: () => void }) {
   const o = ordersSig.value.find((x) => x.id === order.id) ?? order;
   const [sort, setSort] = useState<{ k: SortKey; up: boolean }>({ k: "sr", up: true });
-  const open = (k: number, run = "") => { setLogRun(run); setLogK(k); }, close = () => { setLogK(null); setLogRun(""); };
-  const [logK, setLogK] = useState<number | null>(null), [logRun, setLogRun] = useState(""), [cols, setCols] = useState(false), [lines, setLines] = useState(false);
+  const open = (k: number, run = "", part = "") => { setLogRun(run); setLogPart(part); setLogK(k); }, close = () => { setLogK(null); setLogRun(""); setLogPart(""); };
+  const [logK, setLogK] = useState<number | null>(null), [logRun, setLogRun] = useState(""), [logPart, setLogPart] = useState(""), [cols, setCols] = useState(false), [lines, setLines] = useState(false);
   /* Filament stock beside the table: both panes live, draggable divider. Open state and width are remembered on this device. */
   const [stock, setStock] = useState(() => { try { return localStorage.getItem("emerald:floor:stock") === "1"; } catch { return false; } });
   const [pw, setPw] = useState(() => { try { return Math.min(640, Math.max(300, Number(localStorage.getItem("emerald:floor:stockW")) || 380)); } catch { return 380; } });
@@ -91,10 +92,10 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
           </tr></thead>
           <tbody>
             {shown.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
-              <tr key={k} class={`border-b border-line ${fin ? "bg-c1 text-c2 [&>td]:grayscale [&>td]:opacity-60" : ""}`}>
+              <Fragment key={k}><tr class={`border-b border-line ${fin ? "bg-c1 text-c2 [&>td]:grayscale [&>td]:opacity-60" : ""}`}>
                 <td class={td}>{k + 1}</td>
-                <td class={td}><div class="flex flex-col items-center gap-1">{runsOf(o, i).map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">{run.printer || "on plate"} · {run.units} pcs{run.part ? ` · ${run.part}` : ""}</span></button>)}
-                  <button type="button" onClick={() => open(k)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">{runsOf(o, i).length ? "+ Machine" : "▶ Start"}</button></div></td>
+                <td class={td}><div class="flex flex-col items-center gap-1">{lineRuns(o, i).map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">{run.printer || "on plate"} · {run.units} pcs{run.part ? ` · ${run.part}` : ""}</span></button>)}
+                  {i.parts?.length ? <span class="t-meta whitespace-nowrap">{i.parts.length} parts ↓</span> : <button type="button" onClick={() => open(k)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">{runsOf(o, i).length ? "+ Machine" : "▶ Start"}</button>}</div></td>
                 <td class={td}><div class="inline-block align-middle"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-12 h-12 max-[1100px]:w-9 max-[1100px]:h-9" onAdd={(fl) => attach(k, fl)} /></div></td>
                 <td class="px-2.5 py-2 text-left font-sans font-semibold leading-snug min-w-[8rem]">{i.name}<div class="mt-1 font-normal"><PartsButton o={o} k={k} compact /></div></td>
                 <td class={td}>{i.qty}</td>
@@ -105,7 +106,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
                 <td class={td}><Toggle paid={!!i.paid} onChange={(v) => put(k, { paid: v })} /></td>
                 <td class={td}><MachineSelect value={i.machine} onChange={(v) => put(k, { machine: v || undefined })} /></td>
                 {columns.map((c) => <td key={c} class={`${td} !px-0.5 ${store[c] ? "" : "floor-empty"}`}>{cs.some((x) => eq(x, c)) && <Sq hex={colourHex(c)} size="w-6 h-6 max-[1100px]:w-[18px] max-[1100px]:h-[18px]" />}</td>)}
-              </tr>); })}
+              </tr>{i.parts?.map((_, j) => <PartRow key={i.parts![j].id} o={o} i={i} k={k} j={j} open={open} />)}</Fragment>); })}
           </tbody>
           <tfoot class="text-[12px] text-c3">
             <tr class="border-t-2 border-line"><td colSpan={4} class="px-1 py-1.5 font-semibold text-c4">Total</td><td class={td}>{tot.q}</td><td class={td}>{tot.p}</td><td class={td}>{tot.w}</td><td class={td}>{tot.r}</td><td class={`${td} text-acc`}>+{tot.e}</td><td colSpan={2} class="px-1 text-right whitespace-nowrap">In store (g)</td>
@@ -121,10 +122,11 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
                 <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 shrink-0" onAdd={(fl) => attach(k, fl)} />
                 <div class="min-w-0 flex-1"><div class="font-semibold text-[14px] leading-snug">{k + 1}. {i.name}</div>
                   <div class="t-meta">Qty {i.qty} · {f.printed} printed · {f.remaining} left{f.wasted ? <span class="text-red"> · {f.wasted} wasted</span> : null}{f.extra ? ` · +${f.extra} extra` : ""}</div><div class="mt-1"><PartsButton o={o} k={k} compact /></div></div>
-                <div class="flex flex-col items-end gap-1 shrink-0">{runsOf(o, i).map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-3 py-1.5 text-[12px] font-semibold cursor-pointer leading-tight">■ Finish<span class="block text-[10px] font-medium">{run.printer || "on plate"} · {run.units} pcs{run.part ? ` · ${run.part}` : ""}</span></button>)}
-                  <button type="button" onClick={() => open(k)} class="h-8 px-3 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold cursor-pointer">{runsOf(o, i).length ? "+ Machine" : "▶ Start"}</button></div>
+                <div class="flex flex-col items-end gap-1 shrink-0">{lineRuns(o, i).map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-3 py-1.5 text-[12px] font-semibold cursor-pointer leading-tight">■ Finish<span class="block text-[10px] font-medium">{run.printer || "on plate"} · {run.units} pcs{run.part ? ` · ${run.part}` : ""}</span></button>)}
+                  {i.parts?.length ? <span class="t-meta whitespace-nowrap">{i.parts.length} parts ↓</span> : <button type="button" onClick={() => open(k)} class="h-8 px-3 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold cursor-pointer">{runsOf(o, i).length ? "+ Machine" : "▶ Start"}</button>}</div>
               </div>
               <div class="flex flex-wrap items-center gap-2 mt-2"><Toggle paid={!!i.paid} onChange={(v) => put(k, { paid: v })} /><MachineSelect value={i.machine} onChange={(v) => put(k, { machine: v || undefined })} /></div>
+              {i.parts?.length ? <div class="grid gap-1.5 mt-2">{i.parts.map((_, j) => <PartRow key={i.parts![j].id} o={o} i={i} k={k} j={j} open={open} card />)}</div> : null}
               {cs.length > 0 && <div class="flex flex-wrap gap-1.5 mt-2">{cs.map((c) => <span key={c} class="inline-flex items-center gap-1.5 rounded-full bg-c1 px-2 py-0.5 text-[12px]"><Sq hex={colourHex(c)} size="w-3.5 h-3.5" />{c}</span>)}</div>}
             </div>); })}
           {columns.length > 0 && <div class="rounded-xl border border-line p-3">
@@ -141,7 +143,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <div style={{ width: `${pw}px` }} class="shrink-0 min-h-0 border-l border-line max-[900px]:!w-full max-[900px]:h-[45%] max-[900px]:border-l-0 max-[900px]:border-t"><StockPanel order={o} /></div></>}
       </div>
     </div>
-    {logK !== null && (() => { const run = logRun ? batchesSig.value.find((b) => b.id === logRun && b.running) : undefined; return run ? <FinishPrint o={o} k={logK} run={run} onClose={close} /> : <StartPrint o={o} k={logK} onClose={close} />; })()}
+    {logK !== null && (() => { const run = logRun ? batchesSig.value.find((b) => b.id === logRun && b.running) : undefined; return run ? <FinishPrint o={o} k={logK} run={run} onClose={close} /> : <StartPrint o={o} k={logK} part={logPart || undefined} onClose={close} />; })()}
     {cols && <EditColours o={o} onClose={() => setCols(false)} />}
     {lines && <EditLines o={o} onClose={() => setLines(false)} />}
   </div>;
@@ -193,6 +195,22 @@ const inp = "h-9 w-16 px-2 rounded-lg border border-line bg-c0 text-[15px] num";
 
 /** Every run of a line that is on a plate right now (one per machine). */
 const runsOf = (o: Order, i: LineItem) => batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && b.running);
+/** Runs of the whole piece; a cut line's part runs show on their own part rows. */
+const lineRuns = (o: Order, i: LineItem) => runsOf(o, i).filter((r) => !i.parts?.length || !r.part);
+
+/** One part of a cut line, shown as its own line of the Floor: name it, see its printer, colour, grams and time, start and finish it. */
+function PartRow({ o, i, k, j, open, card }: { o: Order; i: LineItem; k: number; j: number; open: (k: number, run?: string, part?: string) => void; card?: boolean }) {
+  const td = "px-2 py-2 text-center", p = i.parts![j], t = runTotals(o, i, p.name), runs = runsOf(o, i).filter((r) => (r.part ?? "") === p.name), left = Math.max(0, i.qty - t.good);
+  const rename = (name: string) => patchOrder(o, { items: o.items.map((x, n) => (n === k ? { ...x, parts: x.parts!.map((y) => (y.id === p.id ? { ...y, name } : y)) } : x)) });
+  const name = t.runs ? <b class="font-sans font-semibold text-[13px]">{p.name}</b> : <input value={p.name} aria-label={`Name of part ${j + 1}`} onInput={(e) => rename((e.target as HTMLInputElement).value)} class="h-7 px-2 rounded-md border border-line bg-c0 text-[13px] font-sans font-semibold w-full min-w-[7rem]" />;
+  const spec = <span class="t-meta font-sans inline-flex items-center gap-1.5 flex-wrap"><Sq hex={colourHex(p.colour)} size="w-3 h-3" />{p.material} · {p.colour}{p.printer ? ` · ${p.printer}` : " · any printer"}{p.g ? ` · ${p.g} g` : ""}{p.min ? ` · ${p.min >= 60 ? `${Math.floor(p.min / 60)} h ${p.min % 60} min` : `${p.min} min`}` : ""}</span>;
+  const btns = <div class="flex flex-col items-center gap-1">{runs.map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">{run.printer || "on plate"} · {run.units} pcs</span></button>)}
+    {left > 0 ? <button type="button" onClick={() => open(k, "", p.name)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">{runs.length ? "+ Machine" : "▶ Start"}</button> : <span class="text-grn text-[12px] font-semibold">✓ done</span>}</div>;
+  if (card) return <div class="rounded-lg bg-c1/70 p-2.5 grid gap-1.5"><div class="flex items-start gap-2"><span class="w-5 h-5 rounded-full bg-c4 text-c0 text-[11px] font-bold flex items-center justify-center shrink-0">{j + 1}</span><div class="min-w-0 flex-1 grid gap-1">{name}{spec}<span class="t-meta">{t.good} good · {t.failed} failed · {left} left{t.runs ? ` · ${t.g} g` : ""}</span></div>{btns}</div></div>;
+  return <tr class="border-b border-line bg-c1/50"><td class={td}>{k + 1}.{j + 1}</td><td class={td}>{btns}</td><td />
+    <td class="px-2.5 py-1.5 text-left font-sans"><div class="grid gap-0.5">{name}{spec}</div></td>
+    <td class={td}>{i.qty}</td><td class={`${td} font-semibold`}>{t.good}</td><td class={`${td} ${t.failed ? "text-red" : ""}`}>{t.failed}</td><td class={`${td} font-semibold`}>{left}</td><td /><td /><td class={td}>{p.printer || "—"}</td></tr>;
+}
 
 /** One machine of a start: its own plates × copies, and its own spools. */
 type RunRow = { key: string; machine: string; plates: number; per: number; part: string; sp: Record<string, string>; picked: string[]; tab: string };
@@ -202,12 +220,16 @@ const idsOf = (r: RunRow, simple?: boolean) => (simple ? r.picked : Object.value
  * ▶ Start: one or more machines, each with its own plates × copies and its own spools (a big piece is cut into parts and printed on several
  * printers at once, each with its own filaments). Every machine becomes its own run, finished on its own. Skip logs counts for prints made before.
  */
-export function StartPrint({ o, k, onClose, simple }: { o: Order; k: number; onClose: () => void; simple?: boolean }) {
+export function StartPrint({ o, k, onClose, simple, part: startPart }: { o: Order; k: number; onClose: () => void; simple?: boolean; /** start this part of a cut line: its printer, colour and spool are filled in */ part?: string }) {
   const i = o.items[k], f = floorLine(o, i), cs = lineColours(i);
   const last = pendingWeigh(o, i).slice(-1)[0];
   const spoolsFor = (machine: string, skip: string[]) => Object.fromEntries(cs.map((c) => { const j = last?.colours?.findIndex((x) => eq(x, c)) ?? -1, id = j >= 0 ? last!.spoolIds?.[j] : undefined; return [c, id && !spoolBusy(id) && !skip.includes(id) ? id : bestSpool(c, machine, skip) ?? ""]; }));
   const fresh = (skip: string[], first = false): RunRow => { const machine = first ? i.machine ?? "" : ""; return { key: crypto.randomUUID(), machine, plates: 1, per: first ? (simple ? Math.max(1, f.remaining) : i.perPlate ?? 1) : 1, part: "", sp: spoolsFor(machine, skip), picked: [], tab: "" }; };
-  const [rows, setRows] = useState<RunRow[]>(() => { const r = fresh([], true); return [{ ...r, tab: cs.find((c) => !r.sp[c]) ?? cs[0] ?? "" }]; });
+  const [rows, setRows] = useState<RunRow[]>(() => {
+    const r = fresh([], true), pt = startPart ? i.parts?.find((x) => x.name === startPart) : undefined;
+    if (pt) { const mach = pt.printer || r.machine, pcs = pt.colour ? [pt.colour] : cs, left = Math.max(1, i.qty - runTotals(o, i, pt.name).good); return [{ ...r, part: pt.name, machine: mach, per: left, sp: Object.fromEntries(pcs.map((c) => [c, bestSpool(c, mach) ?? ""])), tab: pcs[0] ?? "" }]; }
+    return [{ ...r, tab: cs.find((c) => !r.sp[c]) ?? cs[0] ?? "" }];
+  });
   const [open, setOpen] = useState(0), [bad, setBad] = useState(0);
   const partOf = (name: string) => i.parts?.find((x) => x.name === name);
   /** a part prints in its own colour; a plain run uses the line's colours */
