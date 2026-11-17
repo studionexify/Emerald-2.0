@@ -16,6 +16,7 @@ import { batchesSig, jobsSig, log, ordersSig, patchOrder, lineProgress, spoolsSi
 import { buildDemand } from "./stockPlan";
 import { shrinkImage } from "./image";
 import { cloudEnabled } from "./sync";
+import { cancelDesign, enqueue, isQueued, setRunner } from "./nexder-queue";
 
 /* ---------------------------------------------------------------- limits (free plans: Google Drive 15 GB, Supabase Storage 1 GB) */
 export const LIMITS = {
@@ -28,9 +29,10 @@ export const LIMITS = {
 };
 
 /* ---------------------------------------------------------------- types */
-export type NxPhoto = { id: string; name: string; size: number; mime: string; /** Drive file id (absent on designs saved by the first build) */ drive?: string; /** preview size in bytes */ psize?: number };
-export type NxFile = { id: string; name: string; size: number; mime: string; drive?: string };
-export type NxSize = { label: string; mm?: number; g: number };
+export type NxPhoto = { id: string; name: string; size: number; mime: string; /** Drive file id (absent on designs saved by the first build) */ drive?: string; /** preview size in bytes */ psize?: number; /** saved, but the original has not reached Drive yet */ pend?: boolean };
+export type NxFile = { id: string; name: string; size: number; mime: string; drive?: string; pend?: boolean };
+/** One size of a design. `min` is print minutes per piece; `sliced` is true once the numbers come from the real slicer rather than the estimate. */
+export type NxSize = { label: string; mm?: number; g: number; min?: number; sliced?: boolean };
 export type NxCat = { id: string; name: string; /** two-digit block, 10–99 */ code: number; /** last number used (never goes down, so a deleted design's number is never reused) */ last: number };
 export type NxDesign = {
   id: string; name: string; catId: string; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
@@ -108,10 +110,10 @@ export const previewBytes = () => nexderDesignsSig.value.reduce((a, d) => a + d.
 
 /* ---------------------------------------------------------------- saving */
 /** An item in the form: already stored (no `file`) or newly picked (`file`). */
-export type DraftItem = { id: string; name: string; size: number; mime: string; file?: File; drive?: string; psize?: number };
-export type Draft = { key: string; editId?: string; name: string; desc: string; price: string; sizes: { label: string; mm: string; g: string }[]; photos: DraftItem[]; files: DraftItem[] };
+export type DraftItem = { id: string; name: string; size: number; mime: string; file?: File; drive?: string; psize?: number; pend?: boolean };
+export type Draft = { key: string; editId?: string; name: string; desc: string; price: string; sizes: { label: string; mm: string; g: string; min: string; sliced: boolean }[]; photos: DraftItem[]; files: DraftItem[] };
 export const blankDraft = (): Draft => ({ key: uid(), name: "", desc: "", price: "", sizes: [], photos: [], files: [] });
-export const draftOf = (d: NxDesign): Draft => ({ key: d.id, editId: d.id, name: d.name, desc: d.desc ?? "", price: d.price ? String(d.price) : "", sizes: (d.sizes ?? []).map((s) => ({ label: s.label, mm: s.mm ? String(s.mm) : "", g: String(s.g) })), photos: d.photos.map((p) => ({ ...p })), files: d.files.map((f) => ({ ...f })) });
+export const draftOf = (d: NxDesign): Draft => ({ key: d.id, editId: d.id, name: d.name, desc: d.desc ?? "", price: d.price ? String(d.price) : "", sizes: (d.sizes ?? []).map((s) => ({ label: s.label, mm: s.mm ? String(s.mm) : "", g: String(s.g), min: s.min ? String(s.min) : "", sliced: !!s.sliced })), photos: d.photos.map((p) => ({ ...p })), files: d.files.map((f) => ({ ...f })) });
 export const draftReady = (d: Draft) => !!d.name.trim();
 export const newBytes = (d: Draft) => [...d.photos, ...d.files].reduce((a, x) => a + (x.file ? x.size : 0), 0);
 export type Progress = { label: string; sent: number; total: number };
@@ -123,7 +125,10 @@ async function makePreview(f: File): Promise<Blob> {
   return b;
 }
 
-/** Uploads everything new, then writes the record. If anything fails or is cancelled, what was already sent is deleted again. */
+/**
+ * Saves the design at once: the record, the Drive folder and the small previews. The originals are queued and go to Drive in the background
+ * (see nexder-queue). If the previews or the record fail, what was made is deleted again.
+ */
 export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
   const cat = nexderCatsSig.value.find((c) => c.id === catId); if (!cat) return "Choose a category";
   if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
@@ -139,24 +144,18 @@ export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progres
   } catch (e) { return (e as Error).message; }
   if (previewBytes() + addP.length * LIMITS.previewMax > LIMITS.previewBytes) return "The preview storage is nearly full. Delete designs you no longer need first.";
 
-  const made = { drive: [] as string[], previews: [] as string[] };
-  let folder = prev?.folder, newFolder = false, sent = 0;
-  const upload = async (it: DraftItem) => {
-    const base = sent;
-    const id = await b.upload(it.file!, folder!, (n) => onProgress({ label: it.name, sent: base + n, total: bytes }), signal);
-    made.drive.push(id); sent = base + it.size; it.drive = id;
-  };
+  const made = { previews: [] as string[] };
+  let folder = prev?.folder, newFolder = false;
   try {
     if (!folder) { folder = await b.folder(cat.name, `${no} ${d.name.trim()}`.slice(0, 120)); newFolder = true; }
     const psize: Record<string, number> = {};
-    for (const p of addP) { onProgress({ label: "Previews", sent, total: bytes }); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
-    for (const p of addP) await upload(p);
-    for (const f of addF) await upload(f);
-    const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0 })).filter((s) => s.label && s.g > 0);
+    /* only the small previews are made before the window closes; the originals go up in the background afterwards */
+    for (const [k, p] of addP.entries()) { onProgress({ label: "Previews", sent: k, total: addP.length }); if (signal?.aborted) throw new Error("cancelled"); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
+    const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0, min: Number(s.min) > 0 ? Math.round(Number(s.min)) : undefined, sliced: s.sliced || undefined })).filter((s) => s.label && s.g > 0);
     const row: NxDesign = {
       id: prev?.id ?? uid(), name: d.name.trim(), catId, no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
-      photos: d.photos.map((p) => ({ id: p.id, name: p.name, size: p.size, mime: p.mime, drive: p.drive, psize: psize[p.id] ?? p.psize })),
-      files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive })),
+      photos: d.photos.map((p) => ({ id: p.id, name: p.name, size: p.size, mime: p.mime, drive: p.drive ?? prev?.photos.find((x) => x.id === p.id)?.drive, psize: psize[p.id] ?? p.psize, ...(p.file || (p.pend && !p.drive && !prev?.photos.find((x) => x.id === p.id)?.drive) ? { pend: true } : {}) })),
+      files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive ?? prev?.files.find((x) => x.id === f.id)?.drive, ...(f.file || (f.pend && !f.drive && !prev?.files.find((x) => x.id === f.id)?.drive) ? { pend: true } : {}) })),
       created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",
     };
     if (!prev || prev.catId !== catId) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === cat.id ? { ...c, last } : c));
@@ -168,18 +167,38 @@ export async function saveDraft(d: Draft, catId: string, onProgress: (p: Progres
       const gone = [...prev.photos.filter((p) => !keepP.has(p.id)), ...prev.files.filter((f) => !keepF.has(f.id))];
       await b.purge(gone.map((x) => x.drive).filter(Boolean) as string[]).catch(() => {});
       await b.previewDel(prev.photos.filter((p) => !keepP.has(p.id)).map((p) => p.id)).catch(() => {});
+      cancelDesign(prev.id, gone.map((x) => x.id));
     }
+    enqueue([...addP.map((x) => ({ x, kind: "photo" as const })), ...addF.map((x) => ({ x, kind: "file" as const }))].map(({ x, kind }) => ({ designId: row.id, designName: row.name, itemId: x.id, kind, name: x.name, size: x.size, file: x.file! })));
     return row;
   } catch (e) {
-    await b.purge([...made.drive, ...(newFolder && folder ? [folder] : [])]).catch(() => {});
+    await b.purge(newFolder && folder ? [folder] : []).catch(() => {});
     await b.previewDel(made.previews).catch(() => {});
     return signal?.aborted ? "Cancelled. Nothing was kept." : (e as Error).message || "Upload failed";
   }
 }
 
+/* the queue's transfer step: send the file, then write its Drive id into the design */
+setRunner(async (j, signal, progress) => {
+  const d = nexderDesignsSig.value.find((x) => x.id === j.designId); if (!d?.folder) throw new Error("The design no longer exists");
+  const b = await backend(), id = await b.upload(j.file, d.folder, progress, signal);
+  const list = j.kind === "photo" ? "photos" : "files", cur = nexderDesignsSig.value.find((x) => x.id === j.designId);
+  if (!cur || !cur[list].some((x) => x.id === j.itemId)) { await b.purge([id]).catch(() => {}); throw new Error("Removed from the design"); }
+  nexderDesignsSig.value = nexderDesignsSig.value.map((x) => (x.id !== j.designId ? x : { ...x, [list]: x[list].map((i) => (i.id === j.itemId ? { ...i, drive: id, pend: undefined } : i)) }));
+});
+/** Items of a design whose original is not in Drive yet and is not on its way either (the tab was closed, or the upload was stopped). */
+export const incomplete = (d: NxDesign) => [...d.photos.map((x) => ({ ...x, kind: "photo" as const })), ...d.files.map((x) => ({ ...x, kind: "file" as const }))].filter((x) => x.pend && !x.drive && !isQueued(d.id, x.id));
+/** Uploads an original again for an item that is still marked as not uploaded. */
+export function reupload(d: NxDesign, kind: "photo" | "file", itemId: string, file: File) {
+  const list = kind === "photo" ? "photos" : "files";
+  nexderDesignsSig.value = nexderDesignsSig.value.map((x) => (x.id !== d.id ? x : { ...x, [list]: x[list].map((i) => (i.id === itemId ? { ...i, size: file.size, mime: file.type || i.mime } : i)) }));
+  enqueue([{ designId: d.id, designName: d.name, itemId, kind, name: file.name, size: file.size, file }]);
+}
+
 /* ---------------------------------------------------------------- delete, restore, clean-up */
 /** Moves the design to the Bin and its Drive folder to Drive's trash. */
 export async function deleteDesign(d: NxDesign): Promise<string | null> {
+  cancelDesign(d.id);
   try { if (d.folder) { await (await backend()).trash(d.folder, true); nexderTrashSig.value = [...nexderTrashSig.value, { id: d.id, folder: d.folder, photoIds: d.photos.map((p) => p.id) }]; } }
   catch (e) { return `Could not move the files to Drive's trash: ${(e as Error).message}`; }
   toBin("Design", d, `${d.name} · ${d.no}`, me.value?.name ?? "You");

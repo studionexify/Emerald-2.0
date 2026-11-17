@@ -5,11 +5,12 @@ import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
+  addCategory, assignable, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, LIMITS, markSeen, materialUsage, MAX_PER_CAT,
   MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
 import { uid } from "../data/store";
+import { isQueued, uploadsSig } from "../data/nexder-queue";
 import type { Use, WorkbenchProps } from "./nexcal/Workbench";
 
 /* ---------------------------------------------------------------- small helpers */
@@ -96,6 +97,7 @@ export default function Nexder() {
       detail={detail}>
       {view === "shared" && shared.length > 0 && <div class="grid gap-1.5">{shared.map((s) => (
         <p key={s.id} class="rounded-xl bg-c0 px-3 py-2 text-[13px] break-words"><b>{usersSig.value.find((u) => u.id === s.by)?.name ?? "Someone"}</b> shared {s.designIds.length} design{s.designIds.length > 1 ? "s" : ""} · {shortDate(s.at)}{s.note ? <span class="text-c3"> · “{s.note}”</span> : null}</p>))}</div>}
+      {writable && !uploadsSig.value.length && designs.some((d) => incomplete(d).length) && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Some files were saved but never reached Google Drive, because the tab was closed or the upload was stopped. Open a design marked “Upload incomplete” and press Upload again for each file.</p>}
       {!nexderReady && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Nexder keeps its files in Google Drive, so it needs cloud sync. Sign in to cloud sync to add or open files.</p>}
       {!designs.length
         ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="No designs yet" action={writable ? <Button icon="plus" class="mt-2" onClick={() => setPanel({ k: "new" })}>New design</Button> : undefined} /></div>
@@ -106,6 +108,7 @@ export default function Nexder() {
             <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={selecting ? on : undefined} aria-label={`${d.name}, ${d.no}`}
               class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
               <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
+              {incomplete(d).length > 0 && <span class="absolute top-2.5 right-2.5 rounded-full bg-amb-bg text-amb text-[11px] font-semibold px-2 h-5 inline-flex items-center">Upload incomplete</span>}
               {selecting && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
               <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span> · {catName(d.catId)}</span></span>
             </button>
@@ -156,15 +159,18 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
         <div class="text-right"><div class="t-meta">Category</div><div class="mt-1"><span class={`${chipCls} bg-c1 text-c3`}>{catName(d.catId)}</span></div></div></div>
       {(d.price || d.sizes?.length) && <div class="grid gap-1 text-[13px]">
         {d.price ? <div class="flex justify-between gap-3"><span class="text-c3">Price</span><b class="num">{inr(d.price)}</b></div> : null}
-        {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3">Size {s.label}{s.mm ? ` · ${s.mm} mm` : ""}</span><b class="num">{s.g} g</b></div>)}</div>}
+        {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3">Size {s.label}{s.mm ? ` · ${s.mm} mm` : ""} <span class={`text-[11px] font-semibold ${s.sliced ? "text-grn" : "text-amb"}`}>{s.sliced ? "sliced" : "estimated"}</span></span><b class="num">{s.g} g{s.min ? ` · ${s.min >= 60 ? `${Math.floor(s.min / 60)} h ${s.min % 60} min` : `${s.min} min`}` : ""}</b></div>)}</div>}
       {d.desc && <p class="text-[13px] text-c3 whitespace-pre-wrap break-words">{d.desc}</p>}
       <div>
         <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{writable && d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
         {d.files.length ? <div class="grid gap-1.5">{d.files.map((f) => (
           <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span>
-            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "original in Google Drive" : "not in Drive"}</span></span>
-            {writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
+            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "original in Google Drive" : isQueued(d.id, f.id) ? "uploading…" : f.pend ? "not uploaded yet" : "not in Drive"}</span></span>
+            {writable && f.pend && !f.drive ? (isQueued(d.id, f.id) ? null : <Reup d={d} kind="file" id={f.id} />) : writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
           : <p class="t-meta">No design file yet.{writable ? " Edit the design to add one." : ""}</p>}
+        {writable && d.photos.some((p) => p.pend && !p.drive) && <div class="mt-1.5 grid gap-1.5">{d.photos.filter((p) => p.pend && !p.drive).map((p) => (
+          <div key={p.id} class="flex items-center gap-2.5 rounded-xl bg-amb-bg/50 px-2.5 py-2"><span class="text-c3"><Icon name="image" size={15} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{p.name}</b><span class="t-meta">{isQueued(d.id, p.id) ? "original uploading…" : "original photo not uploaded yet"}</span></span>
+            {!isQueued(d.id, p.id) && <Reup d={d} kind="photo" id={p.id} />}</div>))}</div>}
         {writable && d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing photos…" : "Download original photos (zip)"}</button>}
         {!writable && d.files.length > 0 && <p class="t-meta mt-1.5">Your role can view designs but not download files.</p>}
         {missing && <p role="status" class="t-meta mt-1.5 text-amb">{missing}</p>}
@@ -187,6 +193,12 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
   );
 }
 
+/** Pick the original again for something that never finished uploading. */
+function Reup({ d, kind, id }: { d: NxDesign; kind: "photo" | "file"; id: string }) {
+  return <label class="h-7 px-2.5 rounded-full border border-line bg-c0 text-[12px] font-semibold inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"><Icon name="in" size={12} /> Upload again
+    <input type="file" class="sr-only" accept={kind === "photo" ? "image/*" : undefined} onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) reupload(d, kind, id, f); (e.target as HTMLInputElement).value = ""; }} /></label>;
+}
+
 /* ---------------------------------------------------------------- the design window: form on the left, the whole calculator on the right */
 /** The category used last, so adding several designs to one category needs no re-picking. */
 let lastCat = "";
@@ -200,14 +212,21 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   const [drafts, setDrafts] = useState<Draft[]>(() => [base ? draftOf(base) : blankDraft()]);
   const [cur, setCur] = useState(0), [catId, setCatId] = useState(base?.catId ?? (nexderCatsSig.value.some((c) => c.id === (presetCat || lastCat)) ? presetCat || lastCat : ""));
   const [adding, setAdding] = useState(!nexderCatsSig.value.length), [newCat, setNewCat] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [prog, setProg] = useState<Progress | null>(null);
-  const [tab, setTab] = useState<"form" | "calc">("form"), [seen, setSeen] = useState<string[]>([drafts[0].key]), [feed, setFeed] = useState<Record<string, { n: number; files: File[] }>>({});
-  const ctl = useRef<AbortController | null>(null), asking = useRef(false);
+  const [tab, setTab] = useState<"form" | "calc">("form"), [calcOpen, setCalcOpen] = useState(false), [seen, setSeen] = useState<string[]>([drafts[0].key]), [feed, setFeed] = useState<Record<string, { n: number; files: File[] }>>({});
+  const ctl = useRef<AbortController | null>(null), asking = useRef(false), woke = useRef(false);
   const cats = nexderCatsSig.value, cat = cats.find((c) => c.id === catId);
   const set = (k: number, p: Partial<Draft>) => setDrafts((ds) => ds.map((d, j) => (j === k ? { ...d, ...p } : d)));
   const first = cat ? (cat.last < MAX_PER_CAT ? nextNo(cat.id) : null) : adding && newCat.trim() ? String(nextCode() * 1000 + 1) : null;
   const mk = () => { const r = addCategory(newCat); if (r.error) { setErr(r.error); return null; } setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); return r.cat!; };
   const ready = drafts.every(draftReady) && (!!cat || (adding && !!newCat.trim()));
-  const go = (m: boolean) => { setMulti(m); if (m && drafts.length < 2) setDrafts((d) => [...d, blankDraft()]); setCur(0); };
+  const filled = (d: Draft) => !!(d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length);
+  /* back to a single product drops the extra cards, asking first when they hold something */
+  const go = async (m: boolean) => {
+    if (m === multi) return;
+    if (!m && drafts.slice(1).some(filled) && !(await ask("Go back to a single product? The other products you filled in will be removed.", { ok: "Remove them", danger: true }))) return;
+    setMulti(m); setDrafts((d) => (m ? (d.length < 2 ? [...d, blankDraft()] : d) : d.slice(0, 1))); setCur(0); setSeen((x) => x.filter((k) => m || k === drafts[0].key));
+  };
+  const shown = multi ? drafts : drafts.slice(0, 1);
   const total = drafts.reduce((a, d) => a + newBytes(d), 0);
   const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)));
   const pick = (k: number) => { setCur(k); setSeen((s) => (s.includes(drafts[k].key) ? s : [...s, drafts[k].key])); };
@@ -217,7 +236,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
     if (asking.current) return;
     if (busy || dirty) {
       asking.current = true;
-      const ok = await ask(busy ? "An upload is running. Stop it and discard this design?" : "Close this window? What you typed and picked is not saved yet.", { ok: busy ? "Stop and discard" : "Discard", danger: true });
+      const ok = await ask(busy ? "The design is still being saved. Stop and discard it?" : "Close this window? What you typed and picked is not saved yet.", { ok: busy ? "Stop and discard" : "Discard", danger: true });
       asking.current = false; if (!ok) return;
     }
     ctl.current?.abort(); onClose();
@@ -238,15 +257,17 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   const use = (k: number) => (u: Use) => {
     const d = drafts[k];
     if (u.kind === "price") set(k, { price: String(u.price) });
-    else set(k, { sizes: [...d.sizes.filter((s) => !(s.mm === String(u.sizeMm) && s.g === String(u.grams))), { label: SIZE_NAMES[d.sizes.length] ?? `Size ${d.sizes.length + 1}`, mm: String(u.sizeMm), g: String(u.grams) }] });
+    else set(k, { sizes: [...d.sizes.filter((s) => !(s.mm === String(u.sizeMm) && s.g === String(u.grams))), { label: SIZE_NAMES[d.sizes.length] ?? `Size ${d.sizes.length + 1}`, mm: String(u.sizeMm), g: String(u.grams), min: String(u.minutes), sliced: false }] });
   };
   const gotFiles = (k: number) => (fs: File[]) => setDrafts((ds) => ds.map((d, j) => (j !== k ? d : { ...d, files: [...d.files, ...fs.filter((f) => !d.files.some((x) => x.name === f.name && x.size === f.size)).map((f) => ({ id: uid().replace(/[^A-Za-z0-9-]/g, ""), name: f.name, size: f.size, mime: f.type || "application/octet-stream", file: f }))] })));
-  const calculate = (k: number, f: DraftItem) => { if (!f.file) return; setFeed((m) => ({ ...m, [drafts[k].key]: { n: (m[drafts[k].key]?.n ?? 0) + 1, files: [f.file!] } })); setTab("calc"); };
+  const calculate = (k: number, f: DraftItem) => { if (!f.file) return; setFeed((m) => ({ ...m, [drafts[k].key]: { n: (m[drafts[k].key]?.n ?? 0) + 1, files: [f.file!] } })); setTab("calc"); setCalcOpen(true); };
 
+  if (calcOpen || tab === "calc") woke.current = true;
   const form = (
     <div class="p-4 grid gap-4 content-start">
-      {!base && <Seg value={multi ? "m" : "s"} on={(v) => go(v === "m")} items={[["s", "Single product"], ["m", "Multiple products"]]} />}
-      <div>
+      <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
+      {!base && <div class="pt-5"><Seg value={multi ? "m" : "s"} on={(v) => go(v === "m")} items={[["s", "Single product"], ["m", "Multiple products"]]} /></div>}
+      <div class="flex-1 min-w-[300px] max-w-[640px]">
         <div class="flex items-center justify-between mb-1"><span class="text-[11px] font-medium text-c3">{multi ? "Category for all" : "Category"}</span>
           {!base && !adding && <button type="button" onClick={() => setAdding(true)} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">New category</button>}</div>
         {adding && !base
@@ -255,7 +276,8 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
           : <select aria-label="Category" value={catId} disabled={!!base} onChange={(e) => setCatId((e.target as HTMLSelectElement).value)} class={`${inputCls} cursor-pointer`}><option value="">Choose a category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
         <span class="block t-meta mt-1">{base ? <>Number <b class="num text-c4">{base.no}</b> · the category is fixed once saved</> : adding && !cat ? <>A new category is created when you save{first ? <>. Numbers start at <b class="num text-c4">{first}</b></> : ""}</> : cat ? (first ? multi ? <>Numbers start at <b class="num text-c4">{first}</b></> : <>Number <b class="num text-c4">{first}</b> will be assigned</> : "This category is full (999 designs)") : "Numbers are grouped by category."}</span>
       </div>
-      {drafts.map((d, k) => (!multi || cur === k)
+      </div>
+      {shown.map((d, k) => (!multi || cur === k)
         ? <Product key={d.key} d={d} n={multi ? k + 1 : 0} set={(p) => set(k, p)} onCalc={(f) => calculate(k, f)} onRemove={multi && drafts.length > 1 ? () => { setDrafts((x) => x.filter((_, j) => j !== k)); setCur(0); } : undefined} />
         : <button type="button" key={d.key} onClick={() => pick(k)} class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left rounded-xl border border-line bg-c0 cursor-pointer !min-h-0">
             <span class="w-5 h-5 rounded-full bg-c1 text-c3 text-[11px] font-bold flex items-center justify-center shrink-0">{k + 1}</span>
@@ -266,7 +288,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   /* one calculator per product, kept alive while you switch between products, opened only when first needed */
   const calc = (
     <div class="p-4">
-      {drafts.map((d, k) => seen.includes(d.key) || k === cur ? (
+      {shown.map((d, k) => seen.includes(d.key) || k === cur ? (
         <div key={d.key} class={k === cur ? "" : "hidden"}>{multi && <p class="t-meta mb-2">Calculator for <b class="text-c4">{d.name || `product ${k + 1}`}</b></p>}<Calc mode="embed" onUse={use(k)} onFiles={gotFiles(k)} feed={feed[d.key]} /></div>) : null)}
     </div>
   );
@@ -276,17 +298,26 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
       footer={<div class="flex-1 min-w-0 !h-auto flex items-center gap-3 flex-wrap [&_button]:!h-9">
         <div class="min-w-0 flex-1 text-[12.5px]">
           {err ? <p role="alert" class="text-red break-words">{err}</p>
-            : busy && prog ? <div role="status" class="grid gap-1"><div class="flex justify-between gap-3"><span class="min-w-0 break-all">{prog.label === "Previews" ? "Preparing previews…" : `Uploading ${prog.label}`}</span><span class="num whitespace-nowrap">{prog.total ? Math.min(100, Math.round((prog.sent / prog.total) * 100)) : 0}% · {fmtBytes(prog.sent)} of {fmtBytes(prog.total)}</span></div>
-              <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-acc" style={{ width: `${prog.total ? Math.min(100, (prog.sent / prog.total) * 100) : 0}%` }} /></div><span class="t-meta">Straight to Google Drive. Keep this tab open until it finishes.</span></div>
-            : total > 0 ? <span class="t-meta">{fmtBytes(total)} will be uploaded to Google Drive{total > 50 * 1048576 ? ". Keep this tab open while it uploads." : "."}</span> : null}
+            : busy && prog ? <div role="status" class="grid gap-1"><span>Saving the design and preparing previews… {prog.total ? `${Math.min(prog.total, prog.sent + 1)} of ${prog.total}` : ""}</span>
+              <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class="h-full bg-acc" style={{ width: `${prog.total ? Math.min(100, (prog.sent / prog.total) * 100) : 0}%` }} /></div></div>
+            : total > 0 ? <span class="t-meta">{fmtBytes(total)} goes to Google Drive in the background after you save. You can keep working; keep this tab open until it finishes.</span> : null}
         </div>
-        <Button variant="outline" onClick={leave}>{busy ? "Stop upload" : "Cancel"}</Button>
+        <Button variant="outline" onClick={leave}>{busy ? "Stop saving" : "Cancel"}</Button>
         <Button disabled={!ready || busy} onClick={save}>{busy ? "Saving…" : base ? "Save changes" : multi ? `Save ${drafts.length} designs` : "Save design"}</Button>
       </div>}>
       <div class="lg:hidden px-4 pb-2"><Seg value={tab} on={setTab} items={[["form", "Details"], ["calc", "Calculator"]]} /></div>
-      <div class="h-full min-h-0 lg:grid lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
-        <div class={`${tab === "form" ? "" : "max-lg:hidden"} h-full min-h-0 overflow-y-auto overscroll-contain lg:border-r lg:border-line`}>{form}</div>
-        <div class={`${tab === "calc" ? "" : "max-lg:hidden"} h-full min-h-0 overflow-y-auto overscroll-contain bg-canvas`}>{calc}</div>
+      <div class={`h-full min-h-0 lg:grid ${calcOpen ? "lg:grid-cols-2" : "lg:grid-cols-[minmax(0,1fr)_3.5rem]"}`}>
+        <div class={`${tab === "form" ? "" : "max-lg:hidden"} h-full min-h-0 overflow-y-auto overscroll-contain`}>{form}</div>
+        <div class={`${tab === "calc" ? "" : "max-lg:hidden"} h-full min-h-0 bg-canvas lg:border-l lg:border-line flex flex-col`}>
+          {!calcOpen && <button type="button" onClick={() => setCalcOpen(true)} aria-label="Open the calculator" aria-expanded={false} class="hidden lg:flex flex-1 w-full flex-col items-center justify-center gap-3 text-c4 cursor-pointer !min-h-0 hover:bg-c1/60">
+            <span class="w-8 h-8 rounded-full bg-c4 text-c0 flex items-center justify-center"><Icon name="back" size={14} /></span>
+            <span class="text-[13px] font-semibold tracking-wide [writing-mode:vertical-rl] rotate-180">Open calculator</span></button>}
+          <div class={`${calcOpen ? "" : "lg:hidden"} flex-1 min-h-0 overflow-y-auto overscroll-contain`}>
+            <div class="hidden lg:flex items-center justify-between gap-2 px-4 pt-3"><span class="text-[13px] font-semibold">Calculator</span>
+              <button type="button" onClick={() => setCalcOpen(false)} aria-expanded aria-label="Collapse the calculator" class="h-8 px-3 !min-h-0 rounded-full border border-line bg-c0 text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer">Collapse <Icon name="right" size={12} /></button></div>
+            {woke.current ? calc : null}
+          </div>
+        </div>
       </div>
     </Sheet>
   );
@@ -302,9 +333,13 @@ function Product({ d, n, set, onCalc, onRemove }: { d: Draft; n: number; set: (p
   const drop = (e: DragEvent) => { e.preventDefault(); setOver(false); const fs = [...(e.dataTransfer?.files ?? [])]; pick(fs.filter((f) => f.type.startsWith("image/")), true); pick(fs.filter((f) => !f.type.startsWith("image/")), false); };
   const size = (k: number, p: Partial<Draft["sizes"][number]>) => set({ sizes: d.sizes.map((x, j) => (j === k ? { ...x, ...p } : x)) });
   return (
-    <div class={`grid gap-4 ${n ? "rounded-xl border border-c4 bg-c0 p-3" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
-      {n > 0 && <div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-c4 text-c0 text-[11px] font-bold flex items-center justify-center">{n}</span><b class="text-[13px] flex-1">Product {n}</b>{onRemove && <button type="button" onClick={onRemove} class="text-[12px] text-red underline cursor-pointer !min-h-0">Remove</button>}</div>}
+    <div class={`grid gap-x-6 gap-y-4 grid-cols-[repeat(auto-fit,minmax(340px,1fr))] items-start ${n ? "rounded-xl border border-c4 bg-c0 p-3" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
+      {n > 0 && <div class="col-span-full flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-c4 text-c0 text-[11px] font-bold flex items-center justify-center">{n}</span><b class="text-[13px] flex-1">Product {n}</b>{onRemove && <button type="button" onClick={onRemove} class="text-[12px] text-red underline cursor-pointer !min-h-0">Remove</button>}</div>}
+      <div class="grid gap-4 content-start">
       <Field label="Name"><Grow value={d.name} placeholder="Product name" onInput={(v) => set({ name: v })} /></Field>
+      <Field label="Description (optional)"><textarea value={d.desc} rows={3} onInput={(e) => set({ desc: (e.target as HTMLTextAreaElement).value })} class="w-full rounded-xl border border-line bg-c0 px-3 py-2 text-[13px] outline-none focus:border-c4" /></Field>
+      </div>
+      <div class="grid gap-4 content-start">
       <div>
         <span class="block t-meta mb-1">Photos</span>
         <div class={`flex gap-2 flex-wrap rounded-xl ${over ? "ring-2 ring-c4 ring-offset-2 ring-offset-c0" : ""}`}>
@@ -326,24 +361,28 @@ function Product({ d, n, set, onCalc, onRemove }: { d: Draft; n: number; set: (p
         <label class="h-8 px-3 rounded-xl border border-dashed border-c2 text-[12px] font-medium text-c3 inline-flex items-center gap-1.5 w-full justify-center cursor-pointer"><Icon name="plus" size={13} /> Add file · STL, 3MF, STEP, any type
           <input type="file" multiple class="sr-only" onChange={(e) => { pick((e.target as HTMLInputElement).files, false); (e.target as HTMLInputElement).value = ""; }} /></label>
       </div>
+      </div>
+      <div class="grid gap-4 content-start">
       <div class="grid grid-cols-2 gap-3">
         <Field label="Price (₹, optional)"><span class="relative block"><span class="pointer-events-none absolute left-3 top-1.5 text-[13px] text-c2">₹</span><input inputMode="decimal" value={d.price} placeholder="from the calculator" onInput={(e) => set({ price: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pl-6`} /></span></Field>
         <div class="flex items-end"><span class="t-meta">Use the calculator on the right to work it out, then press “Use ₹… as price”.</span></div>
       </div>
       <div>
-        <div class="flex items-center justify-between mb-1"><span class="t-meta">Sizes <span class="text-c2">· optional, used for material in orders</span></span><button type="button" onClick={() => set({ sizes: [...d.sizes, { label: "", mm: "", g: "" }] })} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Add a size</button></div>
-        {d.sizes.length > 0 ? <div class="grid gap-2">{d.sizes.map((s, k) => (
-          <div key={k} class="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_auto] gap-1.5 items-end">
-            <Field label="Name"><input value={s.label} placeholder="Medium" onInput={(e) => size(k, { label: (e.target as HTMLInputElement).value })} class={inputCls} /></Field>
-            <Field label="Longest side"><span class="relative block"><input inputMode="decimal" value={s.mm} onInput={(e) => size(k, { mm: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-8`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">mm</span></span></Field>
-            <Field label="Weight"><span class="relative block"><input inputMode="decimal" value={s.g} onInput={(e) => size(k, { g: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-6`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">g</span></span></Field>
-            <button type="button" aria-label="Remove size" onClick={() => set({ sizes: d.sizes.filter((_, j) => j !== k) })} class="w-8 h-8 !min-h-0 rounded-full flex items-center justify-center text-c3 cursor-pointer"><Icon name="close" size={13} /></button></div>))}</div>
-          : <p class="t-meta">None yet. “Save as a size” in the calculator adds one with its weight and longest side.</p>}
+        <div class="flex items-center justify-between mb-1"><span class="t-meta">Sizes <span class="text-c2">· optional, used for material in orders</span></span><button type="button" onClick={() => set({ sizes: [...d.sizes, { label: "", mm: "", g: "", min: "", sliced: false }] })} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Add a size</button></div>
+        {d.sizes.length > 0 ? <div class="grid gap-2.5">{d.sizes.map((s, k) => (
+          <div key={k} class="rounded-xl border border-line bg-c0 p-2.5 grid gap-2">
+            <div class="grid grid-cols-[minmax(0,1fr)_4.75rem_4.75rem_4.75rem_auto] gap-1.5 items-end">
+              <Field label="Name"><input value={s.label} placeholder="Medium" onInput={(e) => size(k, { label: (e.target as HTMLInputElement).value })} class={inputCls} /></Field>
+              <Field label="Longest"><span class="relative block"><input inputMode="decimal" value={s.mm} onInput={(e) => size(k, { mm: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-8`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">mm</span></span></Field>
+              <Field label="Weight"><span class="relative block"><input inputMode="decimal" value={s.g} onInput={(e) => size(k, { g: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-6`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">g</span></span></Field>
+              <Field label="Print time"><span class="relative block"><input inputMode="numeric" value={s.min} onInput={(e) => size(k, { min: (e.target as HTMLInputElement).value })} class={`${inputCls} num !pr-9`} /><span class="pointer-events-none absolute right-2 top-2 text-[11px] text-c2">min</span></span></Field>
+              <button type="button" aria-label="Remove size" onClick={() => set({ sizes: d.sizes.filter((_, j) => j !== k) })} class="w-8 h-8 !min-h-0 rounded-full flex items-center justify-center text-c3 cursor-pointer"><Icon name="close" size={13} /></button></div>
+            <label class="flex items-start gap-2 text-[12px] cursor-pointer"><input type="checkbox" class="mt-0.5" checked={s.sliced} onChange={(e) => size(k, { sliced: (e.target as HTMLInputElement).checked })} />
+              <span class="min-w-0"><b class={s.sliced ? "text-grn" : "text-amb"}>{s.sliced ? "Sliced values" : "Estimated values"}</b><span class="text-c3"> · {s.sliced ? "weight and time came from the slicer." : "tick this once you have sliced it and typed the real weight and time. Colour changes add a lot of time that only the slicer shows."}</span></span></label>
+          </div>))}</div>
+          : <p class="t-meta">None yet. “Save as a size” in the calculator adds one with its weight, time and longest side. Edit it any time with the real sliced figures.</p>}
       </div>
-      <details open={!!d.desc} class="rounded-xl border border-line bg-c0 min-w-0">
-        <summary class="flex items-center gap-2 px-3 py-2.5"><span class="text-[13px] font-semibold">Description</span><span class="t-meta min-w-0 flex-1 break-words">{d.desc ? "" : "optional"}</span><span class="chev text-c3 inline-flex"><Icon name="right" size={13} /></span></summary>
-        <div class="px-3 pb-3"><textarea value={d.desc} rows={3} aria-label="Description" onInput={(e) => set({ desc: (e.target as HTMLTextAreaElement).value })} class="w-full rounded-xl border border-line bg-c0 px-3 py-2 text-[13px] outline-none focus:border-c4" /></div>
-      </details>
+      </div>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { searchQ } from "../data/search";
 import { segmentOf } from "../data/inventory";
 import { attention, batchesSig, binSig, tasksSig, can, isExternal, me, moduleOf, packSig, spoolsSig } from "../data";
 import { theme, toggleTheme } from "./theme";
+import { UploadDock } from "./UploadDock";
 
 /** Module key for the themed accent: first path segment; home-like pages share the brand emerald. */
 export const modOf = (path: string) => { const k = path.split("/")[1] || "home"; return ["search", "more"].includes(k) ? "home" : k; };
@@ -225,6 +226,7 @@ export function Frame({ children }: { children: ComponentChildren }) {
         <main class="overflow-hidden flex-1 min-w-0 min-h-0 pr-[env(safe-area-inset-right)] md:pl-0 pl-[env(safe-area-inset-left)]">{children}</main>
       </div>
       <Dock />
+      <UploadDock />
       <AskHost />
     </div>
   );
