@@ -2,7 +2,7 @@
 import { log } from "./index";
 import { binSig } from "./inventory";
 import { today, uid } from "./store";
-import { addCategory, catsOf, draftOf, nexderCatsSig, nexderDesignsSig, saveDraft, type NxDesign } from "./nexder";
+import { addCategory, catsOf, draftOf, nexderCatsSig, nexderDesignsSig, priceUndoSig, saveDraft, setPriceUndo, type NxDesign, type PriceUndo } from "./nexder";
 
 const memberOf = (d: NxDesign, ids: string[]) => { const same = ids.length === 1 && ids[0] === d.catId; return same ? { ...d, cats: undefined } : { ...d, cats: ids }; };
 /** Bulk: lists every design in `ids` under the categories in `add`, and takes it out of those in `drop`. Returns how many designs changed. */
@@ -64,10 +64,20 @@ export const newPrice = (p: number | undefined, mode: PriceMode, v: number): num
   const n = mode === "set" ? v : mode === "pct" ? o * (1 + v / 100) : mode === "add" ? o + v : v > 0 ? Math.round(o / v) * v : o;
   return Math.max(0, Math.round(n)) || undefined;
 };
-export function bulkPrice(ids: string[], mode: PriceMode, v: number): number {
-  const want = new Set(ids); let n = 0;
-  nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { if (!want.has(d.id)) return d; const p = newPrice(d.price, mode, v); if (p === d.price) return d; n++; return { ...d, price: p }; });
-  if (n) log("Bulk price change", `${n} design${n > 1 ? "s" : ""}`, "order"); return n;
+export function bulkPrice(ids: string[], mode: PriceMode, v: number, label = ""): number {
+  const want = new Set(ids), items: PriceUndo["items"] = [];
+  nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { if (!want.has(d.id)) return d; const p = newPrice(d.price, mode, v); if (p === d.price) return d; items.push({ id: d.id, from: d.price, to: p }); return { ...d, price: p }; });
+  if (items.length) { log("Bulk price change", `${items.length} design${items.length > 1 ? "s" : ""}`, "order"); setPriceUndo([{ at: new Date().toISOString(), label, items }, ...priceUndoSig.value].slice(0, 10)); }
+  return items.length;
+}
+/** Puts the prices of the newest bulk change back. A design whose price was changed again since is left alone. Returns how many were restored and how many skipped. */
+export function undoPrice(): { restored: number; skipped: number } {
+  const [top, ...rest] = priceUndoSig.value; if (!top) return { restored: 0, skipped: 0 };
+  const by = new Map(top.items.map((i) => [i.id, i])); let restored = 0, skipped = 0;
+  nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { const i = by.get(d.id); if (!i) return d; if (d.price !== i.to) { skipped++; return d; } restored++; return { ...d, price: i.from }; });
+  skipped += top.items.filter((i) => !nexderDesignsSig.value.some((d) => d.id === i.id)).length;
+  if (restored) log("Undid bulk price change", `${restored} design${restored > 1 ? "s" : ""}`, "order");
+  setPriceUndo(rest); return { restored, skipped };
 }
 
 /* ---------------------------------------------------------------- duplicate: the record, sizes and price; no photos or files */

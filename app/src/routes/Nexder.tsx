@@ -5,7 +5,7 @@ import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, reupload, usedIn, LIMITS, markSeen, materialUsage,
+  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, LIMITS, markSeen, materialUsage,
   MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
@@ -123,7 +123,7 @@ export default function Nexder() {
   const designs = nexderDesignsSig.value, cats = nexderCatsSig.value.filter((c) => !c.archived);
   const [q, setQ] = useState(""), [cat, setCat] = useState(""), [view, setView] = useState<"all" | "shared">("all");
   useEffect(() => { if (cat && cat !== "__none" && !cats.some((c) => c.id === cat)) setCat(""); }, [cat, cats.length]);
-  const [pf, setPf] = useState<Prefs>(loadPrefs);
+  const [pf, setPf] = useState<Prefs>(loadPrefs), [undoNote, setUndoNote] = useState("");
   const setPrefs = (p: Partial<Prefs>) => setPf((o) => { const n = { ...o, ...p }; try { localStorage.setItem(PREFS, JSON.stringify(n)); } catch { /* private mode: the choice just isn't remembered */ } return n; });
   /** Clicking a column: same column flips the direction, another column starts ascending. */
   const sortBy = (k: SortKey) => setPrefs(pf.sort === k ? { dir: (pf.dir * -1) as 1 | -1 } : { sort: k, dir: 1 });
@@ -181,6 +181,11 @@ export default function Nexder() {
       detail={detail}>
       {view === "shared" && shared.length > 0 && <div class="grid gap-1.5">{shared.map((s) => (
         <p key={s.id} class="rounded-xl bg-c0 px-3 py-2 text-[13px] break-words"><b>{usersSig.value.find((u) => u.id === s.by)?.name ?? "Someone"}</b> shared {s.designIds.length} design{s.designIds.length > 1 ? "s" : ""} · {shortDate(s.at)}{s.note ? <span class="text-c3"> · “{s.note}”</span> : null}</p>))}</div>}
+      {writable && !priceUndoSig.value.length && undoNote && <p role="status" class="rounded-xl bg-c0 px-3 py-2 text-[13px]">Price change undone: {undoNote}</p>}
+      {writable && priceUndoSig.value.length > 0 && <div role="status" class="rounded-xl bg-c0 px-3 py-2 text-[13px] flex items-center gap-3 flex-wrap">
+        <span class="min-w-0 flex-1 break-words">Prices changed for {priceUndoSig.value[0].items.length} design{priceUndoSig.value[0].items.length > 1 ? "s" : ""} ({priceUndoSig.value[0].label || "bulk change"}){priceUndoSig.value.length > 1 ? ` · ${priceUndoSig.value.length - 1} earlier change${priceUndoSig.value.length > 2 ? "s" : ""} can be undone after` : ""}.{undoNote && <b> {undoNote}</b>}</span>
+        <button type="button" onClick={() => import("../data/nexder-cats").then((m) => { const r = m.undoPrice(); setUndoNote(`${r.restored} restored${r.skipped ? `, ${r.skipped} left as they are (edited since)` : ""}.`); })} class="h-8 px-3 !min-h-0 rounded-full bg-c4 text-c0 text-[13px] font-semibold cursor-pointer">Undo price change</button>
+        <button type="button" onClick={() => { setPriceUndo([]); setUndoNote(""); }} class="text-[12px] text-c3 underline underline-offset-2 cursor-pointer !min-h-0">Keep, dismiss</button></div>}
       {writable && !uploadsSig.value.length && designs.some((d) => incomplete(d).length) && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Some files were saved but never reached Google Drive, because the tab was closed or the upload was stopped. Open a design marked “Upload incomplete” and press Upload again for each file.</p>}
       {!nexderReady && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Nexder keeps its files in Google Drive, so it needs cloud sync. Sign in to cloud sync to add or open files.</p>}
       {!designs.length
