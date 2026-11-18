@@ -56,7 +56,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
     if (xl && !(e.target as Element).closest("[data-sheet-grab]")) return; // a big working window is closed from its handle or its X, never by dragging inside it
     const body = (e.target as Element).closest("[data-sheet-body]") as HTMLElement | null;
     if (body && body.scrollTop > 0) return;
-    if ((e.target as Element).closest("input,select,textarea,button,a")) return;
+    if ((e.target as Element).closest("input,select,textarea,button,a,summary,label,[role=button]")) return; // pointer capture would swallow the click of these
     drag.current = { y: e.clientY, t: performance.now() };
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };

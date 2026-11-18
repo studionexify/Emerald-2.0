@@ -93,7 +93,7 @@ export function startPlates(o: Order, k: number, d: { machine?: string; plates: 
 export const pendingWeigh = (o: Order, i: LineItem) => batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && b.weighLater && !b.running);
 /** Of those, the ones that used one of these spools: only they are covered by a weigh of those spools (other machines have their own spools). */
 export const pendingOn = (o: Order, i: LineItem, spoolIds: string[], self?: string) => pendingWeigh(o, i).filter((b) => b.id !== self && b.spoolIds?.some((id) => spoolIds.includes(id)));
-export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean; hours?: number }): Order {
+export function finishPlates(o: Order, k: number, runId: string, d: { plates: number; perPlate: number; wasted: number; spools: Record<string, string>; gpp: Record<string, number>; later?: boolean; hours?: number; /** optional: grams each part of a together-plate used */ partG?: Record<string, number> }): Order {
   const i = o.items[k], p = lineProgress(o, i), b = batchesSig.value.find((x) => x.id === runId);
   const asPart = !!b?.part && !!i.parts?.length, was = asPart ? partPieces(i, batchesSig.value, o.no) : null;
   const pcs = d.plates * d.perPlate, bad = Math.min(d.wasted, pcs), grams: Record<string, number> = {}, cons: string[] = [];
@@ -109,7 +109,7 @@ export function finishPlates(o: Order, k: number, runId: string, d: { plates: nu
   }
   const lg = logMachineTime(o, { name: i.name, printer: b?.printer ?? i.machine }, d.hours ?? 0, pcs - bad, bad, Object.values(grams).reduce((a, x) => a + x, 0)); cons.push(...lg.cons);
   const priorIds = new Set(prior.map((x) => x.id));
-  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, hours: d.hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
+  batchesSig.value = batchesSig.value.map((x) => (x.id === runId ? { ...x, running: false, weighLater: d.later || undefined, units: pcs, done: pcs - bad, failed: bad, hours: d.hours || undefined, jobIds: lg.jobIds.length ? lg.jobIds : undefined, plates: d.plates, perPlate: d.perPlate, spoolIds: Object.values(d.spools), colours: Object.keys(d.spools), grams: d.later ? undefined : grams, ...(d.partG && Object.values(d.partG).some((v) => v > 0) ? { partG: Object.fromEntries(Object.entries(d.partG).filter(([, v]) => v > 0)) } : {}), cons, by: me.value?.name ?? x.by } : priorIds.has(x.id) ? { ...x, weighLater: undefined } : x));
   log("Print done", `${o.no} · ${i.name}: ${pcs - bad} good, ${bad} wasted · ${d.later ? "weigh at the end" : `${Object.values(grams).reduce((a, x) => a + x, 0)} g over ${allPlates} plate${allPlates > 1 ? "s" : ""}`}`);
   if (asPart) return applyPartDelta(o, i.name, was, partPieces(i, batchesSig.value, o.no));
   return setLine(o, k, { printed: p.printed + pcs - bad, failed: p.failed + bad, ...(b?.part ? {} : { perPlate: d.perPlate, gpp: d.later ? i.gpp : { ...i.gpp, ...d.gpp } }) });
@@ -136,12 +136,19 @@ export const saveParts = (o: Order, k: number, parts: LinePart[] | undefined): O
 /** Everything printed so far for a line, failed prints included: grams that left the spools and hours on the machines. */
 export function runTotals(o: Order, i: LineItem, part?: string) {
   const runs = batchesSig.value.filter((b) => b.orderNo === o.no && b.name === i.name && (part === undefined || (part === "" ? !b.part : onParts(b).includes(part))));
+  /** Grams of a run that belong to this part: what was typed for it, else the rest of the plate shared between the parts nobody typed a figure for. */
+  const gOf = (b: Batch) => {
+    const total = Object.values(b.grams ?? {}).reduce((x, y) => x + y, 0); if (!part) return total;
+    const on = onParts(b), typed = b.partG ?? {}; if (typed[part] !== undefined) return typed[part];
+    const rest = Math.max(0, total - on.reduce((a, n) => a + (typed[n] ?? 0), 0)), free = on.filter((n) => typed[n] === undefined).length;
+    return rest / Math.max(1, free);
+  };
   const share = (b: Batch) => (part ? 1 / Math.max(1, onParts(b).length) : 1);
   const done = runs.filter((b) => !b.running);
   return {
     runs: runs.length, running: runs.length - done.length,
     good: done.reduce((a, b) => a + (b.done || 0), 0), failed: done.reduce((a, b) => a + (b.failed ?? 0), 0),
-    g: Math.round(done.reduce((a, b) => a + Object.values(b.grams ?? {}).reduce((x, y) => x + y, 0) * share(b), 0)),
+    g: Math.round(done.reduce((a, b) => a + gOf(b), 0)),
     h: Math.round(done.reduce((a, b) => a + (b.hours ?? 0) * share(b), 0) * 10) / 10,
     /** runs printed with the spools still loaded: their grams arrive at the final weigh */
     toWeigh: done.filter((b) => b.weighLater).length,
