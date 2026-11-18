@@ -5,7 +5,7 @@ import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, LIMITS, markSeen, materialUsage,
+  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, LIMITS, markSeen, materialUsage,
   MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
   type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
 } from "../data/nexder";
@@ -71,12 +71,12 @@ const csv = (ds: NxDesign[]) => import("../data/nexder-cats").then((m) => m.expo
 const ManageCats = lazy<{ onClose: () => void }>(() => import("./NexderCats").then((m) => m.ManageCats));
 
 /* ---- how the page is laid out and ordered (remembered on this device) ---- */
-type SortKey = "no" | "name" | "cat" | "price" | "size" | "g" | "min" | "added" | "files";
-const SORTS: [SortKey, string][] = [["no", "Number"], ["name", "Name"], ["cat", "Category"], ["price", "Price"], ["size", "Size (mm)"], ["g", "Weight"], ["min", "Print time"], ["added", "Date added"], ["files", "File size"]];
-type ColKey = "no" | "cats" | "price" | "size" | "g" | "min" | "files" | "added";
+type SortKey = "no" | "name" | "cat" | "designer" | "price" | "size" | "g" | "min" | "added" | "files";
+const SORTS: [SortKey, string][] = [["no", "Number"], ["name", "Name"], ["cat", "Category"], ["designer", "Designer"], ["price", "Price"], ["size", "Size (mm)"], ["g", "Weight"], ["min", "Print time"], ["added", "Date added"], ["files", "File size"]];
+type ColKey = "no" | "cats" | "designer" | "price" | "size" | "g" | "min" | "files" | "added";
 /** The columns of the list view, in this order after the always-present Name. */
 const COLDEFS: { k: ColKey; label: string; w: string; sort: SortKey; right?: boolean }[] = [
-  { k: "no", label: "No.", w: "64px", sort: "no" }, { k: "cats", label: "Categories", w: "minmax(0,1.4fr)", sort: "cat" }, { k: "price", label: "Price", w: "76px", sort: "price", right: true },
+  { k: "no", label: "No.", w: "64px", sort: "no" }, { k: "cats", label: "Categories", w: "minmax(0,1.4fr)", sort: "cat" }, { k: "designer", label: "Designer", w: "minmax(0,1fr)", sort: "designer" }, { k: "price", label: "Price", w: "76px", sort: "price", right: true },
   { k: "size", label: "Size", w: "80px", sort: "size", right: true }, { k: "g", label: "Weight", w: "80px", sort: "g", right: true }, { k: "min", label: "Time", w: "88px", sort: "min", right: true },
   { k: "files", label: "File size", w: "84px", sort: "files", right: true }, { k: "added", label: "Added", w: "92px", sort: "added", right: true },
 ];
@@ -88,7 +88,7 @@ const top = (n: (number | undefined)[]) => { const v = n.filter((x): x is number
 /** What a design is ordered by. Several sizes count as the largest one. */
 const metric = (d: NxDesign, k: SortKey): number | string | undefined => {
   switch (k) {
-    case "no": return d.no; case "name": return d.name.toLowerCase(); case "added": return d.created; case "price": return d.price || undefined;
+    case "no": return d.no; case "name": return d.name.toLowerCase(); case "designer": return d.designer?.toLowerCase() || undefined; case "added": return d.created; case "price": return d.price || undefined;
     case "cat": return catsOf(d).map(catName).sort((a, b) => a.localeCompare(b))[0]?.toLowerCase();
     case "size": return top(d.sizes?.map((s) => s.mm) ?? []); case "g": return top(d.sizes?.map((s) => s.g) ?? []); case "min": return top(d.sizes?.map((s) => s.min) ?? []);
     case "files": return d.files.reduce((a, f) => a + f.size, 0) || undefined;
@@ -110,6 +110,7 @@ function Cell({ d, k }: { d: NxDesign; k: ColKey }) {
   switch (k) {
     case "no": return <span class="hidden md:block num text-[13px] text-c3">{d.no}</span>;
     case "cats": { const ids = catsOf(d); return <span class="hidden md:flex flex-wrap gap-1 min-w-0">{ids.length ? ids.map((id) => <span key={id} class={`${chipCls} bg-c1 text-c3 max-w-full truncate`}>{catName(id)}</span>) : <span class="t-meta">—</span>}</span>; }
+    case "designer": return <span class="hidden md:block text-[13px] truncate" title={d.designer}>{d.designer || <span class="t-meta">—</span>}</span>;
     case "price": return <span class={num}>{d.price ? inr(d.price) : "—"}</span>;
     case "size": return <span class={num}>{mm ? `${mm} mm` : "—"}</span>;
     case "g": return <span class={num}>{gr ? `${gr} g` : "—"}</span>;
@@ -136,7 +137,7 @@ export default function Nexder() {
   useEffect(() => { if (nexderReady) { syncTrash(); if (can("nexder", "full")) sweepOrphans(); } }, []);
   useEffect(() => { if (view === "shared") markSeen(); }, [view, shared.length]);
   const pool = view === "shared" ? designs.filter((d) => shared.some((s) => s.designIds.includes(d.id))) : designs;
-  const list = pool.filter((d) => (!cat || (cat === "__none" ? !catsOf(d).length : catsOf(d).includes(cat))) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim())));
+  const list = pool.filter((d) => (!cat || (cat === "__none" ? !catsOf(d).length : catsOf(d).includes(cat))) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim()) || (d.designer ?? "").toLowerCase().includes(q.trim().toLowerCase())));
   const by = (id: string) => designs.find((d) => d.id === id);
   const picked = sel.map(by).filter(Boolean) as NxDesign[];
   const open = panel && panel.k !== "new" ? by(panel.id) : undefined;
@@ -164,7 +165,7 @@ export default function Nexder() {
         {writable && <Button icon="plus" onClick={() => { setPanel({ k: "new" }); }}>New design</Button>}</>}
       toolbar={<>
         <label class="relative w-full md:w-[260px]"><span class="sr-only">Search designs</span><span class="absolute left-3 top-2.5 text-c2 pointer-events-none"><Icon name="search" size={13} /></span>
-          <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Name or number" class={`${inputCls} !pl-8`} /></label>
+          <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Name, number or designer" class={`${inputCls} !pl-8`} /></label>
         <select aria-label="Category" value={cat} onChange={(e) => setCat((e.target as HTMLSelectElement).value)} class={`${inputCls} !w-auto cursor-pointer`}>
           <option value="">All categories</option><option value="__none">Uncategorized · {designs.filter((d) => !catsOf(d).length).length}</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name} · {designs.filter((d) => catsOf(d).includes(c.id)).length}</option>)}</select>
         <select aria-label="Sort by" value={pf.sort} onChange={(e) => setPrefs({ sort: (e.target as HTMLSelectElement).value as SortKey, dir: 1 })} class={`${inputCls} !w-auto cursor-pointer`}>{SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}</select>
@@ -288,6 +289,9 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
       {(d.price || d.sizes?.length) && <div class="grid gap-1 text-[13px]">
         {d.price ? <div class="flex justify-between gap-3"><span class="text-c3">Price</span><b class="num">{inr(d.price)}</b></div> : null}
         {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3">Size {s.label}{s.mm ? ` · ${s.mm} mm` : ""} <span class={`text-[11px] font-semibold ${s.sliced ? "text-grn" : "text-amb"}`}>{s.sliced ? "sliced" : "estimated"}</span></span><b class="num">{s.g} g{s.min ? ` · ${s.min >= 60 ? `${Math.floor(s.min / 60)} h ${s.min % 60} min` : `${s.min} min`}` : ""}</b></div>)}</div>}
+      {(d.designer || d.source) && <div class="grid gap-1 text-[13px]">
+        {d.designer && <div class="flex justify-between gap-3"><span class="text-c3">Designer</span><b class="min-w-0 break-words text-right">{d.designer}</b></div>}
+        {d.source && cleanLink(d.source) && <div class="flex justify-between gap-3"><span class="text-c3">Original page</span><a href={cleanLink(d.source)!} target="_blank" rel="noopener noreferrer" class="min-w-0 break-all text-right underline underline-offset-2 font-semibold">{new URL(cleanLink(d.source)!).hostname.replace(/^www\./, "")} ↗</a></div>}</div>}
       {d.desc && <p class="text-[13px] text-c3 whitespace-pre-wrap break-words">{d.desc}</p>}
       <div>
         <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{writable && d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
@@ -295,7 +299,7 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
           <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span>
             <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "original in Google Drive" : isQueued(d.id, f.id) ? "uploading…" : f.pend ? "not uploaded yet" : "not in Drive"}</span></span>
             {writable && f.pend && !f.drive ? (isQueued(d.id, f.id) ? null : <Reup d={d} kind="file" id={f.id} />) : writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
-          : <p class="t-meta">No design file yet.{writable ? " Edit the design to add one." : ""}</p>}
+          : <p class="t-meta">No design file. Photos alone are fine.{writable ? " Edit the design to add one." : ""}</p>}
         {writable && d.photos.some((p) => p.pend && !p.drive) && <div class="mt-1.5 grid gap-1.5">{d.photos.filter((p) => p.pend && !p.drive).map((p) => (
           <div key={p.id} class="flex items-center gap-2.5 rounded-xl bg-amb-bg/50 px-2.5 py-2"><span class="text-c3"><Icon name="image" size={15} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{p.name}</b><span class="t-meta">{isQueued(d.id, p.id) ? "original uploading…" : "original photo not uploaded yet"}</span></span>
             {!isQueued(d.id, p.id) && <Reup d={d} kind="photo" id={p.id} />}</div>))}</div>}
@@ -350,7 +354,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   const first = cat ? nextNo(cat.id) : adding && newCat.trim() ? String(nextCode() * 1000 + 1) : null;
   const mk = () => { const r = addCategory(newCat); if (r.error) { setErr(r.error); return null; } setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); return r.cat!; };
   const ready = drafts.every(draftReady) && (!!cat || (adding && !!newCat.trim()));
-  const filled = (d: Draft) => !!(d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length);
+  const filled = (d: Draft) => !!(d.name || d.photos.length || d.files.length || d.desc || d.source || d.designer || d.price || d.sizes.length);
   /* back to a single product drops the extra cards, asking first when they hold something */
   const go = async (m: boolean) => {
     if (m === multi) return;
@@ -359,7 +363,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   };
   const shown = multi ? drafts : drafts.slice(0, 1);
   const total = drafts.reduce((a, d) => a + newBytes(d), 0);
-  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && (JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)) || extra.join() !== catsOf(base).filter((id) => id !== base.catId).join())) || (!base && extra.length > 0);
+  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.source || d.designer || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && (JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)) || extra.join() !== catsOf(base).filter((id) => id !== base.catId).join())) || (!base && extra.length > 0);
   const pick = (k: number) => { setCur(k); setSeen((s) => (s.includes(drafts[k].key) ? s : [...s, drafts[k].key])); };
 
   /* closing never throws work away without asking, and never leaves an upload running behind the window */
@@ -457,6 +461,17 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   );
 }
 
+/** Designer: pick one already used (the drop-down), or add a new name. New names are remembered for next time. */
+function Designer({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const names = nexderDesignersSig.value.map((x) => x.name).sort((a, b) => a.localeCompare(b));
+  const [adding, setAdding] = useState(false);
+  const known = !value || names.some((n) => n.toLowerCase() === value.trim().toLowerCase());
+  return <Field label="Designer (optional)">{adding || !known
+    ? <div class="flex gap-2"><input autofocus value={value} placeholder="Designer name" aria-label="New designer name" onInput={(e) => onChange((e.target as HTMLInputElement).value)} class={inputCls} />
+        {names.length > 0 && <Button variant="outline" onClick={() => { setAdding(false); onChange(""); }}>Cancel</Button>}</div>
+    : <select aria-label="Designer" value={names.find((n) => n.toLowerCase() === value.trim().toLowerCase()) ?? ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v === "__new") { setAdding(true); onChange(""); } else onChange(v); }} class={`${inputCls} cursor-pointer`}>
+        <option value="">None</option>{names.map((n) => <option key={n} value={n}>{n}</option>)}<option value="__new">＋ Add a new designer…</option></select>}</Field>;
+}
 function Product({ d, n, set, onCalc, onRemove }: { d: Draft; n: number; set: (p: Partial<Draft>) => void; onCalc: (f: DraftItem) => void; onRemove?: () => void }) {
   const [over, setOver] = useState(false);
   const pick = (fs: FileList | File[] | null, photo: boolean) => {
@@ -471,6 +486,9 @@ function Product({ d, n, set, onCalc, onRemove }: { d: Draft; n: number; set: (p
       {n > 0 && <div class="col-span-full flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-c4 text-c0 text-[11px] font-bold flex items-center justify-center">{n}</span><b class="text-[13px] flex-1">Product {n}</b>{onRemove && <button type="button" onClick={onRemove} class="text-[12px] text-red underline cursor-pointer !min-h-0">Remove</button>}</div>}
       <div class="grid gap-4 content-start">
       <Field label="Name"><Grow value={d.name} placeholder="Product name" onInput={(v) => set({ name: v })} /></Field>
+      <Designer value={d.designer} onChange={(v) => set({ designer: v })} />
+      <Field label="Link to the original page (optional)"><input type="url" inputMode="url" value={d.source} placeholder="https://www.printables.com/model/…" onInput={(e) => set({ source: (e.target as HTMLInputElement).value })} aria-invalid={cleanLink(d.source) === null} class={`${inputCls} ${cleanLink(d.source) === null ? "!border-red" : ""}`} />
+        {cleanLink(d.source) === null && <span role="alert" class="block text-[12px] text-red mt-1">That is not a web address. It must look like www.site.com/page or https://…</span>}</Field>
       <Field label="Description (optional)"><textarea value={d.desc} rows={3} onInput={(e) => set({ desc: (e.target as HTMLTextAreaElement).value })} class="w-full rounded-xl border border-line bg-c0 px-3 py-2 text-[13px] outline-none focus:border-c4" /></Field>
       </div>
       <div class="grid gap-4 content-start">
@@ -487,7 +505,7 @@ function Product({ d, n, set, onCalc, onRemove }: { d: Draft; n: number; set: (p
         <span class="block t-meta mt-1">The original is kept in Google Drive. Emerald shows a small copy.</span>
       </div>
       <div>
-        <span class="block t-meta mb-1">Files</span>
+        <span class="block t-meta mb-1">Design files <span class="text-c2">· optional, photos alone are enough to save</span></span>
         {d.files.length > 0 && <div class="grid gap-1.5 mb-1.5">{d.files.map((f) => (
           <div key={f.id} class="flex items-center gap-2 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)}</span></span>
             {f.file && CALCULABLE.test(f.name) && <button type="button" onClick={() => onCalc(f)} class="h-7 px-2.5 !min-h-0 rounded-full border border-line bg-c0 text-[12px] font-semibold cursor-pointer whitespace-nowrap">Calculate</button>}

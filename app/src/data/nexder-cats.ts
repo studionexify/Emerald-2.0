@@ -95,8 +95,8 @@ export async function duplicateDesigns(ds: NxDesign[]): Promise<string[]> {
 const cell = (v: string | number | undefined) => { let t = String(v ?? ""); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 /** One row per design, ready for Excel (UTF-8 with a BOM so ₹ and names read correctly). */
 export function exportCsv(ds: NxDesign[]) {
-  const head = ["Number", "Name", "Categories", "Price", "Sizes", "Description", "Photos", "Files", "File bytes", "Added", "Added by"];
-  const rows = ds.map((d) => [d.no, d.name, catsOf(d).map((id) => nexderCatsSig.value.find((c) => c.id === id)?.name ?? "").join("; "), d.price, (d.sizes ?? []).map((s) => `${s.label}${s.mm ? ` ${s.mm}mm` : ""} ${s.g}g${s.min ? ` ${s.min}min` : ""}${s.sliced ? " sliced" : ""}`).join("; "), d.desc, d.photos.length, d.files.length, d.files.reduce((a, f) => a + f.size, 0), d.created, d.by]);
+  const head = ["Number", "Name", "Categories", "Designer", "Source link", "Price", "Sizes", "Description", "Photos", "Files", "File bytes", "Added", "Added by"];
+  const rows = ds.map((d) => [d.no, d.name, catsOf(d).map((id) => nexderCatsSig.value.find((c) => c.id === id)?.name ?? "").join("; "), d.designer, d.source, d.price, (d.sizes ?? []).map((s) => `${s.label}${s.mm ? ` ${s.mm}mm` : ""} ${s.g}g${s.min ? ` ${s.min}min` : ""}${s.sliced ? " sliced" : ""}`).join("; "), d.desc, d.photos.length, d.files.length, d.files.reduce((a, f) => a + f.size, 0), d.created, d.by]);
   const blob = new Blob(["﻿" + [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `nexder-designs-${today()}.csv`; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
