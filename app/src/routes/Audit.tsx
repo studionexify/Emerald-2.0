@@ -6,6 +6,7 @@ import { ask, Button, Card, Field, inputCls, Page, Pick, Progress, Section, Stat
 import {
   applyMove, bodyTare, defaultBody, filMasterSig, inr, itemsSig, log, masterMat, me, movesSig, nextSpoolNo, packSig, persisted, spoolGroup, spoolsSig, spoolValue, spHex, toBin, today, uid,
   type PackItem, type Spool,
+  asHuman,
 } from "../data";
 import { nowStamp } from "../data/store";
 
@@ -48,7 +49,7 @@ function start(cat: Cat) {
 
 /* ---------------------------------------------------------------- filament */
 function setSpoolGrams(s: Spool, net: number, gross: number, a: Audit, note: string) {
-  spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? { ...x, grams: net, gross, weighed: today(), status: net <= 0 ? "empty" : x.status === "loaded" ? "open" : x.status, printer: x.status === "loaded" ? "" : x.printer } : x));
+  asHuman("audit", () => spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? { ...x, grams: net, gross, weighed: today(), status: net <= 0 ? "empty" : x.status === "loaded" ? "open" : x.status, printer: x.status === "loaded" ? "" : x.printer } : x)));
   const d = net - s.grams;
   if (d) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: d > 0 ? "in" : "out", qty: Math.abs(d), unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `${note} · ${a.no}`, by: who() }, ...movesSig.value];
 }
@@ -121,7 +122,7 @@ function NewSpool({ a, f, done }: { a: Audit; f: { mat: string; col: string; bra
           const mm = masterMat(d.material), hex = M.colours.find((c) => c.name.toLowerCase() === d.colour.toLowerCase())?.hex;
           const s: Spool = { id: uid(), material: d.material, colour: d.colour, brand: d.brand, hex, grams: net, size: d.size || M.size, spoolNo: nextSpoolNo(), spoolMat: d.spoolMat, tare, gross: d.gross, diameter: M.diameter,
             costKg: mm?.costKg || M.costKg, nozzle: mm?.nozzle, bed: mm?.bed, status: "open", active: true, weighed: today(), bought: today(), notes: `Found in audit ${a.no}` };
-          spoolsSig.value = [...spoolsSig.value, s];
+          asHuman("audit", () => { spoolsSig.value = [...spoolsSig.value, s]; });
           movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "in", qty: net, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Found in audit · ${a.no}`, by: who() }, ...movesSig.value];
           addLine(a, { ref: s.id, label: spoolName(s), before: 0, after: net, unit: "g", by: who(), at: stamp(), isNew: true });
           log(`Audit ${a.no}: added ${spoolName(s)} (${g(net)})`, spoolName(s), "stock");
@@ -210,7 +211,7 @@ function finishFilament(a: Audit, fate: (id: string) => Fate) {
     offs.push({ how, label: spoolName(s), grams: s.grams, value: spoolValue(s), next: hasStock(s, gone) ? "Others of this kind still in stock" : "None in stock · reorder" });
     movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: spoolKey(s), dir: "out", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: "", colour: s.colour, brand: s.brand, notes: `Audit ${lost ? "write-off (lost)" : "finished (empty)"} · ${a.no}`, by: who() }, ...movesSig.value];
     const done: Spool = { ...s, grams: 0, gross: s.tare ?? 0, status: "empty", printer: "", ...(lost ? {} : { active: false }), notes: `${s.notes ? s.notes + " · " : ""}${lost ? "Lost" : "Finished"} in audit ${a.no}` };
-    spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? done : x));
+    asHuman("audit", () => { spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? done : x)); });
     if (lost) toBin("Spool", done, `${spoolName(s)} · lost in audit ${a.no}`, who());
     log(`Audit ${a.no}: ${spoolName(s)} ${lost ? "lost — written off and deleted (Bin)" : "finished — emptied and archived"} (${g(s.grams)})${hasStock(s, gone) ? "" : "; reorder"}`, spoolName(s), "stock");
   }

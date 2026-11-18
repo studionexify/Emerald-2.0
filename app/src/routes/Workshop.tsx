@@ -9,6 +9,7 @@ import { Actions, Facts, Inspect, PaneSection, useRecord, type FDef } from "../u
 import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig, masterMat, masterColour, spHex, defaultBody, clashIds, renameMaster, masterUse, type FilMaster,
   applyMove, committed, consSig, inr, itemsSig, jobsSig, log, me, movesSig, packSig, printersSig, REORDER_G, shortDate, spoolPct, spoolsSig, spoolValue, stockNames, today, uid, machineStats,
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
+  asHuman,
 } from "../data";
 import { ConsumeForm } from "./work/shared";
 
@@ -128,7 +129,7 @@ export function Printers() {
 const abc = (a = "", b = "") => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
 const groupSpools = (sp: Spool[]) => { const m = new Map<string, Spool[]>(); for (const s of sp) { const k = `${s.material}|${s.colour}|${s.brand}`.toLowerCase(); m.set(k, [...(m.get(k) ?? []), s]); } return [...m.values()].map((l) => l.sort((a, b) => (a.slot ?? 1e9) - (b.slot ?? 1e9) || a.spoolNo.localeCompare(b.spoolNo, undefined, { numeric: true }))).sort((a, b) => abc(a[0].colour, b[0].colour) || abc(a[0].brand, b[0].brand)); };
 const SPOOL_MATS = (): Record<string, number> => ({ ...Object.fromEntries(filMasterSig.value.bodies.map((b) => [b.name, b.tare])), "Refill (no spool)": 0 });
-const putSpool = (id: string, p: Partial<Spool>) => { spoolsSig.value = spoolsSig.value.map((x) => x.id === id ? { ...x, ...p } : x); };
+const putSpool = (id: string, p: Partial<Spool>) => asHuman("store-edit", () => { spoolsSig.value = spoolsSig.value.map((x) => x.id === id ? { ...x, ...p } : x); });
 const fIn = "w-full h-7 rounded-lg border border-line bg-c1 px-2 text-[12px] !min-h-0";
 function SpoolEdit({ s, done }: { s: Spool; done: () => void }) {
   const [gross, setGross] = useState(String(spoolGross(s)));
@@ -307,12 +308,12 @@ export function Filament() {
   const r = useRecord<Spool>({
     sig: spoolsSig, kind: "Spool", noDuplicate: true, recall: ["material", "colour"], title: (s) => `${s.material} ${s.colour} · ${s.spoolNo}`, fields: sFields,
     blank: () => { const M = filMasterSig.value, m0 = M.materials.find((x) => x.name === "PLA") ?? M.materials[0], t = bodyTare(M.body) ?? M.tare; return { id: uid(), material: m0?.name ?? "PLA", colour: "", hex: "#000000", brand: "", finish: "", diameter: M.diameter, grams: M.size, size: M.size, copies: 1, spoolMat: defaultBody(""), tare: bodyTare(defaultBody("")) ?? t, gross: M.size + t, costKg: m0?.costKg || M.costKg, nozzle: m0?.nozzle, bed: m0?.bed, spoolNo: nextSpoolNo(), vendor: "", bought: today(), status: "sealed", active: true }; },
-    onSave: (s0, isNew) => { let s = s0; if (isNew) { const n = Math.max(1, s0.copies ?? 1), sl = freeSlots(s0, n); const { copies: _c, ...base } = s0; s = { ...base, slot: sl[0] };
+    onSave: (s0, isNew) => asHuman("spool-form", () => { let s = s0; if (isNew) { const n = Math.max(1, s0.copies ?? 1), sl = freeSlots(s0, n); const { copies: _c, ...base } = s0; s = { ...base, slot: sl[0] };
         const extra = sl.slice(1).map((k) => ({ ...base, id: uid(), slot: k, spoolNo: "" }) as Spool);
         spoolsSig.value = spoolsSig.value.map((x) => (x.id === s.id ? s : x)); for (const e of extra) { e.spoolNo = nextSpoolNo(); spoolsSig.value = [e, ...spoolsSig.value]; }
         for (const e of extra) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${e.material} ${e.colour} · ${e.spoolNo}`, dir: "in", qty: e.grams, unit: "g", unitCost: (e.costKg ?? 0) / 1000, vendor: e.vendor ?? "", colour: e.colour, brand: e.brand, notes: "New spool", by: who() }, ...movesSig.value]; }
       if (isNew) { const t = bodyTare(s.spoolMat), c = masterMat(s.material)?.costKg; if (t != null || c) spoolsSig.value = spoolsSig.value.map((x) => x.id === s.id ? { ...x, ...(t != null ? { tare: t } : {}), ...(c && x.costKg === filMasterSig.value.costKg ? { costKg: c } : {}) } : x); }
-      if (isNew) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "in", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: s.vendor ?? "", colour: s.colour, brand: s.brand, notes: "New spool", by: who() }, ...movesSig.value]; },
+      if (isNew) movesSig.value = [{ id: uid(), date: today(), cat: "filament", item: `${s.material} ${s.colour} · ${s.spoolNo}`, dir: "in", qty: s.grams, unit: "g", unitCost: (s.costKg ?? 0) / 1000, vendor: s.vendor ?? "", colour: s.colour, brand: s.brand, notes: "New spool", by: who() }, ...movesSig.value]; }),
     facts: (s) => [
       ["Net remaining", <span class="text-lg font-extrabold num">{s.grams.toLocaleString("en-IN")} g</span>], ["Remaining", <span class="flex items-center gap-2"><span class="num">{spoolPct(s)}%</span><span class="flex-1"><Progress value={spoolPct(s)} /></span></span>],
       ["Gross · tare", `${spoolGross(s).toLocaleString("en-IN")} g · ${s.tare ?? 0} g`], ["Value left", inr(spoolValue(s))],

@@ -20,6 +20,22 @@ function list<T extends { id: string }>(key: string, seed: T[], fill: Partial<T>
   return s;
 }
 export const printersSig = list<Printer>("printers", [], { active: true });
+/**
+ * Barrier: a spool's weight (grams, gross, tare, size) changes only inside asHuman(), i.e. a person's own action in Emerald
+ * (weigh-in, audit count, stock movement, new spool). Anything else — effects, sync fix-ups, imports — is refused and
+ * the stored weight kept. Human edits carry a stamp (wAt/wBy/wVia) that the database checks too (migration 0008).
+ * Print-run usage is unaffected: it lives in its own consumption rows.
+ */
+const WEIGHT = ["grams", "gross", "tare", "size"] as const;
+let humanVia = "";
+let humanBy = (): string => "";
+export const setHumanName = (f: () => string) => { humanBy = f; };
+export function asHuman<T>(via: string, fn: () => T): T { const p = humanVia; humanVia = via; try { return fn(); } finally { humanVia = p; } }
+export const weightBlocks = signal<{ at: number; id: string; label: string }[]>([]);
+function blockedWeight(n: Spool, was: Spool) {
+  console.warn("Emerald: refused a spool weight change that no person made", was.id, { from: was.grams, to: n.grams });
+  weightBlocks.value = [{ at: Date.now(), id: was.id, label: `${was.material} ${was.colour} · ${was.spoolNo}` }, ...weightBlocks.value].slice(0, 50);
+}
 /** Stored spool rows. Their `grams` is the weighed balance *before* print-run usage. */
 const spoolBase = list<Spool>("spools", [], { active: true, tare: 250, diameter: 1.75, costKg: 1250, status: "open" });
 /** Filament used by print runs, as its own synced rows (one per spool per run) — set from the data layer. */
@@ -33,7 +49,19 @@ const shown = computed(() => spoolBase.value.map((s) => { const u = usedBy.value
  */
 export const spoolsSig = {
   get value() { return shown.value; },
-  set value(v: Spool[]) { const u = usedBy.peek(); spoolBase.value = v.map((s) => { const g = u.get(s.id); return g ? { ...s, grams: s.grams + g } : s; }); },
+  set value(v: Spool[]) {
+    const u = usedBy.peek(), seen = new Map(shown.peek().map((s) => [s.id, s])), base = new Map(spoolBase.peek().map((s) => [s.id, s]));
+    spoolBase.value = v.map((s) => {
+      const was = base.get(s.id);
+      if (was && seen.get(s.id) === s) return was; // row untouched by this write: keep the stored copy exactly
+      const g = u.get(s.id); let n: Spool = g ? { ...s, grams: s.grams + g } : s;
+      if (was && WEIGHT.some((k) => n[k] !== was[k])) {
+        if (!humanVia) { blockedWeight(n, was); n = { ...n, grams: was.grams, gross: was.gross, tare: was.tare, size: was.size }; }
+        else n = { ...n, wAt: Date.now(), wBy: humanBy(), wVia: humanVia };
+      } else if (!was && humanVia) n = { ...n, wAt: Date.now(), wBy: humanBy(), wVia: humanVia };
+      return n;
+    });
+  },
   peek: () => shown.peek(),
   subscribe: (f: (v: Spool[]) => void) => shown.subscribe(f),
 } as unknown as Signal<Spool[]>;
@@ -63,8 +91,8 @@ const FIX: Record<string, (row: any, live: any[]) => any> = {};
 /** `fix` may adjust a row on its way back (for example a number someone else took meanwhile). */
 export function registerBin(kind: string, sig: Signal<any[]>, fix?: (row: any, live: any[]) => any) { REG[kind] = sig; if (fix) FIX[kind] = fix; }
 export function toBin(kind: string, row: { id: string }, label: string, by: string) {
-  const sig = REG[kind]; if (sig) sig.value = sig.value.filter((r) => r.id !== row.id);
   binSig.value = [{ id: uid(), kind, label, deletedAt: today(), by, data: row }, ...binSig.value];
+  const sig = REG[kind]; if (sig) sig.value = sig.value.filter((r) => r.id !== row.id);
 }
 export function restoreBin(b: Binned) {
   const sig = REG[b.kind]; if (sig && b.data) sig.value = [FIX[b.kind] ? FIX[b.kind](b.data, sig.value) : (b.data as { id: string }), ...sig.value];
@@ -86,7 +114,8 @@ export const spoolValue = (s: Spool) => (s.grams / 1000) * (s.costKg ?? 1250);
 export const REORDER_G = 1000;
 
 /** Apply a stock movement to the matching record and keep it in the ledger. Unit cost is the price at that time. */
-export function applyMove(m: Movement, record = true) {
+export function applyMove(m: Movement, record = true) { return asHuman("movement", () => applyMove0(m, record)); }
+function applyMove0(m: Movement, record: boolean) {
   const d = m.dir === "in" ? m.qty : -m.qty;
   if (m.cat === "filament") spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(m.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams + d), gross: Math.max(0, s.grams + d) + (s.tare ?? 0), status: s.grams + d <= 0 ? "empty" : s.status } : s));
   else if (m.cat === "packing") packSig.value = packSig.value.map((p) => (p.name === m.item ? { ...p, qty: Math.max(0, p.qty + d), cost: m.dir === "in" && m.unitCost ? m.unitCost : p.cost } : p));
@@ -206,7 +235,7 @@ function fixBodies(list: Spool[]): Spool[] {
     const body = want === "Cardboard" ? "Cardboard" : known ? s.spoolMat! : "Plastic";
     if (body === s.spoolMat) return s;
     changed = true; const t = bodyTare(body);
-    return { ...s, spoolMat: body, ...(t != null ? { tare: t, gross: Math.max(0, s.grams) + t } : {}) };
+    return s.tare != null ? { ...s, spoolMat: body } : { ...s, spoolMat: body, ...(t != null ? { tare: t, gross: Math.max(0, s.grams) + t } : {}) };
   });
   return changed ? out : list;
 }
