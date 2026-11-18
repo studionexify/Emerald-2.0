@@ -5,7 +5,7 @@ import { Icon } from "./icon";
 import { FilterSheet, isPhone, Sheet } from "./sheet";
 
 export { Icon };
-export { ask, askText, AskHost, FilterSheet, isPhone, Sheet } from "./sheet";
+export { ask, askText, AskHost, FilterSheet, isDesktop, isPhone, Sheet } from "./sheet";
 
 type Btn = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" | "ghost"; icon?: string };
 export function Button({ variant = "primary", icon, children, class: c, ...rest }: Btn) {
