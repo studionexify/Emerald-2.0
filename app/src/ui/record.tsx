@@ -6,7 +6,7 @@ import { useState } from "preact/hooks";
 import { ask, Button, DetailHead, Field, inputCls } from "./index";
 import { Menu, Reveal } from "./disclose";
 import { MediaImg } from "./media";
-import { log, me, toBin, uid, type LogKind } from "../data";
+import { asHuman, log, me, toBin, uid, type LogKind } from "../data";
 import { fillEmpty, pastValues, recall } from "../data/memory";
 
 export type FType = "text" | "number" | "date" | "select" | "textarea" | "color" | "combo" | "count";
@@ -119,17 +119,17 @@ export function useRecord<T extends { id: string; active?: boolean }>(c: Cfg<T>)
   const [isNew, setNew] = useState(false);
   const cur = id ? c.sig.value.find((r) => r.id === id) ?? null : null;
   const close = () => { setId(null); setDraft(null); setNew(false); setHint(""); };
-  const put = (r: T) => (p: Partial<T>, why?: string) => {
+  const put = (r: T) => (p: Partial<T>, why?: string) => asHuman("record-form", () => {
     c.sig.value = c.sig.value.map((x) => (x.id === r.id ? { ...x, ...p } : x));
     if (why) log(why, c.title({ ...r, ...p }), c.logKind ?? "stock");
-  };
-  const save = () => {
+  });
+  const save = () => asHuman("record-form", () => {
     if (!draft) return;
     if (isNew) { c.sig.value = [draft, ...c.sig.value]; log(`Added ${c.kind.toLowerCase()}`, c.title(draft), c.logKind ?? "stock"); }
     else { c.sig.value = c.sig.value.map((x) => (x.id === draft.id ? draft : x)); log(`Edited ${c.kind.toLowerCase()}`, c.title(draft), c.logKind ?? "stock"); }
     c.onSave?.(draft, isNew);
     setId(draft.id); setDraft(null); setNew(false);
-  };
+  });
   const [blank0, setBlank0] = useState<T | null>(null);
   const [hint, setHint] = useState("");
   const keys = c.recall === false ? [] : c.recall ?? c.fields.filter((f) => !f.view && (!f.type || f.type === "text" || f.type === "combo")).slice(0, 1).map((f) => f.k);

@@ -67,10 +67,11 @@ export function log(action: string, target: string, kind: LogKind = "order") {
   logsSig.value = [{ id: crypto.randomUUID(), at: now(), who: me.value?.name ?? "You", action, target, kind }, ...logsSig.value];
 }
 setLogger(log);
-import { applyMove, binSig, registerBin } from "./inventory";
+import { applyMove, asHuman, binSig, registerBin, setHumanName } from "./inventory";
+setHumanName(() => me.value?.name ?? "");
 import { setStockSink } from "./ledger";
 /** Filament on a bill arrives as sealed 1 kg spools (material and colour read from the line); other stock tops up its item. */
-setStockSink((m) => {
+setStockSink((m) => asHuman("bill", () => {
   if (m.cat !== "filament") return applyMove(m);
   const mat = /PETG|ABS|TPU|ASA|PLA/i.exec(m.item)?.[0].toUpperCase() ?? "PLA";
   const colour = m.item.split("/").pop()?.trim() || "—";
@@ -78,7 +79,7 @@ setStockSink((m) => {
   spoolsSig.value = [...Array.from({ length: n }, (_, k) => ({ id: crypto.randomUUID(), material: mat, colour, brand: m.vendor, grams: 1000, size: 1000, spoolNo: nextSpoolNo(k + 1),
     tare: 250, gross: 1250, costKg: Math.round(m.unitCost * 1000), vendor: m.vendor, bought: m.date, status: "sealed" as const, active: true, notes: m.notes })), ...spoolsSig.value];
   applyMove({ ...m, item: `${mat} ${colour}` }, true);
-});
+}));
 /** Highest EM-number in use (bulk orders carry other ids), at least 1000. */
 /** Highest EM- number ever used, including orders sitting in the Bin, so a restored order never shares a number with a new one. */
 const nextOrderBase = () => Math.max(1000, ...[...ordersSig.value, ...binSig.value.filter((b) => b.kind === "Order").map((b) => b.data as Order)].map((x) => Number(/^EM-(\d+)$/.exec(x?.no ?? "")?.[1] ?? 0)));
@@ -111,7 +112,7 @@ export const UNIT: Record<ConKind, string> = { filament: "g", packing: "pcs", ac
 /** Record any consumption; decrements stock where it applies and writes a log row. */
 export function consume(d: { kind: ConKind; item: string; qty: number; orderNo?: string; batch?: string; printer?: string; /** print-run usage: counted against this spool, sync-safe */ spoolId?: string }) {
   let cost = d.qty * RATE[d.kind](d.item, d.spoolId);
-  if (d.kind === "filament" && !d.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(d.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s));
+  if (d.kind === "filament" && !d.spoolId) asHuman("print-usage", () => spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(d.item, s.spoolNo) ? { ...s, grams: Math.max(0, s.grams - d.qty) } : s)));
   if (d.kind === "packing") {
     const it = packSig.value.find((p) => p.name === d.item); if (it) cost = it.cost * d.qty;
     packSig.value = packSig.value.map((p) => (p.name === d.item ? { ...p, qty: Math.max(0, p.qty - d.qty) } : p));
@@ -245,7 +246,7 @@ export function undoRun(o: Order, id: string): Order {
   const line = o.items.find((x) => x.name === b.name), was = b.part && line?.parts?.length ? partPieces(line, batchesSig.value, o.no) : null;
   // New runs: removing their usage rows puts the grams back. Older runs deducted directly, so add those back by hand.
   const rows = consSig.value.filter((c) => b.cons?.includes(c.id));
-  for (const c of rows) if (!c.spoolId) spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(c.item, s.spoolNo) || s.spoolNo === c.item ? { ...s, grams: s.grams + c.qty } : s));
+  for (const c of rows) if (!c.spoolId) asHuman("undo-print", () => spoolsSig.value = spoolsSig.value.map((s) => (isSpoolItem(c.item, s.spoolNo) || s.spoolNo === c.item ? { ...s, grams: s.grams + c.qty } : s)));
   if (b.cons?.length) consSig.value = consSig.value.filter((c) => !b.cons!.includes(c.id));
   if (b.jobIds?.length) jobsSig.value = jobsSig.value.filter((j) => !b.jobIds!.includes(j.id));
   if (b.hours && b.printer) for (const n of b.printer.split(" + ").map((x) => x.trim())) printersSig.value = printersSig.value.map((p) => (p.name === n ? { ...p, hours: Math.max(0, Math.round((p.hours - b.hours!) * 10) / 10) } : p));
