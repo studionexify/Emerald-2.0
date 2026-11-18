@@ -3,11 +3,11 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { lazy } from "../router";
 import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
-import { inr, log, me, ordersSig, shortDate, usersSig, can, type Order } from "../data";
+import { inr, log, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, checkDrive, deleteDesign, downloadFile, draftOf, draftReady, driveSpace, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, LIMITS, markSeen, materialUsage,
-  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewBytes, previewUrl, saveDraft, sharedWithMe, shareDesigns, sweepOrphans, syncTrash, unseenShares,
-  type Check, type Draft, type DraftItem, type NxDesign, type NxSize, type Progress, type Space,
+  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, deleteDesign, downloadFile, draftOf, draftReady, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, markSeen, materialUsage,
+  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewUrl, saveDraft, sharedWithMe, sweepOrphans, syncTrash, unseenShares,
+  type Draft, type DraftItem, type NxDesign, type NxSize, type Progress,
 } from "../data/nexder";
 import { uid } from "../data/store";
 import { isQueued, uploadsSig } from "../data/nexder-queue";
@@ -87,6 +87,8 @@ const AssignCats = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>((
 const BulkDialog = lazy<{ kind: "price" | "dup" | "del"; ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.BulkDialog));
 const csv = (ds: NxDesign[]) => import("../data/nexder-cats").then((m) => m.exportCsv(ds));
 const ManageCats = lazy<{ onClose: () => void }>(() => import("./NexderCats").then((m) => m.ManageCats));
+const StorageSheet = lazy<{ writable: boolean; onClose: () => void }>(() => import("./NexderCats").then((m) => m.StorageSheet));
+const ShareModal = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.ShareModal));
 
 /* ---- how the page is laid out and ordered (remembered on this device) ---- */
 type SortKey = "no" | "name" | "cat" | "designer" | "price" | "size" | "g" | "min" | "added" | "files";
@@ -623,43 +625,6 @@ function PackModal({ initial, onClose }: { initial: NxDesign[]; onClose: () => v
   );
 }
 
-/* ---------------------------------------------------------------- storage meter and Drive check */
-function StorageSheet({ writable, onClose }: { writable: boolean; onClose: () => void }) {
-  const [sp, setSp] = useState<Space | null>(null), [err, setErr] = useState(""), [res, setRes] = useState<Check[] | null>(null), [busy, setBusy] = useState(false);
-  const pv = previewBytes();
-  useEffect(() => { load(); }, []);
-  const load = () => driveSpace().then(setSp).catch((e) => setErr((e as Error).message));
-  const bar = (v: number, max: number) => <div class="h-1.5 rounded-full bg-c1 overflow-hidden"><div class={`h-full ${v / max > 0.9 ? "bg-red" : "bg-acc"}`} style={{ width: `${Math.min(100, (v / max) * 100)}%` }} /></div>;
-  return (
-    <Sheet onClose={onClose} title="Storage">
-      <div class="px-3 pb-3 grid gap-3">
-        <div class="grid gap-1"><div class="flex justify-between gap-3 text-[13px]"><span>Google Drive</span><span class="num">{sp ? `${fmtBytes(sp.usage)}${sp.limit ? ` of ${fmtBytes(sp.limit)}` : ""}` : err ? "unavailable" : "…"}</span></div>
-          {sp?.limit ? bar(sp.usage, sp.limit) : null}
-          <span class="t-meta">{err || `Shared with Gmail and Docs on the same account. Uploads stop ${fmtBytes(LIMITS.driveReserve)} before it is full.`}</span></div>
-        <div class="grid gap-1"><div class="flex justify-between gap-3 text-[13px]"><span>Previews (Supabase)</span><span class="num">{fmtBytes(pv)} of {fmtBytes(LIMITS.previewBytes)}</span></div>{bar(pv, LIMITS.previewBytes)}</div>
-        {writable && <div class="grid gap-2"><div><Button variant="outline" disabled={busy} onClick={async () => { setBusy(true); setRes(null); setRes(await checkDrive().catch((e) => [{ step: "Check", ok: false, note: (e as Error).message }])); setBusy(false); load(); }}>{busy ? "Checking…" : "Check Google Drive"}</Button></div>
-          {res && <ul class="grid gap-1">{res.map((c) => <li key={c.step} class="text-[12.5px] break-words"><b class={c.ok ? "text-grn" : "text-red"}>{c.ok ? "OK" : "Failed"}</b> · {c.step}{c.note ? <span class="text-c3"> · {c.note}</span> : null}</li>)}</ul>}</div>}
-      </div>
-    </Sheet>
-  );
-}
-
-/* ---------------------------------------------------------------- share, assign */
-function ShareModal({ ds, onClose }: { ds: NxDesign[]; onClose: (done?: boolean) => void }) {
-  const people = usersSig.value.filter((u) => u.active && u.id !== me.value?.id);
-  const [to, setTo] = useState<string[]>([]), [note, setNote] = useState("");
-  return (
-    <Sheet onClose={() => onClose()} title={`Share ${ds.length} design${ds.length > 1 ? "s" : ""}`} footer={<><Button variant="outline" onClick={() => onClose()}>Cancel</Button><Button icon="share" disabled={!to.length} onClick={() => { shareDesigns(ds.map((d) => d.id), to, note); onClose(true); }}>{to.length ? `Share with ${to.length}` : "Choose people"}</Button></>}>
-      <p class="t-meta mb-2">They see the cards under “Shared with me”. Nothing is copied.</p>
-      <div class="grid gap-1">{people.map((u) => { const on = to.includes(u.id);
-        return <button type="button" key={u.id} aria-pressed={on} onClick={() => setTo(on ? to.filter((x) => x !== u.id) : [...to, u.id])} class={`flex items-center gap-3 rounded-xl px-2 py-2 text-left cursor-pointer !min-h-0 ${on ? "bg-c1" : ""}`}>
-          <span class="w-8 h-8 rounded-full bg-avatar flex items-center justify-center text-[13px] font-semibold shrink-0">{u.name[0]}</span><span class="min-w-0 flex-1"><b class="block text-[13px] break-words">{u.name}</b><span class="t-meta">{u.job || u.role}</span></span>
-          <span class={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-c4 text-c0" : "border border-c2/50"}`}>{on && <Icon name="check" size={12} />}</span></button>; })}
-        {!people.length && <p class="t-meta">There is nobody else on the team yet. Add people in Settings → Team.</p>}</div>
-      <div class="mt-3"><Field label="Note"><input value={note} placeholder="Optional" onInput={(e) => setNote((e.target as HTMLInputElement).value)} class={inputCls} /></Field></div>
-    </Sheet>
-  );
-}
 function AssignModal({ ds, onClose }: { ds: NxDesign[]; onClose: (done?: boolean) => void }) {
   const orders = assignable(), [q, setQ] = useState(""), [pick, setPick] = useState(""), [size, setSize] = useState<Record<string, NxSize | undefined>>({});
   const shown = orders.filter((o) => !q.trim() || (o.no + " " + o.customer).toLowerCase().includes(q.trim().toLowerCase()));
