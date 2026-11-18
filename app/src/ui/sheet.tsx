@@ -7,6 +7,10 @@ import { Icon } from "./icon";
 /** True below 768px. Shared by every adaptive component so layout and sheet logic never disagree. */
 const mq = typeof matchMedia === "function" ? matchMedia("(max-width: 767.98px)") : null;
 export const isPhone = signal(!!mq?.matches);
+/** True from 1024px: room for a side column next to the content. Tablets and phones use windows instead. */
+const mqd = typeof matchMedia === "function" ? matchMedia("(min-width: 1024px)") : null;
+export const isDesktop = signal(!!mqd?.matches);
+mqd?.addEventListener("change", (e) => (isDesktop.value = e.matches));
 mq?.addEventListener("change", (e) => (isPhone.value = e.matches));
 
 /** Pixels the virtual keyboard covers at the bottom of the layout viewport. */

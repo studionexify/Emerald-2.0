@@ -2,42 +2,19 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { lazy } from "../router";
-import { ask, Button, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
+import { ask, Button, Empty, isDesktop, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, deleteDesign, downloadFile, draftOf, draftReady, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, markSeen, materialUsage,
-  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, previewUrl, saveDraft, sharedWithMe, sweepOrphans, syncTrash, unseenShares,
+  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, draftOf, draftReady, fmtBytes, incomplete, priceUndoSig, setPriceUndo, markSeen,
+  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, saveDraft, sharedWithMe, sweepOrphans, syncTrash, unseenShares,
   type Draft, type DraftItem, type NxDesign, type NxSize, type Progress,
 } from "../data/nexder";
 import { uid } from "../data/store";
-import { isQueued, uploadsSig } from "../data/nexder-queue";
+import { uploadsSig } from "../data/nexder-queue";
 import type { Use, WorkbenchProps } from "./nexcal/Workbench";
+import { chipCls, kind, mb, mins, Ph, Pic, usePreview } from "./nexder-ui";
 
 /* ---------------------------------------------------------------- small helpers */
-/** Object URL of one photo's small preview ("" until it arrives). */
-function usePreview(id?: string, ref?: { current: Element | null }): string {
-  const [u, setU] = useState(""), [near, setNear] = useState(!ref);
-  /* a card far below the fold fetches nothing until it is about to scroll into view */
-  useEffect(() => {
-    if (near || !ref?.current) return;
-    if (typeof IntersectionObserver !== "function") { setNear(true); return; }
-    const io = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: "400px" });
-    io.observe(ref.current); return () => io.disconnect();
-  }, [near, id]);
-  useEffect(() => { let live = true; setU(""); if (id && near) previewUrl(id).then((x) => live && setU(x)); return () => { live = false; }; }, [id, near]);
-  return u;
-}
-const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-const kind = (name: string) => (/\.([A-Za-z0-9]{1,5})$/.exec(name)?.[1] ?? "file").toUpperCase();
-const g = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(2)} kg` : `${Math.round(n)} g`);
-const chipCls = "inline-flex items-center rounded-full px-2 h-5 text-[11px] font-semibold whitespace-nowrap";
-const Ph = () => <span class="w-full h-full flex items-center justify-center text-c2"><Icon name="image" size={22} /></span>;
-
-/** A stored photo's small preview, or a placeholder. */
-function Pic({ id, alt, class: cls = "" }: { id?: string; alt: string; class?: string }) {
-  const box = useRef<HTMLSpanElement>(null), src = usePreview(id, box);
-  return <span ref={box} class="block w-full h-full">{src ? <img src={src} alt={alt} loading="lazy" decoding="async" class={`w-full h-full object-cover ${cls}`} /> : <Ph />}</span>;
-}
 function Local({ item, alt }: { item: DraftItem; alt: string }) {
   const url = useMemo(() => (item.file ? URL.createObjectURL(item.file) : ""), [item.file]);
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
@@ -87,6 +64,7 @@ const AssignCats = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>((
 const BulkDialog = lazy<{ kind: "price" | "dup" | "del"; ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.BulkDialog));
 const csv = (ds: NxDesign[]) => import("../data/nexder-cats").then((m) => m.exportCsv(ds));
 const ManageCats = lazy<{ onClose: () => void }>(() => import("./NexderCats").then((m) => m.ManageCats));
+const ViewPanel = lazy<{ d: NxDesign; writable: boolean; inline?: boolean; hidden?: boolean; onClose: () => void; onEdit: () => void; onShare: () => void; onAssign: () => void }>(() => import("./NexderView").then((m) => m.ViewPanel));
 const StorageSheet = lazy<{ writable: boolean; onClose: () => void }>(() => import("./NexderCats").then((m) => m.StorageSheet));
 const ShareModal = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.ShareModal));
 
@@ -124,7 +102,6 @@ const order = (k: SortKey, dir: 1 | -1) => (a: NxDesign, b: NxDesign) => {
   const r = typeof x === "string" ? x.localeCompare(y as string, undefined, { numeric: true }) : x - (y as number);
   return dir * r || a.no.localeCompare(b.no);
 };
-const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`);
 /** The grid template for the chosen columns: thumbnail, number, name (the one that grows), then the rest. */
 const tpl = (cols: ColKey[]) => ["44px", ...(cols.includes("no") ? ["64px"] : []), "minmax(0,2fr)", ...COLDEFS.filter((c) => c.k !== "no" && cols.includes(c.k)).map((c) => c.w)].join(" ");
 function Cell({ d, k }: { d: NxDesign; k: ColKey }) {
@@ -180,6 +157,10 @@ export default function Nexder() {
   const fold = (id: string) => setPrefs({ shut: pf.shut.includes(id) ? pf.shut.filter((x) => x !== id) : [...pf.shut, id] });
   const allIds = [...new Set(groups.filter((x) => !shutNow(x.c?.id ?? "none")).flatMap((x) => x.ds.map((d) => d.id)))], everyShown = allIds.length > 0 && allIds.every((id) => sel.includes(id));
 
+  /* desktop: the design opens in the side column, so several can be compared by clicking one after another; tablet and phone: a centred window */
+  const side = isDesktop.value && panel?.k === "view" && open ? (
+    <ViewPanel inline d={open} writable={writable} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
+      onShare={() => { setSel([open.id]); setDlg("share"); }} onAssign={() => { setSel([open.id]); setDlg("assign"); }} />) : null;
   const windowOpen = panel && (panel.k === "new" || panel.k === "edit");
 
   return (
@@ -216,7 +197,7 @@ export default function Nexder() {
           <button type="button" onClick={() => setPrefs({ shut: [] })} disabled={!anyShut} class="h-8 px-3 !min-h-0 rounded-full border border-line bg-c0 text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-default">Expand all</button></span>}
         {shared.length > 0 && <Seg value={view} on={setView} items={[["all", "All"], ["shared", `Shared with me${unseen ? ` · ${unseen} new` : ""}`]]} />}
       </>}
-      >
+      detail={isDesktop.value ? side : undefined}>
       {view === "shared" && shared.length > 0 && <div class="grid gap-1.5">{shared.map((s) => (
         <p key={s.id} class="rounded-xl bg-c0 px-3 py-2 text-[13px] break-words"><b>{usersSig.value.find((u) => u.id === s.by)?.name ?? "Someone"}</b> shared {s.designIds.length} design{s.designIds.length > 1 ? "s" : ""} · {shortDate(s.at)}{s.note ? <span class="text-c3"> · “{s.note}”</span> : null}</p>))}</div>}
       {writable && !priceUndoSig.value.length && undoNote && <p role="status" class="rounded-xl bg-c0 px-3 py-2 text-[13px]">Price change undone: {undoNote}</p>}
@@ -229,14 +210,14 @@ export default function Nexder() {
       {!designs.length
         ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="No designs yet" action={writable ? <Button icon="plus" class="mt-2" onClick={() => setPanel({ k: "new" })}>New design</Button> : undefined} /></div>
         : !list.length ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="Nothing matches" action={<button class="underline text-[13px]" onClick={() => { setQ(""); setCat(""); setView("all"); }}>Clear filters</button>} /></div>
-        : <div class="grid gap-6">
+        : <div class="grid gap-6 grid-cols-[minmax(0,1fr)]">
           {pf.layout === "list" && <div role="row" style={{ "--cols": tpl(pf.cols) } as never} class="hidden md:grid md:[grid-template-columns:var(--cols)] items-center gap-3 px-3 -mb-3 text-[12px] font-semibold text-c3">
             <span />
             {[...(pf.cols.includes("no") ? [COLDEFS[0]] : []), { k: "name" as const, label: "Name", w: "", sort: "name" as SortKey, right: false }, ...COLDEFS.filter((c) => c.k !== "no" && pf.cols.includes(c.k))].map((c) => (
               <button key={c.k} type="button" onClick={() => sortBy(c.sort)} aria-label={`Sort by ${c.label}`} class={`!min-h-0 h-7 inline-flex items-center gap-1 cursor-pointer hover:text-c4 ${c.right ? "justify-end" : ""} ${pf.sort === c.sort ? "text-c4" : ""}`}>{c.label}{pf.sort === c.sort && <span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={11} /></span>}</button>))}
           </div>}
           {groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)), gid = c?.id ?? "none", closed = shutNow(gid); return (
-          <section key={c?.id ?? "none"} aria-label={c?.name ?? "Uncategorized"} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
+          <section key={c?.id ?? "none"} aria-label={c?.name ?? "Uncategorized"} class="min-w-0" style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
             <div class="flex items-center gap-2 pb-2 border-b border-line">
               {foldable
                 ? <button type="button" onClick={() => fold(gid)} aria-expanded={!closed} aria-label={`${closed ? "Expand" : "Collapse"} ${c?.name ?? "Uncategorized"}`} class="!min-h-0 min-w-0 inline-flex items-center gap-2 cursor-pointer text-left"><span class={`inline-flex text-c3 transition-transform ${closed ? "" : "rotate-90"}`}><Icon name="right" size={14} /></span><b class="text-[14px] tracking-[0.04em] truncate">{c?.name ?? "Uncategorized"}</b><span class="t-meta shrink-0">{ds.length} design{ds.length > 1 ? "s" : ""}</span></button>
@@ -288,7 +269,7 @@ export default function Nexder() {
             </>}
           </div>
         </div>)}
-      {panel?.k === "view" && open && <ViewPanel d={open} writable={writable} hidden={dlg === "share" || dlg === "assign"} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
+      {!isDesktop.value && panel?.k === "view" && open && <ViewPanel d={open} writable={writable} hidden={dlg === "share" || dlg === "assign"} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
         onShare={() => { setSel([open.id]); setDlg("share"); }} onAssign={() => { setSel([open.id]); setDlg("assign"); }} />}
       {dlg === "storage" && <StorageSheet writable={can("nexder", "full")} onClose={() => setDlg(null)} />}
       {windowOpen && <DesignWindow key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />}
@@ -300,82 +281,6 @@ export default function Nexder() {
       {dlg === "assign" && <AssignModal ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
     </Page>
   );
-}
-
-/* ---------------------------------------------------------------- view panel */
-function ViewPanel({ d, writable, hidden, onClose, onEdit, onShare, onAssign }: { d: NxDesign; writable: boolean; /** another dialog (share, assign) is open on top */ hidden?: boolean; onClose: () => void; onEdit: () => void; onShare: () => void; onAssign: () => void }) {
-  const [i, setI] = useState(0), [busy, setBusy] = useState(""), [missing, setMissing] = useState(""), asking = useRef(false);
-  const ph = d.photos[Math.min(i, d.photos.length - 1)];
-  const usage = materialUsage(d.id), total = usage.reduce((a, u) => a + u.total, 0), link = d.source ? cleanLink(d.source) : null;
-  useEffect(() => { setI(0); setMissing(""); }, [d.id]);
-  const get = async (f: { id: string; name: string; drive?: string }) => { setBusy(f.id); setMissing(""); setMissing((await downloadFile(f)) ?? ""); setBusy(""); };
-  const all = async () => { for (const f of d.files) { await get(f); await new Promise((r) => setTimeout(r, 600)); } };
-  /* the browser asks where to save first (needs the click), then the photos are fetched from Drive one by one into the zip */
-  const zipPhotos = async () => {
-    const sink = await openSink(`${d.name} photos.zip`); if (!sink) return;
-    setBusy("zip"); setMissing("");
-    try { const r = await buildPack([d], { images: "all" }, sink, () => {}); if (r.missing) setMissing(`${r.missing} photo${r.missing > 1 ? "s" : ""} could not be fetched from Google Drive.`); } catch (e) { setMissing((e as Error).message); }
-    setBusy("");
-  };
-  const del = async () => { asking.current = true; const yes = await ask(`Delete “${d.name}”? It goes to the Bin, and its files to Google Drive's trash until the Bin is emptied. ${usedIn(d).length ? `It is used in ${usedIn(d).join(", ")}, so the number ${d.no} is retired: it stays blank and is never given to another design.` : `It is not used anywhere, so the number ${d.no} goes to the next design added.`}`, { ok: "Delete design" }); asking.current = false; if (yes) { const e = await deleteDesign(d); if (e) setMissing(e); else onClose(); } };
-  const pend = d.photos.filter((p) => p.pend && !p.drive);
-  return (
-    <Sheet win open={!hidden} onClose={() => { if (!asking.current) onClose(); }} title={<span title={d.name}>{d.name}</span>}
-      footer={<div class="flex-1 min-w-0 !h-auto flex gap-2 [&>*]:flex-1 [&_button]:!h-9 pb-1">
-        <Button variant="outline" icon="share" onClick={onShare}>Share</Button>
-        {writable && <Button variant="outline" icon="edit" onClick={onEdit}>Edit</Button>}
-        {writable && <Button icon="link" onClick={onAssign}>Assign to order</Button>}</div>}>
-      <div class="md:h-full grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-x-5 gap-y-3 px-4 pb-3 md:pb-2">
-        {/* photos: one big picture, small ones underneath */}
-        <div class="min-w-0 md:min-h-0 flex flex-col gap-2">
-          <div class="aspect-square md:aspect-auto md:flex-1 md:min-h-0 rounded-2xl overflow-hidden bg-c1"><Pic id={ph?.id} alt={d.name} class="!object-contain" /></div>
-          {d.photos.length > 1 && <div class="flex gap-1.5 overflow-x-auto shrink-0">{d.photos.map((p, k) => (
-            <button key={p.id} type="button" onClick={() => setI(k)} aria-label={`Photo ${k + 1}`} aria-pressed={k === i} class={`w-11 h-11 !min-h-0 shrink-0 rounded-lg overflow-hidden bg-c1 p-0 cursor-pointer ${k === i ? "ring-2 ring-c4" : ""}`}><Pic id={p.id} alt="" /></button>))}</div>}
-        </div>
-        {/* details */}
-        <div class="min-w-0 md:min-h-0 md:overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
-          <div class="flex items-end gap-3 flex-wrap shrink-0"><div><div class="t-meta">Number</div><div class="num text-[22px] font-semibold leading-none mt-0.5">{d.no}</div></div>
-            <div class="ml-auto flex flex-wrap justify-end gap-1">{catsOf(d).length ? catsOf(d).map((id) => <span key={id} class={`${chipCls} bg-c1 text-c3`}>{catName(id)}</span>) : <span class="t-meta">No category</span>}</div></div>
-          {(d.price || d.designer || link || d.sizes?.length) ? <div class="grid gap-1 rounded-xl bg-c1/50 px-3 py-2 shrink-0">
-            {d.price ? <div class="flex justify-between gap-3"><span class="text-c3">Price</span><b class="num">{inr(d.price)}</b></div> : null}
-            {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3 min-w-0">{s.label}{s.mm ? ` · ${s.mm} mm` : ""} <span class={`text-[11px] font-semibold ${s.sliced ? "text-grn" : "text-amb"}`}>{s.sliced ? "sliced" : "est."}</span></span><b class="num shrink-0">{s.g} g{s.min ? ` · ${mins(s.min)}` : ""}</b></div>)}
-            {d.designer && <div class="flex justify-between gap-3"><span class="text-c3">Designer</span><b class="min-w-0 truncate text-right" title={d.designer}>{d.designer}</b></div>}
-            {link && <div class="flex justify-between gap-3"><span class="text-c3">Original page</span><a href={link} target="_blank" rel="noopener noreferrer" class="min-w-0 truncate text-right underline underline-offset-2 font-semibold">{new URL(link).hostname.replace(/^www\./, "")} ↗</a></div>}</div> : null}
-          {d.desc && <p class="text-c3 line-clamp-2 break-words shrink-0" title={d.desc}>{d.desc}</p>}
-          <div class="shrink-0">
-            <div class="flex items-center justify-between mb-1"><span class="t-section">Files</span><span class="flex gap-3">
-              {writable && d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}
-              {writable && d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing…" : "Photos (zip)"}</button>}</span></div>
-            {d.files.length ? <div class="grid gap-1 max-h-[7.5rem] overflow-y-auto">{d.files.map((f) => (
-              <div key={f.id} class="flex items-center gap-2 rounded-lg bg-c1/60 px-2.5 py-1.5"><span class="text-c3"><Icon name="file" size={14} /></span>
-                <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium truncate" title={f.name}>{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "in Google Drive" : isQueued(d.id, f.id) ? "uploading…" : f.pend ? "not uploaded yet" : "not in Drive"}</span></span>
-                {writable && f.pend && !f.drive ? (isQueued(d.id, f.id) ? null : <Reup d={d} kind="file" id={f.id} />) : writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
-              : <p class="t-meta">No design file. Photos alone are fine.{writable ? " Edit the design to add one." : ""}</p>}
-            {writable && pend.length > 0 && <div class="mt-1 grid gap-1">{pend.map((p) => (
-              <div key={p.id} class="flex items-center gap-2 rounded-lg bg-amb-bg/50 px-2.5 py-1.5"><span class="text-c3"><Icon name="image" size={14} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium truncate" title={p.name}>{p.name}</b><span class="t-meta">{isQueued(d.id, p.id) ? "original uploading…" : "original photo not uploaded yet"}</span></span>
-                {!isQueued(d.id, p.id) && <Reup d={d} kind="photo" id={p.id} />}</div>))}</div>}
-            {!writable && d.files.length > 0 && <p class="t-meta mt-1">Your role can view designs but not download files.</p>}
-            {missing && <p role="status" class="t-meta mt-1 text-amb">{missing}</p>}
-          </div>
-          <details class="rounded-xl border border-line bg-c0 min-w-0 shrink-0">
-            <summary class="flex items-center gap-2 px-3 py-2"><span class="font-semibold">Material in live orders</span><span class="t-meta min-w-0 flex-1 text-right truncate">{usage.length ? `${usage.length} order${usage.length > 1 ? "s" : ""} · ${g(total)} to print` : "none"}</span><span class="chev text-c3 inline-flex"><Icon name="right" size={13} /></span></summary>
-            <div class="border-t border-line p-2 grid gap-1.5 max-h-40 overflow-y-auto">{usage.length ? usage.map((u) => (
-              <div key={u.orderNo} class="rounded-lg bg-c1/60 px-3 py-2"><div class="flex items-baseline gap-2"><b class="min-w-0 flex-1 break-words">{u.orderNo}<span class="t-meta font-normal"> · {u.customer || "In-house"}</span></b><b class="num">{u.gEach ? `${u.estimated ? "~" : ""}${g(u.total)}` : "no grams"}</b></div>
-                <div class="t-meta mt-0.5 break-words">{u.pending} pcs left{u.heightMm ? ` · ${u.heightMm} mm` : ""}{u.gEach ? ` · ${u.estimated ? "~" : ""}${Math.round(u.gEach)} g each` : ""}{u.colours.length ? ` · ${u.colours.join(", ")}` : ""}</div></div>))
-              : <p class="t-meta">No live order uses this design. Assign it to an order and the grams still to print show here.</p>}</div>
-          </details>
-          <div class="mt-auto flex items-center justify-between gap-3 pt-1 shrink-0"><span class="t-meta">Added {shortDate(d.created)} by {d.by}</span>
-            {writable && <button type="button" onClick={del} class="text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}</div>
-        </div>
-      </div>
-    </Sheet>
-  );
-}
-
-/** Pick the original again for something that never finished uploading. */
-function Reup({ d, kind, id }: { d: NxDesign; kind: "photo" | "file"; id: string }) {
-  return <label class="h-7 px-2.5 rounded-full border border-line bg-c0 text-[12px] font-semibold inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"><Icon name="in" size={12} /> Upload again
-    <input type="file" class="sr-only" accept={kind === "photo" ? "image/*" : undefined} onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) reupload(d, kind, id, f); (e.target as HTMLInputElement).value = ""; }} /></label>;
 }
 
 /* ---------------------------------------------------------------- the design window: form on the left, the whole calculator on the right */
