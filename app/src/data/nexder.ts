@@ -67,7 +67,7 @@ export const nexderTrashSig = persisted<NxTrash[]>("nexderTrash", []);
 registerBin("Design", nexderDesignsSig, (row: NxDesign, live: NxDesign[]) => {
   const { freed, ...rest } = row;
   if (!freed || !live.some((x) => x.no === row.no)) return rest;
-  const c = nexderCatsSig.value.find((x) => x.id === row.catId), n = c ? freeSeq(c) : null;
+  const c = catOf(row), n = c ? freeSeq(c) : null;
   if (!c || !n) return rest;
   nexderCatsSig.value = nexderCatsSig.value.map((x) => (x.id === c.id ? { ...x, last: Math.max(x.last, n) } : x));
   return { ...rest, no: noOf(c, n) };
@@ -75,7 +75,8 @@ registerBin("Design", nexderDesignsSig, (row: NxDesign, live: NxDesign[]) => {
 /* The first build kept a cover thumbnail inside each record; records must stay small (they live on every device), so drop it. */
 if (nexderDesignsSig.value.some((d) => "cover" in d)) nexderDesignsSig.value = nexderDesignsSig.value.map((d) => { const { cover: _c, ...rest } = d as NxDesign & { cover?: string }; return rest; });
 
-export const catOf = (d: NxDesign) => nexderCatsSig.value.find((c) => c.id === d.catId);
+/** The category whose number block a design's number belongs to. Falls back to the block itself when the stored id is stale. */
+export const catOf = (d: NxDesign) => nexderCatsSig.value.find((c) => c.id === d.catId) ?? nexderCatsSig.value.find((c) => c.code === Math.floor(Number(d.no) / 1000));
 /** Ids of the categories a design is listed in (only ones that still exist). */
 export const catsOf = (d: NxDesign, withArchived = false): string[] => { const all = nexderCatsSig.value; return (d.cats ?? [d.catId]).filter((id) => all.some((c) => c.id === id && (withArchived || !c.archived))); };
 
@@ -164,11 +165,13 @@ async function makePreview(f: File): Promise<Blob> {
  * (see nexder-queue). If the previews or the record fail, what was made is deleted again.
  */
 export async function saveDraft(d: Draft, catId: string, listed: string[] | undefined, onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<NxDesign | string> {
-  const cat = nexderCatsSig.value.find((c) => c.id === catId); if (!cat) return "Choose a category";
-  if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
   const prev = d.editId ? nexderDesignsSig.value.find((x) => x.id === d.editId) : undefined;
-  let no = prev?.no, last = cat.last;
-  if (!prev || prev.catId !== catId) { const n = freeSeq(cat); if (!n) return `${cat.name} is full (999 designs)`; last = Math.max(cat.last, n); no = noOf(cat, n); }
+  /* An edit never renumbers: the number stays with the block it came from, even if that category was removed or archived. `listed` says where the design shows. */
+  if (prev) catId = prev.catId;
+  const cat = nexderCatsSig.value.find((c) => c.id === catId); if (!prev && !cat) return "Choose a category";
+  if (!nexderReady) return "Nexder needs cloud sync, because it keeps files in Google Drive";
+  let no = prev?.no, last = cat?.last ?? 0;
+  if (!prev) { const n = freeSeq(cat!); if (!n) return `${cat!.name} is full (999 designs)`; last = Math.max(cat!.last, n); no = noOf(cat!, n); }
   const b = await backend();
   const addP = d.photos.filter((p) => p.file), addF = d.files.filter((f) => f.file), bytes = newBytes(d);
   /* free space, before a single byte is sent */
@@ -181,7 +184,7 @@ export async function saveDraft(d: Draft, catId: string, listed: string[] | unde
   const made = { previews: [] as string[] };
   let folder = prev?.folder, newFolder = false;
   try {
-    if (!folder) { folder = await b.folder(cat.name, `${no} ${d.name.trim()}`.slice(0, 120)); newFolder = true; }
+    if (!folder) { folder = await b.folder(cat?.name ?? "Uncategorized", `${no} ${d.name.trim()}`.slice(0, 120)); newFolder = true; }
     const psize: Record<string, number> = {};
     /* only the small previews are made before the window closes; the originals go up in the background afterwards */
     for (const [k, p] of addP.entries()) { onProgress({ label: "Previews", sent: k, total: addP.length }); if (signal?.aborted) throw new Error("cancelled"); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
@@ -192,7 +195,7 @@ export async function saveDraft(d: Draft, catId: string, listed: string[] | unde
       files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive ?? prev?.files.find((x) => x.id === f.id)?.drive, ...(f.file || (f.pend && !f.drive && !prev?.files.find((x) => x.id === f.id)?.drive) ? { pend: true } : {}) })),
       created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",
     };
-    if (!prev || prev.catId !== catId) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === cat.id ? { ...c, last } : c));
+    if (!prev && cat) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === cat.id ? { ...c, last } : c));
     nexderDesignsSig.value = prev ? nexderDesignsSig.value.map((x) => (x.id === row.id ? row : x)) : [row, ...nexderDesignsSig.value];
     if (row.designer && !nexderDesignersSig.value.some((x) => x.name.toLowerCase() === row.designer!.toLowerCase())) nexderDesignersSig.value = [...nexderDesignersSig.value, { id: uid(), name: row.designer }];
     log(prev ? "Edited design" : "Added design", `${row.name} · ${row.no}`, "order");
@@ -244,7 +247,8 @@ export async function deleteDesign(d: NxDesign): Promise<string | null> {
   const used = usedIn(d).length > 0;
   try { if (d.folder) { await (await backend()).trash(d.folder, true); nexderTrashSig.value = [...nexderTrashSig.value, { id: d.id, folder: d.folder, photoIds: d.photos.map((p) => p.id) }]; } }
   catch (e) { return `Could not move the files to Drive's trash: ${(e as Error).message}`; }
-  if (used) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === d.catId && !(c.retired ?? []).includes(d.no) ? { ...c, retired: [...(c.retired ?? []), d.no] } : c));
+  const home = catOf(d);
+  if (used && home) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === home.id && !(c.retired ?? []).includes(d.no) ? { ...c, retired: [...(c.retired ?? []), d.no] } : c));
   toBin("Design", used ? d : { ...d, freed: true }, `${d.name} · ${d.no}${used ? " (number retired)" : ""}`, me.value?.name ?? "You");
   log("Deleted design", `${d.name} · ${d.no}${used ? " · number retired" : " · number freed"}`);
   return null;
@@ -312,7 +316,7 @@ export function packPlan(ds: NxDesign[], o: PackOpts) {
   return ds.map((d) => {
     const base = clean(d.name), name = (seen.get(base.toLowerCase()) ?? 0) > 1 ? `${base} ${d.no}` : base;
     const photos = o.images === "all" ? d.photos : o.images === "first3" ? d.photos.slice(0, 3) : d.photos.slice(0, 1);
-    return { d, cat: clean(catName(d.catId)), name, photos };
+    return { d, cat: clean(catName(catsOf(d, true)[0] ?? catOf(d)?.id ?? "")), name, photos };
   });
 }
 export const packBytes = (ds: NxDesign[], o: PackOpts) => packPlan(ds, o).reduce((a, p) => a + p.photos.reduce((s, x) => s + x.size, 0), 0);

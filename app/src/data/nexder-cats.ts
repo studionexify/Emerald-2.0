@@ -2,7 +2,7 @@
 import { log } from "./index";
 import { binSig } from "./inventory";
 import { today, uid } from "./store";
-import { addCategory, catsOf, draftOf, nexderCatsSig, nexderDesignsSig, priceUndoSig, saveDraft, setPriceUndo, type NxDesign, type PriceUndo } from "./nexder";
+import { addCategory, catOf, catsOf, draftOf, nexderCatsSig, nexderDesignsSig, priceUndoSig, saveDraft, setPriceUndo, type NxDesign, type PriceUndo } from "./nexder";
 
 const memberOf = (d: NxDesign, ids: string[]) => { const same = ids.length === 1 && ids[0] === d.catId; return same ? { ...d, cats: undefined } : { ...d, cats: ids }; };
 /** Bulk: lists every design in `ids` under the categories in `add`, and takes it out of those in `drop`. Returns how many designs changed. */
@@ -85,7 +85,10 @@ export async function duplicateDesigns(ds: NxDesign[]): Promise<string[]> {
   const errs: string[] = [];
   for (const d of ds) {
     const dr = { ...draftOf(d), key: uid(), editId: undefined, name: `${d.name} copy`, photos: [], files: [] };
-    const r = await saveDraft(dr, d.catId, d.cats ? d.cats.filter((c) => nexderCatsSig.value.some((x) => x.id === c)) : undefined, () => {});
+    /* a copy is numbered from the same block; when the stored category is gone, from the first one it is listed in */
+    const home = catOf(d) ?? nexderCatsSig.value.find((c) => c.id === catsOf(d, true)[0]);
+    if (!home) { errs.push(`${d.name}: it has no category to number the copy from. Put it in a category first.`); continue; }
+    const r = await saveDraft(dr, home.id, d.cats ? d.cats.filter((c) => nexderCatsSig.value.some((x) => x.id === c)) : undefined, () => {});
     if (typeof r === "string") errs.push(`${d.name}: ${r}`);
   }
   return errs;
