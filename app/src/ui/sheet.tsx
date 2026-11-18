@@ -1,7 +1,7 @@
 /** Bottom sheets (phone): swipe-to-dismiss panel anchored to the bottom, lifted above the on-screen keyboard. */
 import type { ComponentChildren } from "preact";
 import { signal } from "@preact/signals";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Icon } from "./icon";
 
 /** True below 768px. Shared by every adaptive component so layout and sheet logic never disagree. */
@@ -18,7 +18,8 @@ vv?.addEventListener("scroll", syncKb);
 
 const FOCUSABLE = "a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex='-1'])";
 
-export function Sheet({ open = true, onClose, title, children, footer, full, wide, huge, xl }: {
+export function Sheet({ open = true, onClose, title, children, footer, full, wide, huge, xl, win }: {
+  /** A compact, fixed-size window centred on desktop (a record at a glance). Fills the screen on a phone. Its body lays itself out and does not scroll on desktop. */ win?: boolean;
   /** A working window that covers most of a desktop screen (calculator beside a form). Its body scrolls inside its own panes. */ xl?: boolean;
   /** Big editors: as wide as their content needs (up to 1100px), never wider: big editors. */ huge?: boolean;
   /** Wide, fixed-height dialog on desktop (settings). */ wide?: boolean;
@@ -37,7 +38,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
     const p = panel.current!;
     (p.querySelector<HTMLElement>("[autofocus]") ?? p).focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); closeNow.current(); }
+      if (e.key === "Escape") { if (document.querySelector("[role=alertdialog]")) return; /* a confirmation is on top: it takes the key */ e.stopPropagation(); closeNow.current(); }
       if (e.key !== "Tab") return;
       const f = [...p.querySelectorAll<HTMLElement>(FOCUSABLE)];
       if (!f.length) return;
@@ -53,7 +54,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
 
   /* Drag from the handle/header always; from the body only when it is scrolled to the top. */
   const down = (e: PointerEvent) => {
-    if (xl && !(e.target as Element).closest("[data-sheet-grab]")) return; // a big working window is closed from its handle or its X, never by dragging inside it
+    if ((xl || win) && !(e.target as Element).closest("[data-sheet-grab]")) return; // a big working window is closed from its handle or its X, never by dragging inside it
     const body = (e.target as Element).closest("[data-sheet-body]") as HTMLElement | null;
     if (body && body.scrollTop > 0) return;
     if ((e.target as Element).closest("input,select,textarea,button,a,summary,label,[role=button]")) return; // pointer capture would swallow the click of these
@@ -70,11 +71,11 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
   };
 
   return (
-    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide || huge ? "md:justify-center" : ""} ${xl ? "md:items-center md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
+    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide || huge ? "md:justify-center" : ""} ${xl || win ? "md:items-center md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
       <div class="absolute inset-0 bg-black/40 sheet-fade" onClick={onClose} aria-hidden="true" />
       <div ref={panel} role="dialog" aria-modal="true" tabIndex={-1} aria-label={typeof title === "string" ? title : undefined}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 ${huge || xl ? "" : "md:w-full"} ${xl ? "md:w-[min(1880px,99vw)] md:h-[min(1060px,98dvh)] h-[94dvh] max-h-[98dvh] md:mb-0" : ""} ${huge ? "md:w-fit md:min-w-[min(560px,90vw)] md:max-w-[min(1100px,90vw)] md:max-h-[90dvh] max-h-[94dvh]" : wide ? "md:max-w-2xl md:max-h-[min(680px,84dvh)] max-h-[88dvh]" : xl ? "" : "md:max-w-lg"} md:mx-auto ${wide || huge || xl ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge || xl ? "" : "max-h-[92dvh]"}`}
+        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 ${huge || xl || win ? "" : "md:w-full"} ${win ? "md:w-[min(900px,94vw)] md:h-[min(620px,92dvh)] h-[94dvh] max-h-[98dvh] md:rounded-2xl" : ""} ${xl ? "md:w-[min(1880px,99vw)] md:h-[min(1060px,98dvh)] h-[94dvh] max-h-[98dvh] md:mb-0" : ""} ${huge ? "md:w-fit md:min-w-[min(560px,90vw)] md:max-w-[min(1100px,90vw)] md:max-h-[90dvh] max-h-[94dvh]" : wide ? "md:max-w-2xl md:max-h-[min(680px,84dvh)] max-h-[88dvh]" : xl || win ? "" : "md:max-w-lg"} md:mx-auto ${wide || huge || xl || win ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge || xl || win ? "" : "max-h-[92dvh]"}`}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dy ? "none" : undefined, touchAction: "pan-y" }}>
         <div data-sheet-grab class="shrink-0 pt-2 pb-1 flex justify-center cursor-grab" aria-hidden="true"><span class="w-9 h-1.5 rounded-full bg-c1" /></div>
         {title && (
@@ -83,7 +84,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
             <button onClick={onClose} aria-label="Close" class="w-11 h-11 -mr-2 rounded-full flex items-center justify-center cursor-pointer"><span class="w-7 h-7 rounded-full bg-c1 flex items-center justify-center"><Icon name="close" size={14} /></span></button>
           </div>
         )}
-        <div data-sheet-body class={`flex-1 min-h-0 ${xl ? "overflow-hidden" : "overflow-y-auto overscroll-contain px-4 pb-4"}`}>{children}</div>
+        <div data-sheet-body class={`flex-1 min-h-0 ${xl ? "overflow-hidden" : win ? "overflow-y-auto md:overflow-hidden overscroll-contain" : "overflow-y-auto overscroll-contain px-4 pb-4"}`}>{children}</div>
         {footer && <div class="shrink-0 border-t border-line px-4 pt-2 flex gap-2 [&>*]:flex-1 [&_button]:h-12" style={{ paddingBottom: kb.value ? 8 : "max(8px, env(safe-area-inset-bottom))" }}>{footer}</div>}
         {!footer && <div class="shrink-0 h-[env(safe-area-inset-bottom)]" />}
       </div>
@@ -108,6 +109,12 @@ const field = (a: Ask) => a.input ? <input autofocus class="mt-2 w-full h-10 rou
 
 export function AskHost() {
   const a = asking.value;
+  /* Escape cancels the question wherever the focus is */
+  useLayoutEffect(() => {
+    if (!a) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); settle(false); } };
+    document.addEventListener("keydown", k, true); return () => document.removeEventListener("keydown", k, true);
+  }, [a]);
   if (!a) return null;
   const btns = (
     <>
