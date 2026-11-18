@@ -62,6 +62,24 @@ const Seg = <T extends string>({ value, on, items }: { value: T; on: (v: T) => v
   <div class="inline-flex rounded-full bg-c1 p-0.5 max-w-full flex-wrap">{items.map(([k, l]) => <button type="button" key={k} aria-pressed={value === k} onClick={() => on(k)} class={`h-7 px-3 !min-h-0 rounded-full text-[12px] cursor-pointer ${value === k ? "bg-c4 text-c0 font-semibold" : "text-c3 font-medium"}`}>{l}</button>)}</div>
 );
 
+/** A small drop-down panel that closes on an outside click, on Escape, and (for menus) after a choice. */
+function Pop({ label, icon, menu, children }: { label: string; icon: "more" | "rows"; menu?: boolean; children: ComponentChildren }) {
+  const r = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const off = (e: Event) => { const d = r.current; if (d?.open && !d.contains(e.target as Node)) d.open = false; };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && r.current?.open) { r.current.open = false; r.current.querySelector("summary")?.focus(); } };
+    document.addEventListener("pointerdown", off); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", off); document.removeEventListener("keydown", esc); };
+  }, []);
+  return (
+    <details ref={r} class="relative">
+      <summary class="h-8 px-3 rounded-full border border-line bg-c0 text-[13px] font-semibold inline-flex items-center gap-1.5 cursor-pointer list-none select-none"><Icon name={icon} size={13} />{label}</summary>
+      <div onClick={menu ? (e) => { if ((e.target as Element).closest("button") && r.current) r.current.open = false; } : undefined} class="absolute right-0 md:left-0 md:right-auto z-30 mt-1 min-w-52 max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-c0 shadow-xl p-2 grid gap-1.5">{children}</div>
+    </details>
+  );
+}
+const menuItem = "h-9 px-2.5 !min-h-0 rounded-lg inline-flex items-center gap-2 text-[13px] font-medium text-left cursor-pointer hover:bg-c1 w-full";
+
 /* ---------------------------------------------------------------- page */
 type Panel = null | { k: "new" } | { k: "edit"; id: string } | { k: "view"; id: string };
 type Dlg = null | "pack" | "share" | "assign" | "storage" | "cats" | "manage" | "price" | "dup" | "del";
@@ -84,9 +102,9 @@ const DEFAULT_COLS: ColKey[] = ["no", "cats", "price", "g", "min"];
 /** Card width in pixels (the picture is a square of this size). Previews are 640 px wide, so bigger would only blur. */
 const CARD_MIN = 120, CARD_MAX = 300, CARD_STEP = 20, CARD_DEFAULT = 200;
 const cardPx = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== "" ? Math.min(CARD_MAX, Math.max(CARD_MIN, Math.round(n / CARD_STEP) * CARD_STEP)) : CARD_DEFAULT; };
-type Prefs = { layout: "cards" | "list"; sort: SortKey; dir: 1 | -1; group: boolean; cols: ColKey[]; card: number };
+type Prefs = { layout: "cards" | "list"; sort: SortKey; dir: 1 | -1; group: boolean; cols: ColKey[]; card: number; /** ids of the category groups that are folded shut */ shut: string[] };
 const PREFS = "nexderView";
-const loadPrefs = (): Prefs => { const d: Prefs = { layout: "cards", sort: "no", dir: 1, group: true, cols: DEFAULT_COLS, card: CARD_DEFAULT }; try { const x = JSON.parse(localStorage.getItem(PREFS) ?? "{}"); return { layout: x.layout === "list" ? "list" : "cards", sort: SORTS.some(([k]) => k === x.sort) ? x.sort : d.sort, dir: x.dir === -1 ? -1 : 1, group: x.group !== false, cols: Array.isArray(x.cols) ? COLDEFS.map((c) => c.k).filter((k) => x.cols.includes(k)) : DEFAULT_COLS, card: cardPx(x.card) }; } catch { return d; } };
+const loadPrefs = (): Prefs => { const d: Prefs = { layout: "cards", sort: "no", dir: 1, group: true, cols: DEFAULT_COLS, card: CARD_DEFAULT, shut: [] }; try { const x = JSON.parse(localStorage.getItem(PREFS) ?? "{}"); return { layout: x.layout === "list" ? "list" : "cards", sort: SORTS.some(([k]) => k === x.sort) ? x.sort : d.sort, dir: x.dir === -1 ? -1 : 1, group: x.group !== false, cols: Array.isArray(x.cols) ? COLDEFS.map((c) => c.k).filter((k) => x.cols.includes(k)) : DEFAULT_COLS, card: cardPx(x.card), shut: Array.isArray(x.shut) ? x.shut.filter((v: unknown) => typeof v === "string") : [] }; } catch { return d; } };
 const top = (n: (number | undefined)[]) => { const v = n.filter((x): x is number => !!x); return v.length ? Math.max(...v) : undefined; };
 /** What a design is ordered by. Several sizes count as the largest one. */
 const metric = (d: NxDesign, k: SortKey): number | string | undefined => {
@@ -153,7 +171,12 @@ export default function Nexder() {
   const named = cats.filter((c) => !cat || c.id === cat).map((c) => ({ c: c as { id: string; name: string } | null, ds: sorted.filter((d) => catsOf(d).includes(c.id)) })).sort((a, b) => a.c!.name.localeCompare(b.c!.name) * (pf.sort === "cat" ? pf.dir : 1));
   const loose = cat && cat !== "__none" ? [] : sorted.filter((d) => !catsOf(d).length);
   const groups = (pf.group ? [...named, { c: null, ds: loose }] : [{ c: { id: "all", name: "All designs" }, ds: sorted }]).filter((g) => g.ds.length);
-  const allIds = sorted.map((d) => d.id), everyShown = allIds.length > 0 && allIds.every((id) => sel.includes(id));
+  /* Folding: while searching, every group stays open so no match is hidden. */
+  const searching = !!q.trim(), foldable = pf.group && groups.length > 1;
+  const shutNow = (id: string) => foldable && !searching && pf.shut.includes(id);
+  const allShut = groups.every((x) => shutNow(x.c?.id ?? "none")), anyShut = groups.some((x) => shutNow(x.c?.id ?? "none"));
+  const fold = (id: string) => setPrefs({ shut: pf.shut.includes(id) ? pf.shut.filter((x) => x !== id) : [...pf.shut, id] });
+  const allIds = [...new Set(groups.filter((x) => !shutNow(x.c?.id ?? "none")).flatMap((x) => x.ds.map((d) => d.id)))], everyShown = allIds.length > 0 && allIds.every((id) => sel.includes(id));
 
   const detail = !panel ? null : panel.k === "view" && open
     ? <ViewPanel d={open} writable={writable} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
@@ -163,25 +186,36 @@ export default function Nexder() {
 
   return (
     <Page title="Nexder" sub="Designs, photos and files. Photos and files are kept in Google Drive; Emerald shows small copies."
-      actions={<>{writable && <Button variant="outline" icon="folder" onClick={() => setDlg("manage")}>Categories</Button>}{sorted.length > 0 && <Button variant="outline" icon="out" onClick={() => csv(sorted)}>Export CSV</Button>}{nexderReady && designs.length > 0 && <Button variant="outline" icon="archive" onClick={() => setDlg("storage")}>Storage</Button>}
+      actions={<>
         {designs.length > 0 && (mode === "off" ? <Button variant="outline" onClick={() => { setMode("pick"); setPanel(null); }}>Select</Button> : <Button variant="outline" onClick={stopSelect}>Cancel selection</Button>)}
+        {(writable || sorted.length > 0 || (nexderReady && designs.length > 0)) && <Pop label="More" icon="more" menu>
+          {writable && <button type="button" class={menuItem} onClick={() => setDlg("manage")}><Icon name="folder" size={14} /> Categories</button>}
+          {sorted.length > 0 && <button type="button" class={menuItem} onClick={() => csv(sorted)}><Icon name="out" size={14} /> Export CSV</button>}
+          {nexderReady && designs.length > 0 && <button type="button" class={menuItem} onClick={() => setDlg("storage")}><Icon name="archive" size={14} /> Storage</button>}
+        </Pop>}
         {writable && <Button icon="plus" onClick={() => { setPanel({ k: "new" }); }}>New design</Button>}</>}
       toolbar={<>
         <label class="relative w-full md:w-[260px]"><span class="sr-only">Search designs</span><span class="absolute left-3 top-2.5 text-c2 pointer-events-none"><Icon name="search" size={13} /></span>
           <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Name, number or designer" class={`${inputCls} !pl-8`} /></label>
         <select aria-label="Category" value={cat} onChange={(e) => setCat((e.target as HTMLSelectElement).value)} class={`${inputCls} !w-auto cursor-pointer`}>
           <option value="">All categories</option><option value="__none">Uncategorized · {designs.filter((d) => !catsOf(d).length).length}</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name} · {designs.filter((d) => catsOf(d).includes(c.id)).length}</option>)}</select>
-        <select aria-label="Sort by" value={pf.sort} onChange={(e) => setPrefs({ sort: (e.target as HTMLSelectElement).value as SortKey, dir: 1 })} class={`${inputCls} !w-auto cursor-pointer`}>{SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}</select>
-        <button type="button" aria-label={pf.dir === 1 ? "Ascending. Press for descending" : "Descending. Press for ascending"} title={pf.dir === 1 ? "Ascending (A→Z, low→high, old→new)" : "Descending (Z→A, high→low, new→old)"} onClick={() => setPrefs({ dir: (pf.dir * -1) as 1 | -1 })} class="h-8 w-8 !min-h-0 shrink-0 rounded-lg border border-line bg-c0 inline-flex items-center justify-center cursor-pointer"><span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={14} /></span></button>
-        <select aria-label="Group by" value={pf.group ? "cat" : "none"} onChange={(e) => setPrefs({ group: (e.target as HTMLSelectElement).value === "cat" })} class={`${inputCls} !w-auto cursor-pointer`}><option value="cat">Group: Category</option><option value="none">Group: None</option></select>
         <Seg value={pf.layout} on={(v) => setPrefs({ layout: v })} items={[["cards", "Cards"], ["list", "List"]]} />
         {pf.layout === "cards" && <label class="inline-flex items-center gap-1.5 h-8 text-c3" title={`Card size: ${pf.card} px`}><span class="sr-only">Card size</span><Icon name="image" size={12} />
           <input type="range" aria-label="Card size" min={CARD_MIN} max={CARD_MAX} step={CARD_STEP} value={pf.card} onInput={(e) => setPrefs({ card: cardPx((e.target as HTMLInputElement).value) })} class="w-24 !min-h-0 accent-c4 cursor-pointer" /><Icon name="image" size={18} /></label>}
-        {pf.layout === "list" && <details class="relative hidden md:block"><summary class="h-8 px-3 rounded-lg border border-line bg-c0 text-[13px] font-semibold inline-flex items-center gap-1.5 cursor-pointer list-none"><Icon name="rows" size={13} /> Columns</summary>
-          <div class="absolute z-30 mt-1 w-48 rounded-xl border border-line bg-c0 shadow-xl p-2 grid gap-0.5">
+        <Pop label="View" icon="rows">
+          <label class="grid gap-1 text-[11px] font-medium text-c3">Sort by<span class="flex gap-1.5">
+            <select aria-label="Sort by" value={pf.sort} onChange={(e) => setPrefs({ sort: (e.target as HTMLSelectElement).value as SortKey, dir: 1 })} class={`${inputCls} cursor-pointer`}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+            <button type="button" aria-label={pf.dir === 1 ? "Ascending. Press for descending" : "Descending. Press for ascending"} title={pf.dir === 1 ? "Ascending (A→Z, low→high, old→new)" : "Descending (Z→A, high→low, new→old)"} onClick={() => setPrefs({ dir: (pf.dir * -1) as 1 | -1 })} class="h-8 w-8 !min-h-0 shrink-0 rounded-lg border border-line bg-c0 inline-flex items-center justify-center cursor-pointer"><span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={14} /></span></button></span></label>
+          <label class="grid gap-1 text-[11px] font-medium text-c3">Group by
+            <select aria-label="Group by" value={pf.group ? "cat" : "none"} onChange={(e) => setPrefs({ group: (e.target as HTMLSelectElement).value === "cat" })} class={`${inputCls} cursor-pointer`}><option value="cat">Category</option><option value="none">None</option></select></label>
+          {pf.layout === "list" && <div class="hidden md:grid gap-0.5 border-t border-line pt-1.5"><span class="text-[11px] font-medium text-c3 px-1">Columns</span>
             <label class="flex items-center gap-2 px-2 h-8 text-[13px] text-c3"><input type="checkbox" checked disabled /> Name</label>
             {COLDEFS.map((c) => <label key={c.k} class="flex items-center gap-2 px-2 h-8 text-[13px] cursor-pointer"><input type="checkbox" checked={pf.cols.includes(c.k)} onChange={() => setPrefs({ cols: pf.cols.includes(c.k) ? pf.cols.filter((x) => x !== c.k) : COLDEFS.map((d) => d.k).filter((k) => k === c.k || pf.cols.includes(k)) })} /> {c.label}</label>)}
-            <button type="button" onClick={() => setPrefs({ cols: DEFAULT_COLS })} class="text-[12px] underline text-c3 text-left px-2 h-7 !min-h-0 cursor-pointer">Reset</button></div></details>}
+            <button type="button" onClick={() => setPrefs({ cols: DEFAULT_COLS })} class="text-[12px] underline text-c3 text-left px-2 h-7 !min-h-0 cursor-pointer">Reset columns</button></div>}
+        </Pop>
+        {foldable && <span class="inline-flex gap-1">
+          <button type="button" onClick={() => setPrefs({ shut: groups.map((x) => x.c?.id ?? "none") })} disabled={allShut} class="h-8 px-3 !min-h-0 rounded-full border border-line bg-c0 text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-default">Collapse all</button>
+          <button type="button" onClick={() => setPrefs({ shut: [] })} disabled={!anyShut} class="h-8 px-3 !min-h-0 rounded-full border border-line bg-c0 text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-default">Expand all</button></span>}
         {shared.length > 0 && <Seg value={view} on={setView} items={[["all", "All"], ["shared", `Shared with me${unseen ? ` · ${unseen} new` : ""}`]]} />}
       </>}
       detail={detail}>
@@ -203,13 +237,15 @@ export default function Nexder() {
             {[...(pf.cols.includes("no") ? [COLDEFS[0]] : []), { k: "name" as const, label: "Name", w: "", sort: "name" as SortKey, right: false }, ...COLDEFS.filter((c) => c.k !== "no" && pf.cols.includes(c.k))].map((c) => (
               <button key={c.k} type="button" onClick={() => sortBy(c.sort)} aria-label={`Sort by ${c.label}`} class={`!min-h-0 h-7 inline-flex items-center gap-1 cursor-pointer hover:text-c4 ${c.right ? "justify-end" : ""} ${pf.sort === c.sort ? "text-c4" : ""}`}>{c.label}{pf.sort === c.sort && <span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={11} /></span>}</button>))}
           </div>}
-          {groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)); return (
+          {groups.map(({ c, ds }) => { const all = ds.every((d) => sel.includes(d.id)), gid = c?.id ?? "none", closed = shutNow(gid); return (
           <section key={c?.id ?? "none"} aria-label={c?.name ?? "Uncategorized"} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
-            <div class="flex items-center gap-2 pb-2 border-b-2 border-c4/25">
-              <b class="text-[14px] tracking-[0.04em]">{c?.name ?? "Uncategorized"}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span>
+            <div class="flex items-center gap-2 pb-2 border-b border-line">
+              {foldable
+                ? <button type="button" onClick={() => fold(gid)} aria-expanded={!closed} aria-label={`${closed ? "Expand" : "Collapse"} ${c?.name ?? "Uncategorized"}`} class="!min-h-0 min-w-0 inline-flex items-center gap-2 cursor-pointer text-left"><span class={`inline-flex text-c3 transition-transform ${closed ? "" : "rotate-90"}`}><Icon name="right" size={14} /></span><b class="text-[14px] tracking-[0.04em] truncate">{c?.name ?? "Uncategorized"}</b><span class="t-meta shrink-0">{ds.length} design{ds.length > 1 ? "s" : ""}</span></button>
+                : <><b class="text-[14px] tracking-[0.04em]">{c?.name ?? "Uncategorized"}</b><span class="t-meta">{ds.length} design{ds.length > 1 ? "s" : ""}</span></>}
               {selecting && <button type="button" onClick={() => setSel((x) => (all ? x.filter((id) => !ds.some((d) => d.id === id)) : [...new Set([...x, ...ds.map((d) => d.id)])]))} class="ml-auto text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{all ? (c?.id === "all" ? "Unselect all" : "Unselect category") : (c?.id === "all" ? "Select all" : "Select category")}</button>}
             </div>
-            {pf.layout === "list"
+            {closed ? null : pf.layout === "list"
               ? <div class="mt-2 grid divide-y divide-line rounded-2xl bg-c0 overflow-hidden">{ds.map((d) => {
                   const on = sel.includes(d.id), cur = open?.id === d.id, gr = top(d.sizes?.map((x) => x.g) ?? []), mn = top(d.sizes?.map((x) => x.min) ?? []);
                   return (
@@ -225,7 +261,7 @@ export default function Nexder() {
                       {COLDEFS.filter((c) => c.k !== "no" && pf.cols.includes(c.k)).map((c) => <Cell key={c.k} d={d} k={c.k} />)}
                     </button>);
                 })}</div>
-              : <div style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${pf.card}px, 100%), ${pf.card}px))` }} class="grid gap-3 items-stretch justify-start mt-3">{ds.map((d) => {
+              : <div style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${pf.card}px, 100%), 1fr))` }} class="grid gap-3 items-stretch mt-3">{ds.map((d) => {
                   const on = sel.includes(d.id), cur = open?.id === d.id;
                   return (
                     <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={mode !== "off" ? on : undefined} aria-label={`${d.name}, ${d.no}`}
