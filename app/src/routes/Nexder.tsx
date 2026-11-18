@@ -2,7 +2,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { lazy } from "../router";
-import { ask, Button, DetailHead, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
+import { ask, Button, Empty, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
   addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, deleteDesign, downloadFile, draftOf, draftReady, fmtBytes, incomplete, priceUndoSig, reupload, setPriceUndo, usedIn, markSeen, materialUsage,
@@ -180,10 +180,6 @@ export default function Nexder() {
   const fold = (id: string) => setPrefs({ shut: pf.shut.includes(id) ? pf.shut.filter((x) => x !== id) : [...pf.shut, id] });
   const allIds = [...new Set(groups.filter((x) => !shutNow(x.c?.id ?? "none")).flatMap((x) => x.ds.map((d) => d.id)))], everyShown = allIds.length > 0 && allIds.every((id) => sel.includes(id));
 
-  const detail = !panel ? null : panel.k === "view" && open
-    ? <ViewPanel d={open} writable={writable} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
-        onShare={() => { setSel([open.id]); setDlg("share"); }} onAssign={() => { setSel([open.id]); setDlg("assign"); }} />
-    : null;
   const windowOpen = panel && (panel.k === "new" || panel.k === "edit");
 
   return (
@@ -220,7 +216,7 @@ export default function Nexder() {
           <button type="button" onClick={() => setPrefs({ shut: [] })} disabled={!anyShut} class="h-8 px-3 !min-h-0 rounded-full border border-line bg-c0 text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-default">Expand all</button></span>}
         {shared.length > 0 && <Seg value={view} on={setView} items={[["all", "All"], ["shared", `Shared with me${unseen ? ` · ${unseen} new` : ""}`]]} />}
       </>}
-      detail={detail}>
+      >
       {view === "shared" && shared.length > 0 && <div class="grid gap-1.5">{shared.map((s) => (
         <p key={s.id} class="rounded-xl bg-c0 px-3 py-2 text-[13px] break-words"><b>{usersSig.value.find((u) => u.id === s.by)?.name ?? "Someone"}</b> shared {s.designIds.length} design{s.designIds.length > 1 ? "s" : ""} · {shortDate(s.at)}{s.note ? <span class="text-c3"> · “{s.note}”</span> : null}</p>))}</div>}
       {writable && !priceUndoSig.value.length && undoNote && <p role="status" class="rounded-xl bg-c0 px-3 py-2 text-[13px]">Price change undone: {undoNote}</p>}
@@ -292,6 +288,8 @@ export default function Nexder() {
             </>}
           </div>
         </div>)}
+      {panel?.k === "view" && open && <ViewPanel d={open} writable={writable} hidden={dlg === "share" || dlg === "assign"} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
+        onShare={() => { setSel([open.id]); setDlg("share"); }} onAssign={() => { setSel([open.id]); setDlg("assign"); }} />}
       {dlg === "storage" && <StorageSheet writable={can("nexder", "full")} onClose={() => setDlg(null)} />}
       {windowOpen && <DesignWindow key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />}
       {(dlg === "price" || dlg === "dup" || dlg === "del") && <BulkDialog kind={dlg} ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}
@@ -305,10 +303,10 @@ export default function Nexder() {
 }
 
 /* ---------------------------------------------------------------- view panel */
-function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxDesign; writable: boolean; onClose: () => void; onEdit: () => void; onShare: () => void; onAssign: () => void }) {
-  const [i, setI] = useState(0), [busy, setBusy] = useState(""), [missing, setMissing] = useState("");
+function ViewPanel({ d, writable, hidden, onClose, onEdit, onShare, onAssign }: { d: NxDesign; writable: boolean; /** another dialog (share, assign) is open on top */ hidden?: boolean; onClose: () => void; onEdit: () => void; onShare: () => void; onAssign: () => void }) {
+  const [i, setI] = useState(0), [busy, setBusy] = useState(""), [missing, setMissing] = useState(""), asking = useRef(false);
   const ph = d.photos[Math.min(i, d.photos.length - 1)];
-  const usage = materialUsage(d.id), total = usage.reduce((a, u) => a + u.total, 0);
+  const usage = materialUsage(d.id), total = usage.reduce((a, u) => a + u.total, 0), link = d.source ? cleanLink(d.source) : null;
   useEffect(() => { setI(0); setMissing(""); }, [d.id]);
   const get = async (f: { id: string; name: string; drive?: string }) => { setBusy(f.id); setMissing(""); setMissing((await downloadFile(f)) ?? ""); setBusy(""); };
   const all = async () => { for (const f of d.files) { await get(f); await new Promise((r) => setTimeout(r, 600)); } };
@@ -319,52 +317,58 @@ function ViewPanel({ d, writable, onClose, onEdit, onShare, onAssign }: { d: NxD
     try { const r = await buildPack([d], { images: "all" }, sink, () => {}); if (r.missing) setMissing(`${r.missing} photo${r.missing > 1 ? "s" : ""} could not be fetched from Google Drive.`); } catch (e) { setMissing((e as Error).message); }
     setBusy("");
   };
+  const del = async () => { asking.current = true; const yes = await ask(`Delete “${d.name}”? It goes to the Bin, and its files to Google Drive's trash until the Bin is emptied. ${usedIn(d).length ? `It is used in ${usedIn(d).join(", ")}, so the number ${d.no} is retired: it stays blank and is never given to another design.` : `It is not used anywhere, so the number ${d.no} goes to the next design added.`}`, { ok: "Delete design" }); asking.current = false; if (yes) { const e = await deleteDesign(d); if (e) setMissing(e); else onClose(); } };
+  const pend = d.photos.filter((p) => p.pend && !p.drive);
   return (
-    <div class="flex flex-col min-h-full gap-3.5">
-      <DetailHead title={d.name} onClose={onClose} />
-      <div>
-        <div class="aspect-[5/3] rounded-2xl overflow-hidden bg-c1"><Pic id={ph?.id} alt={d.name} /></div>
-        {d.photos.length > 1 && <div class="flex gap-2 mt-2 flex-wrap">{d.photos.map((p, k) => (
-          <button key={p.id} type="button" onClick={() => setI(k)} aria-label={`Photo ${k + 1}`} aria-pressed={k === i} class={`w-11 h-11 !min-h-0 rounded-lg overflow-hidden bg-c1 p-0 cursor-pointer ${k === i ? "ring-2 ring-c4" : ""}`}><Pic id={p.id} alt="" /></button>))}</div>}
-      </div>
-      <div class="flex items-end gap-3 flex-wrap"><div class="min-w-0 flex-1"><div class="t-meta">Number</div><div class="num text-[24px] font-semibold leading-none mt-0.5">{d.no}</div></div>
-        <div class="text-right min-w-0"><div class="t-meta">{catsOf(d).length > 1 ? "Categories" : "Category"}</div><div class="mt-1 flex flex-wrap justify-end gap-1">{catsOf(d).length ? catsOf(d).map((id) => <span key={id} class={`${chipCls} bg-c1 text-c3`}>{catName(id)}</span>) : <span class="t-meta">None</span>}</div></div></div>
-      {(d.price || d.sizes?.length) && <div class="grid gap-1 text-[13px]">
-        {d.price ? <div class="flex justify-between gap-3"><span class="text-c3">Price</span><b class="num">{inr(d.price)}</b></div> : null}
-        {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3">Size {s.label}{s.mm ? ` · ${s.mm} mm` : ""} <span class={`text-[11px] font-semibold ${s.sliced ? "text-grn" : "text-amb"}`}>{s.sliced ? "sliced" : "estimated"}</span></span><b class="num">{s.g} g{s.min ? ` · ${s.min >= 60 ? `${Math.floor(s.min / 60)} h ${s.min % 60} min` : `${s.min} min`}` : ""}</b></div>)}</div>}
-      {(d.designer || d.source) && <div class="grid gap-1 text-[13px]">
-        {d.designer && <div class="flex justify-between gap-3"><span class="text-c3">Designer</span><b class="min-w-0 break-words text-right">{d.designer}</b></div>}
-        {d.source && cleanLink(d.source) && <div class="flex justify-between gap-3"><span class="text-c3">Original page</span><a href={cleanLink(d.source)!} target="_blank" rel="noopener noreferrer" class="min-w-0 break-all text-right underline underline-offset-2 font-semibold">{new URL(cleanLink(d.source)!).hostname.replace(/^www\./, "")} ↗</a></div>}</div>}
-      {d.desc && <p class="text-[13px] text-c3 whitespace-pre-wrap break-words">{d.desc}</p>}
-      <div>
-        <div class="flex items-center justify-between mb-1.5"><span class="t-section">Files</span>{writable && d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}</div>
-        {d.files.length ? <div class="grid gap-1.5">{d.files.map((f) => (
-          <div key={f.id} class="flex items-center gap-2.5 rounded-xl bg-c1/60 px-2.5 py-2"><span class="text-c3"><Icon name="file" size={15} /></span>
-            <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "original in Google Drive" : isQueued(d.id, f.id) ? "uploading…" : f.pend ? "not uploaded yet" : "not in Drive"}</span></span>
-            {writable && f.pend && !f.drive ? (isQueued(d.id, f.id) ? null : <Reup d={d} kind="file" id={f.id} />) : writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
-          : <p class="t-meta">No design file. Photos alone are fine.{writable ? " Edit the design to add one." : ""}</p>}
-        {writable && d.photos.some((p) => p.pend && !p.drive) && <div class="mt-1.5 grid gap-1.5">{d.photos.filter((p) => p.pend && !p.drive).map((p) => (
-          <div key={p.id} class="flex items-center gap-2.5 rounded-xl bg-amb-bg/50 px-2.5 py-2"><span class="text-c3"><Icon name="image" size={15} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium break-all">{p.name}</b><span class="t-meta">{isQueued(d.id, p.id) ? "original uploading…" : "original photo not uploaded yet"}</span></span>
-            {!isQueued(d.id, p.id) && <Reup d={d} kind="photo" id={p.id} />}</div>))}</div>}
-        {writable && d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="mt-1.5 text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing photos…" : "Download original photos (zip)"}</button>}
-        {!writable && d.files.length > 0 && <p class="t-meta mt-1.5">Your role can view designs but not download files.</p>}
-        {missing && <p role="status" class="t-meta mt-1.5 text-amb">{missing}</p>}
-      </div>
-      <details class="rounded-xl border border-line bg-c0 min-w-0" open={usage.length > 0}>
-        <summary class="flex items-center gap-2 px-3 py-2.5"><span class="text-[13px] font-semibold">Material in live orders</span><span class="t-meta min-w-0 flex-1 text-right break-words">{usage.length ? `${usage.length} order${usage.length > 1 ? "s" : ""} · ${g(total)} to print` : "none"}</span><span class="chev text-c3 inline-flex"><Icon name="right" size={13} /></span></summary>
-        <div class="border-t border-line p-2.5 grid gap-1.5">{usage.length ? usage.map((u) => (
-          <div key={u.orderNo} class="rounded-xl bg-c1/60 px-3 py-2.5"><div class="flex items-baseline gap-2"><b class="text-[13px] min-w-0 flex-1 break-words">{u.orderNo}<span class="t-meta font-normal"> · {u.customer || "In-house"}</span></b><b class="num text-[13px]">{u.gEach ? `${u.estimated ? "~" : ""}${g(u.total)}` : "no grams"}</b></div>
-            <div class="t-meta mt-0.5 break-words">{u.pending} pcs left{u.heightMm ? ` · ${u.heightMm} mm` : ""}{u.gEach ? ` · ${u.estimated ? "~" : ""}${Math.round(u.gEach)} g each` : ""}{u.colours.length ? ` · ${u.colours.join(", ")}` : ""}</div></div>))
-          : <p class="t-meta">No live order uses this design. Assign it to an order and the grams still to print show here, from the same numbers as the filament panel.</p>}</div>
-      </details>
-      <div class="t-meta">Added {shortDate(d.created)} by {d.by}</div>
-      {writable && <button type="button" onClick={async () => { if (await ask(`Delete “${d.name}”? It goes to the Bin, and its files to Google Drive's trash until the Bin is emptied. ${usedIn(d).length ? `It is used in ${usedIn(d).join(", ")}, so the number ${d.no} is retired: it stays blank and is never given to another design.` : `It is not used anywhere, so the number ${d.no} goes to the next design added.`}`, { ok: "Delete design" })) { const e = await deleteDesign(d); if (e) setMissing(e); else onClose(); } }} class="self-start text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}
-      <div class="sticky -bottom-4 -mx-4 -mb-4 mt-auto border-t border-line bg-c0 px-4 py-3 flex gap-2 [&>*]:flex-1">
+    <Sheet win open={!hidden} onClose={() => { if (!asking.current) onClose(); }} title={<span title={d.name}>{d.name}</span>}
+      footer={<div class="flex-1 min-w-0 !h-auto flex gap-2 [&>*]:flex-1 [&_button]:!h-9 pb-1">
         <Button variant="outline" icon="share" onClick={onShare}>Share</Button>
         {writable && <Button variant="outline" icon="edit" onClick={onEdit}>Edit</Button>}
-        {writable && <Button icon="link" onClick={onAssign}>Assign to order</Button>}
+        {writable && <Button icon="link" onClick={onAssign}>Assign to order</Button>}</div>}>
+      <div class="md:h-full grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-x-5 gap-y-3 px-4 pb-3 md:pb-2">
+        {/* photos: one big picture, small ones underneath */}
+        <div class="min-w-0 md:min-h-0 flex flex-col gap-2">
+          <div class="aspect-square md:aspect-auto md:flex-1 md:min-h-0 rounded-2xl overflow-hidden bg-c1"><Pic id={ph?.id} alt={d.name} class="!object-contain" /></div>
+          {d.photos.length > 1 && <div class="flex gap-1.5 overflow-x-auto shrink-0">{d.photos.map((p, k) => (
+            <button key={p.id} type="button" onClick={() => setI(k)} aria-label={`Photo ${k + 1}`} aria-pressed={k === i} class={`w-11 h-11 !min-h-0 shrink-0 rounded-lg overflow-hidden bg-c1 p-0 cursor-pointer ${k === i ? "ring-2 ring-c4" : ""}`}><Pic id={p.id} alt="" /></button>))}</div>}
+        </div>
+        {/* details */}
+        <div class="min-w-0 md:min-h-0 md:overflow-y-auto overscroll-contain flex flex-col gap-3 text-[13px]">
+          <div class="flex items-end gap-3 flex-wrap shrink-0"><div><div class="t-meta">Number</div><div class="num text-[22px] font-semibold leading-none mt-0.5">{d.no}</div></div>
+            <div class="ml-auto flex flex-wrap justify-end gap-1">{catsOf(d).length ? catsOf(d).map((id) => <span key={id} class={`${chipCls} bg-c1 text-c3`}>{catName(id)}</span>) : <span class="t-meta">No category</span>}</div></div>
+          {(d.price || d.designer || link || d.sizes?.length) ? <div class="grid gap-1 rounded-xl bg-c1/50 px-3 py-2 shrink-0">
+            {d.price ? <div class="flex justify-between gap-3"><span class="text-c3">Price</span><b class="num">{inr(d.price)}</b></div> : null}
+            {d.sizes?.map((s) => <div key={s.label} class="flex justify-between gap-3"><span class="text-c3 min-w-0">{s.label}{s.mm ? ` · ${s.mm} mm` : ""} <span class={`text-[11px] font-semibold ${s.sliced ? "text-grn" : "text-amb"}`}>{s.sliced ? "sliced" : "est."}</span></span><b class="num shrink-0">{s.g} g{s.min ? ` · ${mins(s.min)}` : ""}</b></div>)}
+            {d.designer && <div class="flex justify-between gap-3"><span class="text-c3">Designer</span><b class="min-w-0 truncate text-right" title={d.designer}>{d.designer}</b></div>}
+            {link && <div class="flex justify-between gap-3"><span class="text-c3">Original page</span><a href={link} target="_blank" rel="noopener noreferrer" class="min-w-0 truncate text-right underline underline-offset-2 font-semibold">{new URL(link).hostname.replace(/^www\./, "")} ↗</a></div>}</div> : null}
+          {d.desc && <p class="text-c3 line-clamp-2 break-words shrink-0" title={d.desc}>{d.desc}</p>}
+          <div class="shrink-0">
+            <div class="flex items-center justify-between mb-1"><span class="t-section">Files</span><span class="flex gap-3">
+              {writable && d.files.length > 1 && <button type="button" onClick={all} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">Download all</button>}
+              {writable && d.photos.length > 0 && <button type="button" disabled={busy === "zip"} onClick={zipPhotos} class="text-[12px] font-semibold underline underline-offset-2 cursor-pointer !min-h-0">{busy === "zip" ? "Preparing…" : "Photos (zip)"}</button>}</span></div>
+            {d.files.length ? <div class="grid gap-1 max-h-[7.5rem] overflow-y-auto">{d.files.map((f) => (
+              <div key={f.id} class="flex items-center gap-2 rounded-lg bg-c1/60 px-2.5 py-1.5"><span class="text-c3"><Icon name="file" size={14} /></span>
+                <span class="min-w-0 flex-1"><b class="block text-[13px] font-medium truncate" title={f.name}>{f.name}</b><span class="t-meta">{kind(f.name)} · {mb(f.size)} · {f.drive ? "in Google Drive" : isQueued(d.id, f.id) ? "uploading…" : f.pend ? "not uploaded yet" : "not in Drive"}</span></span>
+                {writable && f.pend && !f.drive ? (isQueued(d.id, f.id) ? null : <Reup d={d} kind="file" id={f.id} />) : writable && <Button variant="outline" icon="in" class="!h-7 !px-2.5 !text-[12px]" disabled={busy === f.id} onClick={() => get(f)}>{busy === f.id ? "…" : "Get"}</Button>}</div>))}</div>
+              : <p class="t-meta">No design file. Photos alone are fine.{writable ? " Edit the design to add one." : ""}</p>}
+            {writable && pend.length > 0 && <div class="mt-1 grid gap-1">{pend.map((p) => (
+              <div key={p.id} class="flex items-center gap-2 rounded-lg bg-amb-bg/50 px-2.5 py-1.5"><span class="text-c3"><Icon name="image" size={14} /></span><span class="min-w-0 flex-1"><b class="block text-[13px] font-medium truncate" title={p.name}>{p.name}</b><span class="t-meta">{isQueued(d.id, p.id) ? "original uploading…" : "original photo not uploaded yet"}</span></span>
+                {!isQueued(d.id, p.id) && <Reup d={d} kind="photo" id={p.id} />}</div>))}</div>}
+            {!writable && d.files.length > 0 && <p class="t-meta mt-1">Your role can view designs but not download files.</p>}
+            {missing && <p role="status" class="t-meta mt-1 text-amb">{missing}</p>}
+          </div>
+          <details class="rounded-xl border border-line bg-c0 min-w-0 shrink-0">
+            <summary class="flex items-center gap-2 px-3 py-2"><span class="font-semibold">Material in live orders</span><span class="t-meta min-w-0 flex-1 text-right truncate">{usage.length ? `${usage.length} order${usage.length > 1 ? "s" : ""} · ${g(total)} to print` : "none"}</span><span class="chev text-c3 inline-flex"><Icon name="right" size={13} /></span></summary>
+            <div class="border-t border-line p-2 grid gap-1.5 max-h-40 overflow-y-auto">{usage.length ? usage.map((u) => (
+              <div key={u.orderNo} class="rounded-lg bg-c1/60 px-3 py-2"><div class="flex items-baseline gap-2"><b class="min-w-0 flex-1 break-words">{u.orderNo}<span class="t-meta font-normal"> · {u.customer || "In-house"}</span></b><b class="num">{u.gEach ? `${u.estimated ? "~" : ""}${g(u.total)}` : "no grams"}</b></div>
+                <div class="t-meta mt-0.5 break-words">{u.pending} pcs left{u.heightMm ? ` · ${u.heightMm} mm` : ""}{u.gEach ? ` · ${u.estimated ? "~" : ""}${Math.round(u.gEach)} g each` : ""}{u.colours.length ? ` · ${u.colours.join(", ")}` : ""}</div></div>))
+              : <p class="t-meta">No live order uses this design. Assign it to an order and the grams still to print show here.</p>}</div>
+          </details>
+          <div class="mt-auto flex items-center justify-between gap-3 pt-1 shrink-0"><span class="t-meta">Added {shortDate(d.created)} by {d.by}</span>
+            {writable && <button type="button" onClick={del} class="text-[12px] text-red underline underline-offset-2 cursor-pointer !min-h-0">Delete design</button>}</div>
+        </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
