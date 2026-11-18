@@ -81,9 +81,12 @@ const COLDEFS: { k: ColKey; label: string; w: string; sort: SortKey; right?: boo
   { k: "files", label: "File size", w: "84px", sort: "files", right: true }, { k: "added", label: "Added", w: "92px", sort: "added", right: true },
 ];
 const DEFAULT_COLS: ColKey[] = ["no", "cats", "price", "g", "min"];
-type Prefs = { layout: "cards" | "list"; sort: SortKey; dir: 1 | -1; group: boolean; cols: ColKey[] };
+/** Card width in pixels (the picture is a square of this size). Previews are 640 px wide, so bigger would only blur. */
+const CARD_MIN = 120, CARD_MAX = 300, CARD_STEP = 20, CARD_DEFAULT = 200;
+const cardPx = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== "" ? Math.min(CARD_MAX, Math.max(CARD_MIN, Math.round(n / CARD_STEP) * CARD_STEP)) : CARD_DEFAULT; };
+type Prefs = { layout: "cards" | "list"; sort: SortKey; dir: 1 | -1; group: boolean; cols: ColKey[]; card: number };
 const PREFS = "nexderView";
-const loadPrefs = (): Prefs => { const d: Prefs = { layout: "cards", sort: "no", dir: 1, group: true, cols: DEFAULT_COLS }; try { const x = JSON.parse(localStorage.getItem(PREFS) ?? "{}"); return { layout: x.layout === "list" ? "list" : "cards", sort: SORTS.some(([k]) => k === x.sort) ? x.sort : d.sort, dir: x.dir === -1 ? -1 : 1, group: x.group !== false, cols: Array.isArray(x.cols) ? COLDEFS.map((c) => c.k).filter((k) => x.cols.includes(k)) : DEFAULT_COLS }; } catch { return d; } };
+const loadPrefs = (): Prefs => { const d: Prefs = { layout: "cards", sort: "no", dir: 1, group: true, cols: DEFAULT_COLS, card: CARD_DEFAULT }; try { const x = JSON.parse(localStorage.getItem(PREFS) ?? "{}"); return { layout: x.layout === "list" ? "list" : "cards", sort: SORTS.some(([k]) => k === x.sort) ? x.sort : d.sort, dir: x.dir === -1 ? -1 : 1, group: x.group !== false, cols: Array.isArray(x.cols) ? COLDEFS.map((c) => c.k).filter((k) => x.cols.includes(k)) : DEFAULT_COLS, card: cardPx(x.card) }; } catch { return d; } };
 const top = (n: (number | undefined)[]) => { const v = n.filter((x): x is number => !!x); return v.length ? Math.max(...v) : undefined; };
 /** What a design is ordered by. Several sizes count as the largest one. */
 const metric = (d: NxDesign, k: SortKey): number | string | undefined => {
@@ -172,6 +175,8 @@ export default function Nexder() {
         <button type="button" aria-label={pf.dir === 1 ? "Ascending. Press for descending" : "Descending. Press for ascending"} title={pf.dir === 1 ? "Ascending (A→Z, low→high, old→new)" : "Descending (Z→A, high→low, new→old)"} onClick={() => setPrefs({ dir: (pf.dir * -1) as 1 | -1 })} class="h-8 w-8 !min-h-0 shrink-0 rounded-lg border border-line bg-c0 inline-flex items-center justify-center cursor-pointer"><span class={`inline-flex ${pf.dir === -1 ? "rotate-180" : ""}`}><Icon name="down" size={14} /></span></button>
         <select aria-label="Group by" value={pf.group ? "cat" : "none"} onChange={(e) => setPrefs({ group: (e.target as HTMLSelectElement).value === "cat" })} class={`${inputCls} !w-auto cursor-pointer`}><option value="cat">Group: Category</option><option value="none">Group: None</option></select>
         <Seg value={pf.layout} on={(v) => setPrefs({ layout: v })} items={[["cards", "Cards"], ["list", "List"]]} />
+        {pf.layout === "cards" && <label class="inline-flex items-center gap-1.5 h-8 text-c3" title={`Card size: ${pf.card} px`}><span class="sr-only">Card size</span><Icon name="image" size={12} />
+          <input type="range" aria-label="Card size" min={CARD_MIN} max={CARD_MAX} step={CARD_STEP} value={pf.card} onInput={(e) => setPrefs({ card: cardPx((e.target as HTMLInputElement).value) })} class="w-24 !min-h-0 accent-c4 cursor-pointer" /><Icon name="image" size={18} /></label>}
         {pf.layout === "list" && <details class="relative hidden md:block"><summary class="h-8 px-3 rounded-lg border border-line bg-c0 text-[13px] font-semibold inline-flex items-center gap-1.5 cursor-pointer list-none"><Icon name="rows" size={13} /> Columns</summary>
           <div class="absolute z-30 mt-1 w-48 rounded-xl border border-line bg-c0 shadow-xl p-2 grid gap-0.5">
             <label class="flex items-center gap-2 px-2 h-8 text-[13px] text-c3"><input type="checkbox" checked disabled /> Name</label>
@@ -220,15 +225,15 @@ export default function Nexder() {
                       {COLDEFS.filter((c) => c.k !== "no" && pf.cols.includes(c.k)).map((c) => <Cell key={c.k} d={d} k={c.k} />)}
                     </button>);
                 })}</div>
-              : <div class="grid gap-3 items-start grid-cols-[repeat(auto-fill,minmax(160px,1fr))] mt-3">{ds.map((d) => {
+              : <div style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${pf.card}px, 100%), ${pf.card}px))` }} class="grid gap-3 items-stretch justify-start mt-3">{ds.map((d) => {
                   const on = sel.includes(d.id), cur = open?.id === d.id;
                   return (
                     <button type="button" key={d.id} onClick={() => tap(d)} aria-pressed={mode !== "off" ? on : undefined} aria-label={`${d.name}, ${d.no}`}
-                      class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
-                      <span class="block aspect-[4/3] bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
+                      class={`relative flex flex-col items-stretch justify-start text-left rounded-[20px] bg-c0 overflow-hidden min-w-0 cursor-pointer !p-0 !h-auto ${on ? "ring-2 ring-c4" : cur ? "ring-2 ring-acc" : ""}`}>
+                      <span class="block aspect-square w-full shrink-0 overflow-hidden bg-c1"><Pic id={d.photos[0]?.id} alt="" /></span>
                       {incomplete(d).length > 0 && <span class="absolute top-2.5 right-2.5 rounded-full bg-amb-bg text-amb text-[11px] font-semibold px-2 h-5 inline-flex items-center">Upload incomplete</span>}
                       {mode !== "off" && <span class={`absolute top-2.5 left-2.5 w-6 h-6 rounded-full flex items-center justify-center ${on ? "bg-c4 text-c0" : "bg-c0/90 border border-c2/40"}`}>{on && <Icon name="check" size={14} />}</span>}
-                      <span class="block px-3 pt-2.5 pb-3"><b class="block text-[13px] font-semibold leading-snug break-words">{d.name}</b><span class="block t-meta mt-0.5 break-words"><span class="num">{d.no}</span>{catsOf(d).length > 1 ? ` · ${catsOf(d).length} categories` : ""}</span></span>
+                      <span class="block px-3 pt-2.5 pb-3 min-w-0"><b title={d.name} class="text-[13px] font-semibold leading-snug break-words line-clamp-2 min-h-[2.75em]">{d.name}</b><span class="block t-meta mt-0.5 truncate"><span class="num">{d.no}</span>{catsOf(d).length > 1 ? ` · ${catsOf(d).length} categories` : ""}</span></span>
                     </button>);
                 })}</div>}
           </section>); })}</div>}
@@ -342,18 +347,20 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   const base = editId ? nexderDesignsSig.value.find((d) => d.id === editId) : undefined;
   const [multi, setMulti] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>(() => [base ? draftOf(base) : blankDraft()]);
-  const [extra, setExtra] = useState<string[]>(() => (base ? catsOf(base).filter((id) => id !== base.catId) : []));
-  const [cur, setCur] = useState(0), [catId, setCatId] = useState(base?.catId ?? (nexderCatsSig.value.some((c) => c.id === (presetCat || lastCat)) ? presetCat || lastCat : ""));
+  /* Editing: the number never changes, so the category picker says where the design is LISTED (the first one is its main category; none = Uncategorized). */
+  const listedNow = base ? catsOf(base) : [];
+  const [extra, setExtra] = useState<string[]>(() => (base ? (listedNow.includes(base.catId) ? listedNow.filter((id) => id !== base.catId) : listedNow.slice(1)) : []));
+  const [cur, setCur] = useState(0), [catId, setCatId] = useState(base ? (listedNow.includes(base.catId) ? base.catId : listedNow[0] ?? "") : (nexderCatsSig.value.some((c) => c.id === (presetCat || lastCat)) ? presetCat || lastCat : ""));
   const [adding, setAdding] = useState(!nexderCatsSig.value.length), [newCat, setNewCat] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [prog, setProg] = useState<Progress | null>(null);
   const [tab, setTab] = useState<"form" | "calc">("form"), [calcOpen, setCalcOpen] = useState(false), [seen, setSeen] = useState<string[]>([drafts[0].key]), [feed, setFeed] = useState<Record<string, { n: number; files: File[] }>>({});
   const ctl = useRef<AbortController | null>(null), asking = useRef(false), woke = useRef(false);
-  const cats = nexderCatsSig.value.filter((c) => !c.archived || c.id === base?.catId), cat = cats.find((c) => c.id === catId);
+  const cats = nexderCatsSig.value.filter((c) => !c.archived), cat = cats.find((c) => c.id === catId);
   /* categories hidden by Archive stay on the design when it is edited */
-  const hidden = base ? (base.cats ?? [base.catId]).filter((id) => id !== base.catId && nexderCatsSig.value.some((c) => c.id === id && c.archived)) : [];
+  const hidden = base ? (base.cats ?? [base.catId]).filter((id) => nexderCatsSig.value.some((c) => c.id === id && c.archived)) : [];
   const set = (k: number, p: Partial<Draft>) => setDrafts((ds) => ds.map((d, j) => (j === k ? { ...d, ...p } : d)));
   const first = cat ? nextNo(cat.id) : adding && newCat.trim() ? String(nextCode() * 1000 + 1) : null;
   const mk = () => { const r = addCategory(newCat); if (r.error) { setErr(r.error); return null; } setErr(""); setCatId(r.cat!.id); setAdding(false); setNewCat(""); return r.cat!; };
-  const ready = drafts.every(draftReady) && (!!cat || (adding && !!newCat.trim()));
+  const ready = drafts.every(draftReady) && (!!base || !!cat || (adding && !!newCat.trim()));
   const filled = (d: Draft) => !!(d.name || d.photos.length || d.files.length || d.desc || d.source || d.designer || d.price || d.sizes.length);
   /* back to a single product drops the extra cards, asking first when they hold something */
   const go = async (m: boolean) => {
@@ -363,7 +370,7 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
   };
   const shown = multi ? drafts : drafts.slice(0, 1);
   const total = drafts.reduce((a, d) => a + newBytes(d), 0);
-  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.source || d.designer || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && (JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)) || extra.join() !== catsOf(base).filter((id) => id !== base.catId).join())) || (!base && extra.length > 0);
+  const dirty = drafts.some((d) => !d.editId && (d.name || d.photos.length || d.files.length || d.desc || d.source || d.designer || d.price || d.sizes.length)) || (!base && !!newCat.trim()) || (!!base && (JSON.stringify(drafts[0]) !== JSON.stringify(draftOf(base)) || [catId, ...extra].filter(Boolean).join() !== listedNow.join())) || (!base && extra.length > 0);
   const pick = (k: number) => { setCur(k); setSeen((s) => (s.includes(drafts[k].key) ? s : [...s, drafts[k].key])); };
 
   /* closing never throws work away without asking, and never leaves an upload running behind the window */
@@ -381,7 +388,10 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
     let cid = catId; if (!cid && adding && newCat.trim()) { const c = mk(); if (!c) { setBusy(false); return; } cid = c.id; }
     const ac = (ctl.current = new AbortController()); let last: NxDesign | null = null;
     for (const d of drafts) {
-      const r = await saveDraft(d, cid, [...(base && !(base.cats ?? [base.catId]).includes(base.catId) ? [] : [cid]), ...extra.filter((x) => x !== cid), ...hidden], setProg, ac.signal);
+      const want = [...new Set([...(cid ? [cid] : []), ...extra, ...hidden])];
+      /* nothing about where it is listed changed: leave that field exactly as stored */
+      const had = base ? catsOf(base, true) : [], same = !!base && want.length === had.length && want.every((x) => had.includes(x));
+      const r = await saveDraft(d, base ? base.catId : cid, same ? base!.cats : want, setProg, ac.signal);
       if (typeof r === "string") { setErr(r); setBusy(false); setProg(null); return; }
       last = r; setDrafts((x) => x.filter((y) => y.key !== d.key));
     }
@@ -408,8 +418,8 @@ function DesignWindow({ editId, presetCat, onClose, onSaved }: { editId?: string
         {adding && !base
           ? <div class="flex gap-2"><input value={newCat} placeholder="Category name, for example Desk" aria-label="New category name" onInput={(e) => setNewCat((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && mk()} class={inputCls} />
               {cats.length > 0 && <Button variant="outline" onClick={() => { setAdding(false); setNewCat(""); setErr(""); }}>Cancel</Button>}</div>
-          : <select aria-label="Category" value={catId} disabled={!!base} onChange={(e) => setCatId((e.target as HTMLSelectElement).value)} class={`${inputCls} cursor-pointer`}><option value="">Choose a category</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
-        <span class="block t-meta mt-1">{base ? <>Number <b class="num text-c4">{base.no}</b> · the category is fixed once saved</> : adding && !cat ? <>A new category is created when you save{first ? <>. Numbers start at <b class="num text-c4">{first}</b></> : ""}</> : cat ? (first ? multi ? <>Numbers start at <b class="num text-c4">{first}</b></> : <>Number <b class="num text-c4">{first}</b> will be assigned</> : "This category is full (999 designs)") : "Numbers are grouped by category."}</span>
+          : <select aria-label="Category" value={cats.some((c) => c.id === catId) ? catId : ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; setCatId(v); setExtra((x) => x.filter((i) => i !== v)); }} class={`${inputCls} cursor-pointer`}><option value="">{base ? "None (uncategorized)" : "Choose a category"}</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+        <span class="block t-meta mt-1">{base ? <>Number <b class="num text-c4">{base.no}</b> · the number stays the same when you change the category</> : adding && !cat ? <>A new category is created when you save{first ? <>. Numbers start at <b class="num text-c4">{first}</b></> : ""}</> : cat ? (first ? multi ? <>Numbers start at <b class="num text-c4">{first}</b></> : <>Number <b class="num text-c4">{first}</b> will be assigned</> : "This category is full (999 designs)") : "Numbers are grouped by category."}</span>
       </div>
       </div>
       {cats.length > 1 && <div class="max-w-[640px]"><span class="block text-[11px] font-medium text-c3 mb-1">Also list in</span>
