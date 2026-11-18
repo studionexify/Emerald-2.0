@@ -38,12 +38,22 @@ export type NxCat = { id: string; name: string; /** two-digit block, 10–99 */ 
 export type NxDesign = {
   id: string; name: string; /** the category whose number block this design's number came from (fixed once saved) */ catId: string;
   /** every category the design is listed in. Absent = just `catId`; empty = in none. */ cats?: string[]; /** five-digit number: category block + 3-digit sequence */ no: string; /** Drive folder holding this design's files */ folder?: string;
-  photos: NxPhoto[]; files: NxFile[]; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string; /** set when it went to the Bin unused: its number was free at once, so Restore may have to renumber it */ freed?: boolean;
+  photos: NxPhoto[]; files: NxFile[]; /** where the design came from (a web page) */ source?: string; /** who designed it */ designer?: string; desc?: string; price?: number; sizes?: NxSize[]; created: string; by: string; /** set when it went to the Bin unused: its number was free at once, so Restore may have to renumber it */ freed?: boolean;
 };
 export type NxShare = { id: string; designIds: string[]; to: string[]; by: string; at: string; note?: string; seen?: string[] };
 /** A design in the Bin: its Drive folder sits in Drive's trash until the Bin entry is gone for good. */
 export type NxTrash = { id: string; folder: string; photoIds: string[] };
 
+/** Every designer name ever entered, offered in a drop-down the next time. */
+export type NxDesigner = { id: string; name: string };
+export const nexderDesignersSig = persisted<NxDesigner[]>("nexderDesigners", []);
+/** A designer name as already stored (same spelling, ignoring case), so one person is never listed twice. */
+export const canonDesigner = (t: string) => { const v = t.trim().replace(/\s+/g, " "); return nexderDesignersSig.value.find((x) => x.name.toLowerCase() === v.toLowerCase())?.name ?? v; };
+/** A link to the original page: empty is fine; anything else must be a web address (https:// is added when missing). Returns null when it is not one. */
+export function cleanLink(t: string): string | null {
+  const v = t.trim(); if (!v) return "";
+  try { const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(v) ? v : "https://" + v); return (u.protocol === "https:" || u.protocol === "http:") && u.hostname.includes(".") ? u.href : null; } catch { return null; }
+}
 export const nexderCatsSig = persisted<NxCat[]>("nexderCats", []);
 export const nexderDesignsSig = persisted<NxDesign[]>("nexderDesigns", []);
 /** Bulk price changes that can still be undone, newest first. Kept on this device only. */
@@ -135,10 +145,10 @@ export const previewBytes = () => nexderDesignsSig.value.reduce((a, d) => a + d.
 /* ---------------------------------------------------------------- saving */
 /** An item in the form: already stored (no `file`) or newly picked (`file`). */
 export type DraftItem = { id: string; name: string; size: number; mime: string; file?: File; drive?: string; psize?: number; pend?: boolean };
-export type Draft = { key: string; editId?: string; name: string; desc: string; price: string; sizes: { label: string; mm: string; g: string; min: string; sliced: boolean }[]; photos: DraftItem[]; files: DraftItem[] };
-export const blankDraft = (): Draft => ({ key: uid(), name: "", desc: "", price: "", sizes: [], photos: [], files: [] });
-export const draftOf = (d: NxDesign): Draft => ({ key: d.id, editId: d.id, name: d.name, desc: d.desc ?? "", price: d.price ? String(d.price) : "", sizes: (d.sizes ?? []).map((s) => ({ label: s.label, mm: s.mm ? String(s.mm) : "", g: String(s.g), min: s.min ? String(s.min) : "", sliced: !!s.sliced })), photos: d.photos.map((p) => ({ ...p })), files: d.files.map((f) => ({ ...f })) });
-export const draftReady = (d: Draft) => !!d.name.trim();
+export type Draft = { key: string; editId?: string; name: string; desc: string; source: string; designer: string; price: string; sizes: { label: string; mm: string; g: string; min: string; sliced: boolean }[]; photos: DraftItem[]; files: DraftItem[] };
+export const blankDraft = (): Draft => ({ key: uid(), name: "", desc: "", source: "", designer: "", price: "", sizes: [], photos: [], files: [] });
+export const draftOf = (d: NxDesign): Draft => ({ key: d.id, editId: d.id, name: d.name, desc: d.desc ?? "", source: d.source ?? "", designer: d.designer ?? "", price: d.price ? String(d.price) : "", sizes: (d.sizes ?? []).map((s) => ({ label: s.label, mm: s.mm ? String(s.mm) : "", g: String(s.g), min: s.min ? String(s.min) : "", sliced: !!s.sliced })), photos: d.photos.map((p) => ({ ...p })), files: d.files.map((f) => ({ ...f })) });
+export const draftReady = (d: Draft) => !!d.name.trim() && cleanLink(d.source) !== null;
 export const newBytes = (d: Draft) => [...d.photos, ...d.files].reduce((a, x) => a + (x.file ? x.size : 0), 0);
 export type Progress = { label: string; sent: number; total: number };
 export const fmtBytes = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -177,13 +187,14 @@ export async function saveDraft(d: Draft, catId: string, listed: string[] | unde
     for (const [k, p] of addP.entries()) { onProgress({ label: "Previews", sent: k, total: addP.length }); if (signal?.aborted) throw new Error("cancelled"); const pv = await makePreview(p.file!); await b.previewPut(p.id, pv); made.previews.push(p.id); psize[p.id] = pv.size; }
     const sizes = d.sizes.map((s) => ({ label: s.label.trim(), mm: Number(s.mm) || undefined, g: Number(s.g) || 0, min: Number(s.min) > 0 ? Math.round(Number(s.min)) : undefined, sliced: s.sliced || undefined })).filter((s) => s.label && s.g > 0);
     const row: NxDesign = {
-      id: prev?.id ?? uid(), name: d.name.trim(), catId, ...(listed && !(listed.length === 1 && listed[0] === catId) ? { cats: listed } : {}), no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
+      id: prev?.id ?? uid(), name: d.name.trim(), ...(cleanLink(d.source) ? { source: cleanLink(d.source)! } : {}), ...(d.designer.trim() ? { designer: canonDesigner(d.designer) } : {}), catId, ...(listed && !(listed.length === 1 && listed[0] === catId) ? { cats: listed } : {}), no: no!, folder, desc: d.desc.trim() || undefined, price: Number(d.price) > 0 ? Number(d.price) : undefined, sizes: sizes.length ? sizes : undefined,
       photos: d.photos.map((p) => ({ id: p.id, name: p.name, size: p.size, mime: p.mime, drive: p.drive ?? prev?.photos.find((x) => x.id === p.id)?.drive, psize: psize[p.id] ?? p.psize, ...(p.file || (p.pend && !p.drive && !prev?.photos.find((x) => x.id === p.id)?.drive) ? { pend: true } : {}) })),
       files: d.files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, drive: f.drive ?? prev?.files.find((x) => x.id === f.id)?.drive, ...(f.file || (f.pend && !f.drive && !prev?.files.find((x) => x.id === f.id)?.drive) ? { pend: true } : {}) })),
       created: prev?.created ?? today(), by: prev?.by ?? me.value?.name ?? "You",
     };
     if (!prev || prev.catId !== catId) nexderCatsSig.value = nexderCatsSig.value.map((c) => (c.id === cat.id ? { ...c, last } : c));
     nexderDesignsSig.value = prev ? nexderDesignsSig.value.map((x) => (x.id === row.id ? row : x)) : [row, ...nexderDesignsSig.value];
+    if (row.designer && !nexderDesignersSig.value.some((x) => x.name.toLowerCase() === row.designer!.toLowerCase())) nexderDesignersSig.value = [...nexderDesignersSig.value, { id: uid(), name: row.designer }];
     log(prev ? "Edited design" : "Added design", `${row.name} · ${row.no}`, "order");
     /* what the user took out of an existing design is deleted from Drive and from the previews */
     if (prev) {
