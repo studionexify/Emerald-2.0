@@ -3,6 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { ask, Button, Field, Icon, inputCls, Sheet } from "../ui";
 import { inr, me, usersSig } from "../data";
 import { catsOf, checkDrive, deleteDesign, deletePlan, driveSpace, fmtBytes, LIMITS, nexderCatsSig, nexderDesignsSig, previewBytes, shareDesigns, type Check, type NxDesign, type Space } from "../data/nexder";
+import { importFound, scanDrive, type Found } from "../data/nexder-recover";
 import { addCategories, bulkPrice, canDeleteCategory, deleteCategory, duplicateDesigns, mergeCategories, newPrice, renameCategory, setArchived, setMembership, type PriceMode } from "../data/nexder-cats";
 
 /** Tick the categories the chosen designs should be in. A dash means only some of them are in it now; leave it alone to keep it as it is. */
@@ -143,6 +144,25 @@ export function ShareModal({ ds, onClose }: { ds: NxDesign[]; onClose: (done?: b
           <span class={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-c4 text-c0" : "border border-c2/50"}`}>{on && <Icon name="check" size={12} />}</span></button>; })}
         {!people.length && <p class="t-meta">There is nobody else on the team yet. Add people in Settings → Team.</p>}</div>
       <div class="mt-3"><Field label="Note"><input value={note} placeholder="Optional" onInput={(e) => setNote((e.target as HTMLInputElement).value)} class={inputCls} /></Field></div>
+    </Sheet>
+  );
+}
+
+/* ---------------------------------------------------------------- recover designs whose records were lost, from Google Drive */
+export function RecoverSheet({ onClose }: { onClose: () => void }) {
+  const [list, setList] = useState<Found[] | null>(null), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [pg, setPg] = useState(""), [done, setDone] = useState("");
+  useEffect(() => { scanDrive().then(setList).catch((e) => setErr((e as Error).message)); }, []);
+  const ok = (list ?? []).filter((x) => !x.problem);
+  return (
+    <Sheet onClose={onClose} title="Recover from Google Drive" footer={<><Button variant="outline" onClick={onClose}>Close</Button><Button disabled={busy || !ok.length} onClick={async () => { setBusy(true); const r = await importFound(ok, (n, t) => setPg(`${n} of ${t}`)); setBusy(false); setDone(`${r.restored} design${r.restored === 1 ? "" : "s"} restored.${r.failed.length ? " Not restored: " + r.failed.join("; ") : ""}`); setList((l) => (l ?? []).filter((x) => x.problem)); }}>{busy ? `Restoring… ${pg}` : `Restore ${ok.length} design${ok.length === 1 ? "" : "s"}`}</Button></>}>
+      <div class="px-3 pb-3 grid gap-2">
+        <p class="t-meta">These design folders are still in Google Drive, but no design in Nexder points at them. Restoring brings back the name, number, category, photos and files. Price, sizes, description, designer and source link were only in the lost records, so they come back empty. Nothing is deleted or changed in Drive.</p>
+        {err && <p class="text-[13px] text-red break-words">{err}</p>}
+        {!list && !err && <p class="t-meta">Looking in Google Drive…</p>}
+        {done && <p role="status" class="text-[13px] font-semibold break-words">{done}</p>}
+        {list && !list.length && !done && <p class="t-meta">Nothing to recover: every design folder in Drive already has a design.</p>}
+        <ul class="grid gap-1">{(list ?? []).map((x) => <li key={x.folder} class="rounded-xl bg-c1 px-3 py-2 text-[13px] break-words"><b>{x.no || "—"} · {x.name}</b> <span class="t-meta">· {x.cat} · {x.photos.length} photo{x.photos.length === 1 ? "" : "s"}, {x.files.length} file{x.files.length === 1 ? "" : "s"}</span>{x.problem && <span class="block text-amb">{x.problem}. Not restored.</span>}</li>)}</ul>
+      </div>
     </Sheet>
   );
 }

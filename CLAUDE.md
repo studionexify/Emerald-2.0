@@ -1,5 +1,10 @@
 # Data-change rule (Emerald)
 
+- **Nothing is deleted except by a person.** No record, file or Drive item is deleted, emptied or overwritten by sync, reconcile, a fix-up, a stale tab/device, an old app version or a clean-up job. Only a person using Emerald (or a Claude session acting on an explicit owner decision) deletes.
+- App code: a removal made inside the running app is stamped (`data._del`, added by `diff()` in `app/src/data/store.ts`). Sync code (`reconcile`, `fullSync`, `catchUp`) never creates a deletion on its own: a record the cloud has but the device lacks is fetched back (`restoreMissing`).
+- Database: `records_y_tombstone` (migration 0009) puts back any unstamped deletion, never empties a deleted row, and records every deletion in `public.record_history`. Drive: `nexder-drive` has no real delete (`purge` only moves to Drive's trash; `sweep` is off).
+- Claude sessions: never delete or tombstone any record unless the owner asked for that exact deletion in the session; then run `select set_config('emerald.actor', 'claude: <owner request>', true);` in the same SQL call. To undo a deletion: set `deleted=false` and remove `_del` from `data` (the content is still there), or read `record_history`.
+
 - Spool weights (`grams`, `gross`, `tare`, `size`) change only through a person's action in Emerald or a Claude session acting on an explicit owner decision.
 - App code: any weight write must run inside `asHuman(via, fn)` (`app/src/data/inventory.ts`); unstamped writes are refused on the device and in the database (`records_z_guard`, migration 0008).
 - Claude sessions: never change spool data unless the owner asked for that exact change in the session. Then, in the same SQL call: `select set_config('emerald.actor', 'claude: <owner request>', true);` before the update. Every change is kept in `public.record_history`.

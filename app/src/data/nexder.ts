@@ -18,6 +18,7 @@ import { buildDemand } from "./stockPlan";
 import { shrinkImage } from "./image";
 import { cloudEnabled } from "./sync";
 import { cancelDesign, enqueue, isQueued, setRunner } from "./nexder-queue";
+import { allPending, type Pending } from "./nexder-pending";
 
 /* ---------------------------------------------------------------- limits (free plans: Google Drive 15 GB, Supabase Storage 1 GB) */
 export const LIMITS = {
@@ -103,7 +104,7 @@ const FAKE = !!import.meta.env.VITE_NEXDER_FAKE;
 /** Nexder works only with cloud sync (that is where the files go). */
 export const nexderReady = cloudEnabled || FAKE;
 let be: Promise<Backend> | null = null;
-const backend = () => be ??= FAKE ? import("./nexder-fake").then((m) => m.fake) : import("./nexder-drive").then((m) => m.real);
+export const backend = () => be ??= FAKE ? import("./nexder-fake").then((m) => m.fake) : import("./nexder-drive").then((m) => m.real);
 
 /* ---------------------------------------------------------------- numbers */
 export const MAX_PER_CAT = 999;
@@ -154,7 +155,7 @@ export const newBytes = (d: Draft) => [...d.photos, ...d.files].reduce((a, x) =>
 export type Progress = { label: string; sent: number; total: number };
 export const fmtBytes = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const toBlob = (dataUrl: string) => fetch(dataUrl).then((r) => r.blob());
-async function makePreview(f: File): Promise<Blob> {
+export async function makePreview(f: File): Promise<Blob> {
   let b = await toBlob(await shrinkImage(f, 640, 0.7));
   if (b.size > LIMITS.previewMax) b = await toBlob(await shrinkImage(f, 420, 0.55));
   return b;
@@ -269,10 +270,25 @@ export async function syncTrash() {
   }
   nexderTrashSig.value = left;
 }
-/** Once a day (writers only): delete Drive files nothing refers to any more, such as an upload whose tab was closed before saving. */
-export async function sweepOrphans() {
-  if (!nexderReady) return;
-  try { const k = "emerald:nexder:sweep"; if (Date.now() - Number(localStorage.getItem(k) || 0) < 864e5) return; localStorage.setItem(k, String(Date.now())); await (await backend()).sweep(); } catch { /* next time */ }
+/** Nothing in Emerald deletes Drive files on its own any more (the old daily clean-up is gone; the server refuses it too). */
+export async function sweepOrphans() { /* intentionally empty */ }
+
+/* ---------------------------------------------------------------- uploads interrupted by a closed tab or a refresh */
+/** Originals still on THIS device that never reached Drive. The designs stay in the list; the person decides when to continue. */
+export const resumableSig = signal<Pending[]>([]);
+export async function loadResumable() {
+  const keep: Pending[] = [];
+  for (const p of await allPending()) {
+    const d = nexderDesignsSig.value.find((x) => x.id === p.designId), item = d && (p.kind === "photo" ? d.photos : d.files).find((x) => x.id === p.itemId);
+    if (item && !item.drive && !isQueued(p.designId, p.itemId)) keep.push(p);
+    /* an entry whose design is not in the list is left alone: the records may simply not have arrived yet, and the file must never be thrown away on a guess */
+  }
+  resumableSig.value = keep;
+}
+/** The person pressed Continue: send the saved originals to Drive again, from this device. */
+export function resumeUploads() {
+  const list = resumableSig.value; resumableSig.value = [];
+  enqueue(list.map((p) => ({ designId: p.designId, designName: p.designName, itemId: p.itemId, kind: p.kind, name: p.name, size: p.size, file: p.file instanceof File ? p.file : new File([p.file], p.name, { type: p.mime }) })));
 }
 
 /* ---------------------------------------------------------------- space meter and self-test */

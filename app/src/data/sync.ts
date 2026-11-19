@@ -10,7 +10,7 @@ import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import { sessionSig, usersSig, type Role } from "./auth";
 import { storeMedia, uploadPending } from "./media";
 import { billsSig, photosSig } from "./ledger";
-import { allRecords, applyRemote, isSample, fingerprint, localGet, localSet, setSyncSink, syncedKinds, type Change } from "./store";
+import { allRecords, applyRemote, flush, isSample, fingerprint, localGet, localSet, setSyncSink, syncedKinds, type Change } from "./store";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -32,7 +32,8 @@ const keyOf = (c: Change) => c.kind + "/" + c.id;
 /** What the cloud holds, as this device last saw it (record key → fingerprint, "x" = deleted). Anything local that differs was never sent. */
 const known = new Map<string, string>(localGet<[string, string][]>("sync:known", []));
 let knownTimer: ReturnType<typeof setTimeout> | 0 = 0;
-const saveKnown = () => { if (!knownTimer) knownTimer = setTimeout(() => { knownTimer = 0; localSet("sync:known", [...known]); }, 500); };
+/* "known" is only written after the lists themselves are saved: a copy of "known" that is ahead of the saved lists is what once made a device think its own records were gone. */
+const saveKnown = () => { if (!knownTimer) knownTimer = setTimeout(() => { knownTimer = 0; flush(); localSet("sync:known", [...known]); }, 500); };
 const markKnown = (c: Change) => { known.set(keyOf(c), c.deleted ? "x" : fingerprint(strip(c).data)); saveKnown(); };
 const strip = (c: Change): Change => (c.kind === "users" && c.data && typeof c.data === "object" ? { ...c, data: { ...(c.data as any), pass: undefined } } : c);
 
@@ -163,11 +164,30 @@ export async function loadMembers() {
 function reconcile() {
   const kinds = syncedKinds(), local = new Set<string>(), out: Change[] = [], since = localGet<number>("sync:contact", 0);
   for (const c of allRecords()) { const k = keyOf(c); local.add(k); if (!outbox.has(k) && known.get(k) !== fingerprint(strip(c).data)) out.push({ ...c, at: since || c.at }); }
+  /* Known to the cloud but missing on this device is NEVER sent as a deletion (that is how 36 designs were lost on 2026-11-19).
+     The cloud copy is fetched back instead; only a person deleting something inside Emerald deletes. */
+  const missing: { kind: string; id: string }[] = [];
   known.forEach((fp, k) => {
     const [kind, id] = [k.slice(0, k.indexOf("/")), k.slice(k.indexOf("/") + 1)];
-    if (fp !== "x" && id !== "_" && kinds.has(kind) && !local.has(k) && !outbox.has(k)) out.push({ kind, id, data: null, deleted: true, at: since || Date.now() });
+    if (fp !== "x" && id !== "_" && kinds.has(kind) && !local.has(k) && !outbox.has(k)) missing.push({ kind, id });
   });
+  if (missing.length) void restoreMissing(missing);
   if (out.length) enqueue(out);
+}
+
+/** Fetches back records the cloud still holds that this device lost (cleared storage, unsaved lists, a stale tab). Nothing is deleted anywhere. */
+async function restoreMissing(missing: { kind: string; id: string }[]) {
+  try {
+    const c0 = await client(), byKind = new Map<string, string[]>();
+    missing.forEach((m) => (byKind.get(m.kind) ?? byKind.set(m.kind, []).get(m.kind)!).push(m.id));
+    for (const [kind, ids] of byKind) for (let i = 0; i < ids.length; i += 100) {
+      const { data } = await c0.from("records").select("kind,id,data,deleted,updated_at,edited_at").eq("org", org).eq("kind", kind).in("id", ids.slice(i, i + 100));
+      const rows = (data ?? []) as Row[];
+      const live = rows.filter((r) => !r.deleted && r.data);
+      if (live.length) { applyRemote(live.map(toChange)); live.forEach((r) => markKnown(toChange(r))); }
+      rows.filter((r) => r.deleted).forEach((r) => markKnown(toChange(r))); // someone really deleted it elsewhere: nothing to bring back
+    }
+  } catch { /* tried again at the next start */ }
 }
 
 async function fetchAll() {
@@ -195,7 +215,7 @@ export async function fullSync(mode: "auto" | "device" | "cloud") {
   known.clear();
   if (choice === "device") {
     const out: Change[] = [];
-    for (const r of rows) { const c = toChange(r); if (!differs(r)) markKnown(c); else if (!local.has(keyOf(c)) && !r.deleted && r.id !== "_" && kinds.has(r.kind)) out.push({ kind: r.kind, id: r.id, data: null, deleted: true }); }
+    for (const r of rows) { const c = toChange(r); if (!differs(r)) markKnown(c); else if (!local.has(keyOf(c)) && !r.deleted && r.id !== "_" && kinds.has(r.kind)) out.push({ kind: r.kind, id: r.id, data: { _del: { at: Date.now(), via: "owner-confirmed-full-sync" } }, deleted: true }); }
     for (const [k, c] of local) if (!remote.has(k) || differs(remote.get(k)!)) out.push(c);
     if (out.length) enqueue(out);
   } else {
