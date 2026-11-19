@@ -49,6 +49,7 @@ export const WORK_TABS = [
   { href: "/work/shipping", label: "Shipping" },
   { href: "/work/archive", label: "Archive" },
   { href: "/work/bulk", label: "Bulk batches" },
+  { href: "/work/failures", label: "Failures" },
   { href: "/work/clients", label: "Clients" },
   { href: "/work/quotes", label: "Quotes" },
   { href: "/work/documents", label: "Documents" },

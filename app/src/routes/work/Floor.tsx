@@ -9,7 +9,7 @@ import { StockPanel } from "./StockPanel";
 import { PartsButton } from "./Parts";
 import { pieceGrams, loggedPc } from "../../data/stockPlan";
 import { onParts } from "../../data";
-import { cancelRun, colourHex, runTotals, colourStore, finishPlates, floorColumns, floorLine, gramsFor, lineColours, logPlates, pendingOn, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
+import { cancelRun, colourHex, sameFamily, runTotals, colourStore, finishPlates, floorColumns, floorLine, gramsFor, lineColours, logPlates, pendingOn, pendingWeigh, returnGrams, saveFloorLines, startPlates } from "../../data/floor";
 
 const eq = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 const n0 = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
@@ -32,14 +32,14 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const o = ordersSig.value.find((x) => x.id === order.id) ?? order;
   const [sort, setSort] = useState<{ k: SortKey; up: boolean }>({ k: "sr", up: true });
   const open = (k: number, run = "", part = "", group?: string[]) => { setLogRun(run); setLogPart(part); setLogGroup(group); setLogK(k); }, close = () => { setLogK(null); setLogRun(""); setLogPart(""); setLogGroup(undefined); };
-  const [logK, setLogK] = useState<number | null>(null), [logRun, setLogRun] = useState(""), [logPart, setLogPart] = useState(""), [logGroup, setLogGroup] = useState<string[] | undefined>(), [tick, setTick] = useState<Record<number, string[]>>({}), [cols, setCols] = useState(false), [lines, setLines] = useState(false);
+  const [logK, setLogK] = useState<number | null>(null), [logRun, setLogRun] = useState(""), [logPart, setLogPart] = useState(""), [logGroup, setLogGroup] = useState<string[] | undefined>(), [tick, setTick] = useState<Record<number, string[]>>({}), [cols, setCols] = useState(false), [hist, setHist] = useState<number | null>(null), [lines, setLines] = useState(false);
   /* Filament stock beside the table: both panes live, draggable divider. Open state and width are remembered on this device. */
   const [stock, setStock] = useState(() => { try { return localStorage.getItem("emerald:floor:stock") === "1"; } catch { return false; } });
   const [pw, setPw] = useState(() => { try { return Math.min(640, Math.max(300, Number(localStorage.getItem("emerald:floor:stockW")) || 380)); } catch { return 380; } });
   const toggleStock = () => { const v = !stock; setStock(v); try { localStorage.setItem("emerald:floor:stock", v ? "1" : "0"); } catch {} };
   const saveW = (w: number) => { setPw(w); try { localStorage.setItem("emerald:floor:stockW", String(w)); } catch {} };
   const drag = (e: PointerEvent) => { e.preventDefault(); const x0 = e.clientX, w0 = pw; const mv = (ev: PointerEvent) => setPw(Math.min(640, Math.max(300, w0 - (ev.clientX - x0)))); const up = (ev: PointerEvent) => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); saveW(Math.min(640, Math.max(300, w0 - (ev.clientX - x0)))); }; addEventListener("pointermove", mv); addEventListener("pointerup", up); };
-  useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && logK === null && !cols && !lines && onClose(); addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, [logK, cols, lines]);
+  useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && logK === null && hist === null && !cols && !lines && onClose(); addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, [logK, hist, cols, lines]);
 
   const flipTick = (k: number, name: string) => setTick((t) => ({ ...t, [k]: (t[k] ?? []).includes(name) ? t[k].filter((x) => x !== name) : [...(t[k] ?? []), name] }));
   /** A cut line shows one row per printer (all its parts together) and one row per part that has no printer yet. */
@@ -107,7 +107,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
                 <td class={td}><div class="flex flex-col items-center gap-1">{lineRuns(o, i).map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap cursor-pointer leading-tight">■ Finish<span class="block text-[9.5px] font-medium">{run.printer || "on plate"} · {run.units} pcs{run.part ? ` · ${run.part}` : ""}</span></button>)}
                   {i.parts?.length ? <span class="t-meta whitespace-nowrap">{i.parts.length} parts ↓</span> : <button type="button" onClick={() => open(k)} class="h-7 px-2.5 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold whitespace-nowrap cursor-pointer">{runsOf(o, i).length ? "+ Machine" : "▶ Start"}</button>}</div></td>
                 <td class={td}><div class="inline-block align-middle"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-12 h-12 max-[1100px]:w-9 max-[1100px]:h-9" onAdd={(fl) => attach(k, fl)} /></div></td>
-                <td class="px-2.5 py-2 text-left font-sans font-semibold leading-snug min-w-[8rem]">{i.name}<div class="mt-1 font-normal"><PartsButton o={o} k={k} compact /></div></td>
+                <td class="px-2.5 py-2 text-left font-sans font-semibold leading-snug min-w-[8rem]">{i.name}<div class="mt-1 font-normal flex flex-wrap items-center gap-1"><PartsButton o={o} k={k} compact />{hasHistory(o, i) && <button type="button" onClick={() => setHist(k)} class="ml-1 h-6 px-2 !min-h-0 rounded-full border border-line text-[11.5px] font-semibold text-c3 cursor-pointer whitespace-nowrap">🕘 History</button>}</div></td>
                 <td class={td}>{i.qty}</td>
                 <td class={`${td} font-semibold`}>{f.printed}</td>
                 <td class={`${td} ${f.wasted ? "text-red" : ""}`}>{f.wasted}</td>
@@ -131,7 +131,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
               <div class="flex items-center gap-3">
                 <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 shrink-0" onAdd={(fl) => attach(k, fl)} />
                 <div class="min-w-0 flex-1"><div class="font-semibold text-[14px] leading-snug">{k + 1}. {i.name}</div>
-                  <div class="t-meta">Qty {i.qty} · {f.printed} printed · {f.remaining} left{f.wasted ? <span class="text-red"> · {f.wasted} wasted</span> : null}{f.extra ? ` · +${f.extra} extra` : ""}</div><div class="mt-1"><PartsButton o={o} k={k} compact /></div></div>
+                  <div class="t-meta">Qty {i.qty} · {f.printed} printed · {f.remaining} left{f.wasted ? <span class="text-red"> · {f.wasted} wasted</span> : null}{f.extra ? ` · +${f.extra} extra` : ""}</div><div class="mt-1 flex flex-wrap items-center gap-1"><PartsButton o={o} k={k} compact />{hasHistory(o, i) && <button type="button" onClick={() => setHist(k)} class="ml-1 h-6 px-2 !min-h-0 rounded-full border border-line text-[11.5px] font-semibold text-c3 cursor-pointer whitespace-nowrap">🕘 History</button>}</div></div>
                 <div class="flex flex-col items-end gap-1 shrink-0">{lineRuns(o, i).map((run) => <button key={run.id} type="button" onClick={() => open(k, run.id)} class="!min-h-0 rounded-full bg-amb-bg text-amb px-3 py-1.5 text-[12px] font-semibold cursor-pointer leading-tight">■ Finish<span class="block text-[10px] font-medium">{run.printer || "on plate"} · {run.units} pcs{run.part ? ` · ${run.part}` : ""}</span></button>)}
                   {i.parts?.length ? <span class="t-meta whitespace-nowrap">{i.parts.length} parts ↓</span> : <button type="button" onClick={() => open(k)} class="h-8 px-3 !min-h-0 rounded-full bg-grn-bg text-grn text-[12px] font-semibold cursor-pointer">{runsOf(o, i).length ? "+ Machine" : "▶ Start"}</button>}</div>
               </div>
@@ -153,6 +153,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
         <div style={{ width: `${pw}px` }} class="shrink-0 min-h-0 border-l border-line max-[900px]:!w-full max-[900px]:h-[45%] max-[900px]:border-l-0 max-[900px]:border-t"><StockPanel order={o} /></div></>}
       </div>
     </div>
+    {hist !== null && <LazyHistory o={o} k={hist} onClose={() => setHist(null)} />}
     {logK !== null && (() => { const run = logRun ? batchesSig.value.find((b) => b.id === logRun && b.running) : undefined; return run ? <FinishPrint o={o} k={logK} run={run} onClose={close} /> : <StartPrint o={o} k={logK} part={logPart || undefined} group={logGroup} onClose={() => { close(); setTick({}); }} />; })()}
     {cols && <EditColours o={o} onClose={() => setCols(false)} />}
     {lines && <EditLines o={o} onClose={() => setLines(false)} />}
@@ -170,7 +171,8 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked, taken }: { 
   const hit = (s: Spool) => (!mat || s.material === mat) && (!brand || s.brand === brand) && words.every((w) => `${s.material} ${s.colour} ${s.brand} ${spoolNum(s)}`.toLowerCase().includes(w));
   const loaded = (s: Spool) => s.status === "loaded" && !!machine && machine.split(" + ").some((m) => eq(s.printer, m));
   const rank = (a: Spool, b: Spool) => Number(loaded(b)) - Number(loaded(a)) || b.grams - a.grams;
-  const match = all.filter((s) => eq(s.colour, colour) && hit(s)).sort(rank), other = all.filter((s) => !eq(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
+  const close = (s: Spool) => Number(eq(b0(s), colour)), b0 = (s: Spool) => s.colour;
+  const match = all.filter((s) => sameFamily(s.colour, colour) && hit(s)).sort((a, b) => close(b) - close(a) || rank(a, b)), other = all.filter((s) => !sameFamily(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
   const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = picked ? picked.includes(s.id) : value === s.id, other = !!taken?.includes(s.id), busy = spoolBusy(s.id, self) ?? (other ? ({ orderNo: "this start", name: "another machine", printer: "" } as unknown as Batch) : undefined); return (
     <button type="button" disabled={!!busy} onClick={() => !busy && onPick(s.id)} aria-pressed={on} title={busy ? "In use until that print is completed" : undefined} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 ${busy ? "cursor-not-allowed border border-dashed border-red/50 bg-red-bg/40" : "cursor-pointer"} ${on ? "border-2 border-grn bg-grn-bg" : busy ? "" : "border border-line hover:bg-c1"} ${(dim || busy) && !on ? "opacity-60" : ""}`}>
       <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
@@ -183,10 +185,10 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked, taken }: { 
     <div class="flex flex-wrap gap-1.5 mb-2">{chip(!mat, "All materials", () => setMat(""))}{mats.map((m) => chip(mat === m, m, () => setMat(mat === m ? "" : m)))}
       <select value={brand} onChange={(e) => setBrand((e.target as HTMLSelectElement).value)} class="h-7 px-2 rounded-full border border-line text-[11px] bg-c0 cursor-pointer"><option value="">Brand ▾</option>{brands.map((b) => <option key={b}>{b}</option>)}</select></div>
     <div class="max-h-[38vh] overflow-y-auto pr-1">
-      {!picked && <><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase my-1">{colour} · matches</div>
+      {!picked && <><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase my-1">{colour} family · any material (PLA, Silk, Matte, PETG…)</div>
       {match.length ? match.map((s) => <Row key={s.id} s={s} />) : <p class="t-meta mb-2">No {colour} spool in store{q || mat || brand ? " for this search" : ""}.</p>}
-      {other.length > 0 && <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-3 mb-1">Other spools in store</div>}</>}
-      {picked ? [...match, ...other].map((s) => <Row key={s.id} s={s} />) : other.map((s) => <Row key={s.id} s={s} dim />)}
+      {other.length > 0 && <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-3 mb-1">Any other spool · the colour above is only a reference</div>}</>}
+      {picked ? [...match, ...other].map((s) => <Row key={s.id} s={s} />) : other.map((s) => <Row key={s.id} s={s} />)}
     </div>
   </div>;
 }
@@ -194,7 +196,7 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked, taken }: { 
 const spoolNum = (s: Spool) => String(s.slot ?? s.spoolNo);
 const spoolName = (id?: string) => { const s = spoolsSig.value.find((x) => x.id === id); return s ? { s, t: `${s.material} · ${s.colour} · #${spoolNum(s)}` } : null; };
 /** Fullest spool of a colour, preferring the one loaded on this machine. */
-const bestSpool = (colour: string, machine?: string, skip: string[] = []) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && eq(s.colour, colour) && !spoolBusy(s.id) && !skip.includes(s.id)).sort((a, b) => Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
+const bestSpool = (colour: string, machine?: string, skip: string[] = []) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && sameFamily(s.colour, colour) && !spoolBusy(s.id) && !skip.includes(s.id)).sort((a, b) => Number(eq(b.colour, colour)) - Number(eq(a.colour, colour)) || Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
 
 function Head({ i, k, f, children }: { i: LineItem; k: number; f: ReturnType<typeof floorLine>; children?: preact.ComponentChildren }) {
   return <div class="flex gap-4 mb-4"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-24 h-24 !rounded-xl" />
@@ -242,8 +244,8 @@ function PartRow({ o, i, k, j, open, card, ticked, onTick }: { o: Order; i: Line
 }
 
 /** One machine of a start: its own plates × copies, and its own spools. */
-type RunRow = { key: string; machine: string; plates: number; per: number; part: string; sp: Record<string, string>; picked: string[]; tab: string };
-const idsOf = (r: RunRow, simple?: boolean) => (simple ? r.picked : Object.values(r.sp)).filter(Boolean);
+type RunRow = { /** pick any spools freely, ignoring the reference colours */ free?: boolean; key: string; machine: string; plates: number; per: number; part: string; sp: Record<string, string>; picked: string[]; tab: string };
+const idsOf = (r: RunRow, simple?: boolean) => (simple || r.free ? r.picked : Object.values(r.sp)).filter(Boolean);
 
 /**
  * ▶ Start: one or more machines, each with its own plates × copies and its own spools (a big piece is cut into parts and printed on several
@@ -253,7 +255,7 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
   const i = o.items[k], f = floorLine(o, i), cs = lineColours(i);
   const last = pendingWeigh(o, i).slice(-1)[0];
   const spoolsFor = (machine: string, skip: string[]) => Object.fromEntries(cs.map((c) => { const j = last?.colours?.findIndex((x) => eq(x, c)) ?? -1, id = j >= 0 ? last!.spoolIds?.[j] : undefined; return [c, id && !spoolBusy(id) && !skip.includes(id) ? id : bestSpool(c, machine, skip) ?? ""]; }));
-  const fresh = (skip: string[], first = false): RunRow => { const machine = first ? i.machine ?? "" : ""; return { key: crypto.randomUUID(), machine, plates: 1, per: first ? (simple ? Math.max(1, f.remaining) : i.perPlate ?? 1) : 1, part: "", sp: spoolsFor(machine, skip), picked: [], tab: "" }; };
+  const fresh = (skip: string[], first = false): RunRow => { const machine = first ? i.machine ?? "" : ""; return { free: !cs.length || undefined, key: crypto.randomUUID(), machine, plates: 1, per: first ? (simple ? Math.max(1, f.remaining) : i.perPlate ?? 1) : 1, part: "", sp: spoolsFor(machine, skip), picked: [], tab: "" }; };
   const [rows, setRows] = useState<RunRow[]>(() => {
     const r = fresh([], true), pt = startPart ? i.parts?.find((x) => x.name === startPart) : undefined;
     if (group && group.length > 1) {
@@ -266,7 +268,7 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
     if (pt) { const mach = pt.printer || r.machine, pcs = pt.colour ? [pt.colour] : cs, left = Math.max(1, i.qty - runTotals(o, i, pt.name).good); return [{ ...r, part: pt.name, machine: mach, per: left, sp: Object.fromEntries(pcs.map((c) => [c, bestSpool(c, mach) ?? ""])), tab: pcs[0] ?? "" }]; }
     return [{ ...r, tab: cs.find((c) => !r.sp[c]) ?? cs[0] ?? "" }];
   });
-  const [open, setOpen] = useState(0), [bad, setBad] = useState(0);
+  const [open, setOpen] = useState(0), [bad, setBad] = useState(0), [why, setWhy] = useState("");
   const partOf = (name: string) => i.parts?.find((x) => x.name === name);
   /** a part prints in its own colour; a plain run uses the line's colours */
   const gcols = group && group.length > 1 ? [...new Set(group.map((n) => partOf(n)?.colour).filter(Boolean) as string[])] : null;
@@ -275,32 +277,32 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
   const takenBy = (n: number) => rows.flatMap((r, j) => (j === n ? [] : idsOf(r, simple)));
   const pcsOf = (r: RunRow) => (simple ? r.per : r.plates * r.per);
   const total = rows.reduce((a, r) => a + pcsOf(r), 0);
-  const rowOk = (r: RunRow, n: number) => (simple ? r.picked.length > 0 && !r.picked.some((id) => spoolBusy(id)) : csOf(r).every((c) => r.sp[c] && !spoolBusy(r.sp[c]))) && !idsOf(r, simple).some((id) => takenBy(n).includes(id)) && (rows.length < 2 || !!r.machine) && pcsOf(r) > 0;
+  const rowOk = (r: RunRow, n: number) => (simple || r.free ? r.picked.length > 0 && !r.picked.some((id) => spoolBusy(id)) : csOf(r).every((c) => r.sp[c] && !spoolBusy(r.sp[c]))) && !idsOf(r, simple).some((id) => takenBy(n).includes(id)) && (rows.length < 2 || !!r.machine) && pcsOf(r) > 0;
   const machinesOk = new Set(rows.map((r) => r.machine).filter(Boolean)).size === rows.filter((r) => r.machine).length;
   const ready = rows.every(rowOk) && machinesOk;
   /** Free choice of spools: any material, colour or brand. Keys are the colour name, made unique when a colour repeats. */
   const freeSpools = (picked: string[]) => { const out: Record<string, string> = {}; for (const id of picked) { const s = spoolsSig.value.find((x) => x.id === id); let key = s?.colour || "Spool"; if (out[key]) key = `${key} · #${s ? spoolNum(s) : ""}`; out[key] = id; } return out; };
   const start = () => {
     const names = rows.map((r) => r.machine).filter(Boolean).join(" + ") || undefined;
-    for (const r of rows) startPlates(o, k, { machine: r.machine || undefined, plates: simple ? 1 : r.plates, perPlate: r.per, spools: simple ? freeSpools(r.picked) : Object.fromEntries(csOf(r).map((c) => [c, r.sp[c]])), part: r.part.trim() || undefined, ...(group && group.length > 1 ? { partsOn: group } : {}), lineMachine: names });
+    for (const r of rows) startPlates(o, k, { machine: r.machine || undefined, plates: simple ? 1 : r.plates, perPlate: r.per, spools: simple || r.free ? freeSpools(r.picked) : Object.fromEntries(csOf(r).map((c) => [c, r.sp[c]])), part: r.part.trim() || undefined, ...(group && group.length > 1 ? { partsOn: group } : {}), lineMachine: names });
     onClose();
   };
-  const skip = () => { const r = rows[0]; logPlates(o, k, { good: total - Math.min(bad, total), wasted: Math.min(bad, total), plates: simple ? 1 : r.plates, perPlate: simple ? total : r.per, gpp: {}, deduct: false }); onClose(); };
+  const skip = () => { const r = rows[0]; logPlates(o, k, { good: total - Math.min(bad, total), wasted: Math.min(bad, total), plates: simple ? 1 : r.plates, perPlate: simple ? total : r.per, gpp: {}, deduct: false, reason: why }); onClose(); };
   const add = () => { const r = fresh(rows.flatMap((x) => idsOf(x, simple))); setRows((rs) => [...rs, { ...r, tab: cs.find((c) => !r.sp[c]) ?? cs[0] ?? "" }]); setOpen(rows.length); };
   /** a bulk line: the pieces still to print are shared equally between the machines in this start (the first ones take the odd piece) */
   const spread = () => { const m = rows.length, base = Math.floor(f.remaining / m), extra = f.remaining % m; setRows((rs) => rs.map((r, j) => ({ ...r, plates: 1, per: Math.max(1, base + (j < extra ? 1 : 0)) }))); };
   const drop = (n: number) => { setRows((rs) => rs.filter((_, j) => j !== n)); setOpen(0); };
   return <Sheet huge open onClose={onClose} title={`▶ Start print · ${i.name}`}
-    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>{!simple && !(group && group.length > 1) && <Button variant="outline" onClick={skip} title="Already printed before: log the counts only, no grams">Skip (already printed)</Button>}<Button onClick={start} disabled={!ready && (simple || cs.length > 0)}>▶ Start {group && group.length > 1 ? `${group.length} parts together` : rows.length > 1 ? `${rows.length} machines` : "print"}</Button></>}>
+    footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>{!simple && !(group && group.length > 1) && <Button variant="outline" onClick={skip} disabled={bad > 0 && !why.trim()} title={bad > 0 && !why.trim() ? "Pick why the wasted pieces failed" : "Already printed before: log the counts only, no grams"}>Skip (already printed)</Button>}<Button onClick={start} disabled={!ready && (simple || cs.length > 0 || rows.some((r) => r.picked.length > 0))}>▶ Start {group && group.length > 1 ? `${group.length} parts together` : rows.length > 1 ? `${rows.length} machines` : "print"}</Button></>}>
     <div class="max-w-[720px] mx-auto"><Head i={i} k={k} f={f} />
     {rows.map((r, n) => {
-      const on = open === n, ok = rowOk(r, n), pcs = pcsOf(r), names = simple ? r.picked.map((id) => spoolName(id)?.t).filter(Boolean) : csOf(r).map((c) => spoolName(r.sp[c])?.t).filter(Boolean);
+      const on = open === n, ok = rowOk(r, n), pcs = pcsOf(r), names = simple || r.free ? r.picked.map((id) => spoolName(id)?.t).filter(Boolean) : csOf(r).map((c) => spoolName(r.sp[c])?.t).filter(Boolean);
       const dup = idsOf(r, simple).some((id) => takenBy(n).includes(id)), sameMachine = !!r.machine && rows.some((x, j) => j !== n && x.machine === r.machine);
       return <div key={r.key} class={`rounded-2xl border mb-3 ${on ? "border-c4/40 bg-c0" : "border-line bg-c0"}`}>
         <div class="flex items-center gap-2 px-3 py-2.5">
           <span class="w-5 h-5 rounded-full bg-c4 text-c0 text-[11px] font-bold flex items-center justify-center shrink-0">{n + 1}</span>
           <button type="button" onClick={() => setOpen(on ? -1 : n)} aria-expanded={on} class="min-w-0 flex-1 text-left !min-h-0 cursor-pointer"><b class="block text-[13px]">{r.machine || (rows.length > 1 ? "Pick a machine" : "Any machine")} · {pcs} pcs{r.part ? ` · ${r.part}` : ""}</b>
-            <span class={`block text-[11.5px] truncate ${ok ? "text-c2" : "text-amb"}`}>{names.length ? names.join(" · ") : simple ? "No spools yet" : csOf(r).length ? "Pick a spool for each colour" : "No colours set"}{dup ? " · a spool is also used on another machine" : sameMachine ? " · this machine is used twice" : ""}</span></button>
+            <span class={`block text-[11.5px] truncate ${ok ? "text-c2" : "text-amb"}`}>{names.length ? names.join(" · ") : simple || r.free ? "No spools yet" : csOf(r).length ? "Pick a spool for each colour" : "No colours set"}{dup ? " · a spool is also used on another machine" : sameMachine ? " · this machine is used twice" : ""}</span></button>
           {rows.length > 1 && <button type="button" onClick={() => drop(n)} class="text-[12px] text-red underline cursor-pointer !min-h-0 shrink-0">Remove</button>}
         </div>
         {on && <div class="px-3 pb-3 border-t border-line pt-3">
@@ -315,7 +317,9 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
               {group && group.length > 1 ? <span class="min-h-9 px-2 py-1.5 rounded-lg bg-c0 border border-line text-[13px] font-semibold break-words">{group.join(" + ")} <span class="font-normal text-c3">· one plate</span></span> : i.parts?.length ? <select class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer" value={r.part} onChange={(e) => { const nm = (e.target as HTMLSelectElement).value, pt = partOf(nm), mach = pt?.printer || r.machine, pcs2 = pt?.colour ? [pt.colour] : cs; set(n, { part: nm, machine: mach, sp: Object.fromEntries(pcs2.map((c) => [c, bestSpool(c, mach, takenBy(n)) ?? ""])), tab: pcs2[0] ?? "" }); }}><option value="">Whole piece</option>{i.parts.map((x) => <option key={x.id}>{x.name}</option>)}</select>
                 : <input class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px]" placeholder="e.g. Left half" value={r.part} onInput={(e) => set(n, { part: (e.target as HTMLInputElement).value })} />}</label>
           </div>
-          {simple ? <>
+          {!simple && <label class="flex items-start gap-2 mt-3 text-[12.5px] cursor-pointer"><input type="checkbox" class="mt-0.5 accent-grn" checked={!!r.free} onChange={(e) => set(n, { free: (e.target as HTMLInputElement).checked })} />
+            <span><b>Pick any spools freely</b><span class="block text-[11.5px] text-c2">The colours of this design are only a reference. Use any material, colour, brand or number of spools (e.g. Silk White instead of Pure White).</span></span></label>}
+          {simple || r.free ? <>
             <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Filaments on this machine · tap any spools: multi-material, multi-colour, any brand</div>
             <div class="flex flex-wrap gap-1.5 mb-2 min-h-8">{r.picked.length ? r.picked.map((id) => { const nm = spoolName(id); return nm && <button key={id} type="button" onClick={() => set(n, { picked: r.picked.filter((x) => x !== id) })} class="h-8 px-2.5 !min-h-0 rounded-full bg-c4 text-c0 text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer"><Sq hex={nm.s.hex ?? colourHex(nm.s.colour)} size="w-3.5 h-3.5" />{nm.t} ✕</button>; }) : <span class="t-meta">None picked yet</span>}</div>
             <SpoolPicker colour="" machine={r.machine} picked={r.picked} taken={takenBy(n)} onPick={(id) => set(n, { picked: r.picked.includes(id) ? r.picked.filter((x) => x !== id) : [...r.picked, id] })} />
@@ -329,16 +333,19 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
     <button type="button" onClick={add} class="w-full h-10 rounded-xl border border-dashed border-c2 text-[13px] font-medium text-c3 cursor-pointer !min-h-0">+ Add another machine <span class="t-meta">· its own plates and its own filaments</span></button>
     <div class="flex flex-wrap items-center gap-3 mt-3 text-[12px] text-c3"><b class="text-c4 text-[14px] num">{total} pcs on {rows.length} machine{rows.length > 1 ? "s" : ""}</b>
       {rows.length > 1 && f.remaining > 1 && <button type="button" onClick={spread} class="underline underline-offset-2 font-semibold text-c4 cursor-pointer !min-h-0" title="Share the pieces still to print equally between these machines">Share the {f.remaining} pcs left equally</button>}
-      {!simple && <label class="ml-auto flex items-center gap-1.5" title="Only for Skip (already printed)">Wasted (if skipping)<input type="number" min={0} class={inp} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>}</div>
+      {!simple && <label class="ml-auto flex items-center gap-1.5" title="Only for Skip (already printed)">Wasted (if skipping)<input type="number" min={0} class={inp} value={bad} onInput={(e) => setBad(n0((e.target as HTMLInputElement).value))} /></label>}
+      {!simple && bad > 0 && <div class="basis-full flex flex-wrap items-center gap-1.5"><span class="text-red font-semibold">Why did {bad} fail?</span>{FAIL_REASONS.map((x) => <button key={x} type="button" aria-pressed={why === x} onClick={() => setWhy(why === x ? "" : x)} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11.5px] font-semibold cursor-pointer border ${why === x ? "bg-red text-c0 border-red" : "border-line text-c3 bg-c0"}`}>{x}</button>)}
+        <input value={FAIL_REASONS.includes(why) ? "" : why} onInput={(e) => setWhy((e.target as HTMLInputElement).value)} placeholder="Or type the reason" aria-label="Failure reason for skipped pieces" class="h-7 px-2 rounded-md border border-line bg-c0 text-[12px] min-w-[12rem] flex-1" /></div>}</div>
     </div>
   </Sheet>;
 }
 
+const FAIL_REASONS = ["Bed adhesion / warping", "Spaghetti / layer shift", "Nozzle clog / under-extrusion", "Filament ran out / tangle", "Stringing / poor finish", "Supports / broke on removal", "Power cut / printer stopped", "Wrong colour / settings"];
 /** ■ Finish: pieces off the plates (good + wasted) and grams per plate from the spools picked at Start. */
 export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: number; run: Batch; onClose: () => void; simple?: boolean }) {
   const i = o.items[k], f = floorLine(o, i);
   const cs = run.colours?.length ? run.colours : lineColours(i);
-  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0), [hrs, setHrs] = useState(runHours(run));
+  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0), [why, setWhy] = useState(""), [hrs, setHrs] = useState(runHours(run));
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c, j) => [c, run.spoolIds?.[j] ?? bestSpool(c, run.printer) ?? ""])));
   const [g, setG] = useState<Record<string, number>>(() => Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
   const [chg, setChg] = useState<string | null>(null), [w, setW] = useState<Record<string, number>>({}), [pg, setPg] = useState<Record<string, number>>({});
@@ -348,10 +355,10 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
   const [later, setLater] = useState(!simple && f.remaining > pcs);
   /** Spool weighed at the end (gross): grams used = gross before − gross now, spread over every plate since it was loaded. */
   const weigh = (c: string, v: number) => { setW({ ...w, [c]: v }); const n = spoolName(sp[c]); if (n && v > 0) setG({ ...g, [c]: Math.max(0, Math.round((spoolGross(n.s) - v) / allPlates)) }); };
-  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later, hours: hrs, partG: run.partsOn ? pg : undefined }); onClose(); };
+  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later, hours: hrs, reason: why, partG: run.partsOn ? pg : undefined }); onClose(); };
   const when = run.at ? new Date(run.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
   return <Sheet huge open onClose={onClose} title={`■ Complete print · ${i.name}`}
-    footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs}>Complete log</Button></>}>
+    footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs || (wasted > 0 && !why.trim())} title={wasted > 0 && !why.trim() ? "Pick why the pieces failed" : undefined}>Complete log</Button></>}>
     <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f}><span class="inline-block rounded-md bg-amb-bg text-amb text-[11px] font-bold px-2 py-0.5 mb-1">ON PLATE{run.printer ? ` · ${run.printer}` : ""}{run.partsOn ? ` · ${run.partsOn.length} parts together` : run.part ? ` · ${run.part}` : ""}{when ? ` · started ${when}` : ""}</span></Head>
     <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1">
       {simple ? <label class="flex flex-col gap-1 text-[11px] text-c2">Pieces printed<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label> : <>
@@ -363,6 +370,10 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
     </div>
     <label class="flex items-center gap-2 mt-3 text-[12px] text-c2">Print time (hours)<input type="number" min={0} step="0.1" class={`${inp} w-24`} value={hrs || ""} onInput={(e) => setHrs(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Print time in hours" /><span>{run.printer ? `logged on ${run.printer}: machine hours, service count, failure %, machine and power cost` : "no printer picked, so nothing is logged on a printer"}</span></label>
     {run.partsOn && i.parts?.length ? <div class="mt-1.5 text-[12px] rounded-lg bg-c1 px-3 py-2">This plate printed {run.partsOn.length} parts together: {run.partsOn.join(", ")}. Each good copy counts for every one of them. The grams and hours are for the whole plate. They are shared equally between the parts unless you type what each part used below.</div> : run.part && i.parts?.length ? <div class="mt-1.5 text-[12px] rounded-lg bg-c1 px-3 py-2">This run printed “{run.part}”, one part of each piece. A piece is counted automatically once every part of it has printed good. Grams and hours are logged either way.</div> : null}
+    {wasted > 0 && <div class="mt-3 p-3 rounded-xl border border-red/40 bg-red-bg/30">
+      <div class="text-[10.5px] font-bold tracking-wide text-red uppercase mb-1.5">Why did {wasted} fail? · required</div>
+      <div class="flex flex-wrap gap-1.5 mb-2">{FAIL_REASONS.map((x) => <button key={x} type="button" aria-pressed={why === x} onClick={() => setWhy(why === x ? "" : x)} class={`h-8 px-3 !min-h-0 rounded-full text-[12px] font-semibold cursor-pointer border ${why === x ? "bg-red text-c0 border-red" : "border-line text-c3 bg-c0"}`}>{x}</button>)}</div>
+      <input value={FAIL_REASONS.includes(why) ? "" : why} onInput={(e) => setWhy((e.target as HTMLInputElement).value)} placeholder="Or type the reason, e.g. nozzle clog at layer 40" aria-label="Failure reason" class="h-9 w-full px-2.5 rounded-lg border border-line bg-c0 text-[13px]" /></div>}
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
     {!simple && <label class="flex items-start gap-2 mt-4 p-3 rounded-xl border border-line cursor-pointer text-[13px]"><input type="checkbox" class="mt-0.5 accent-grn" checked={later} onChange={(e) => setLater((e.target as HTMLInputElement).checked)} />
       <span><b>Spools stay loaded — weigh at the end</b><span class="block text-[12px] text-c2">Logs pieces only. Print the next plates from the same spools; weigh once when the batch is done and the grams are split over every plate.</span></span></label>}
@@ -497,4 +508,14 @@ function EditLines({ o, onClose }: { o: Order; onClose: () => void }) {
       </tr>)}</tbody>
     </table></div>
   </Sheet>;
+}
+
+/** Runs of a line taken off the plate, or on it now: the History button shows for these. */
+const hasHistory = (o: Order, i: LineItem) => batchesSig.value.some((b) => b.orderNo === o.no && b.name === i.name);
+/** History sheet lives in its own chunk; loaded on first open. */
+let HistMod: typeof import("./History") | null = null;
+function LazyHistory(p: { o: Order; k: number; onClose: () => void }) {
+  const [, re] = useState(0);
+  useEffect(() => { if (!HistMod) import("./History").then((m) => { HistMod = m; re(1); }); }, []);
+  return HistMod ? <HistMod.PrintHistory {...p} /> : null;
 }
