@@ -47,6 +47,7 @@ const routes: [string, any][] = [
   ["/settings/rates", L(g, "Rates")],
   ["/alerts", L(g, "Alerts")],
   ["/work/bulk", D(() => import("./routes/work/Bulk"))],
+  ["/work/failures", D(() => import("./routes/work/Failures"))],
   ["/workshop", L(ws, "Filament")],
   ["/workshop/printers", L(ws, "Printers")],
   ["/workshop/filament", L(ws, "Filament")], // old link

@@ -45,7 +45,7 @@ const setLine = (o: Order, k: number, patch: Partial<LineItem>): Order => patchO
  * Log plates for a line. Pieces on the plates are good + wasted (a halted plate is all wasted).
  * Every gram on the plates is consumed, good or bad. `deduct` false = already printed, counts only.
  */
-export function logPlates(o: Order, k: number, d: { good: number; wasted: number; plates: number; perPlate: number; gpp: Record<string, number>; deduct: boolean }): Order {
+export function logPlates(o: Order, k: number, d: { good: number; wasted: number; plates: number; perPlate: number; gpp: Record<string, number>; deduct: boolean; /** why pieces failed */ reason?: string }): Order {
   const i = o.items[k], p = lineProgress(o, i);
   const grams: Record<string, number> = {}, cons: string[] = [];
   if (d.deduct) for (const [colour, g] of Object.entries(d.gpp)) {
@@ -54,7 +54,7 @@ export function logPlates(o: Order, k: number, d: { good: number; wasted: number
     cons.push(consume({ kind: "filament", item: sp ? spoolLabel(sp) : colour, qty, orderNo: o.no, batch: i.name, printer: i.machine, spoolId: sp?.id }).id);
     grams[sp?.id ?? colour] = (grams[sp?.id ?? colour] ?? 0) + qty;
   }
-  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.good + d.wasted, done: d.good, failed: d.wasted, printer: i.machine, grams: d.deduct ? grams : undefined, cons, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
+  batchesSig.value = [...batchesSig.value, { id: crypto.randomUUID(), orderNo: o.no, customer: o.customer, name: i.name, units: d.good + d.wasted, done: d.good, failed: d.wasted, ...(d.wasted && d.reason?.trim() ? { reason: d.reason.trim() } : {}), printer: i.machine, grams: d.deduct ? grams : undefined, cons, at: new Date().toISOString(), by: me.value?.name, stage: "production" }];
   log(d.deduct ? "Logged plates" : "Logged plates (already printed)", `${o.no} · ${i.name}: ${d.good} good, ${d.wasted} wasted${d.deduct ? ` · ${Object.values(grams).reduce((a, x) => a + x, 0)} g` : ""}`);
   // Store counts on the line so later corrections stay exact; remember the plate setup for next time.
   return setLine(o, k, { printed: p.printed + d.good, failed: p.failed + d.wasted, perPlate: d.perPlate, gpp: { ...i.gpp, ...d.gpp } });
