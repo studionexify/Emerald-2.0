@@ -2,7 +2,7 @@ import { sortAbc } from "../mock/types";
 import { vOrders } from "../data";
 import { useState } from "preact/hooks";
 import { clientsSig } from "../data/inventory";
-import { adminUsers, cloudEnabled, cloudSignOut, fullSync, cloudUser, syncState, type SyncState } from "../data/sync";
+import { adminUsers, cloudEnabled, cloudSignOut, deviceSyncPlan, fullSync, cloudUser, syncState, type SyncState } from "../data/sync";
 import { SETTINGS_TABS } from "../nav";
 import { booksModeSig, canSwitchMode, MODE_LABEL, type BooksMode } from "../data/mode";
 import { ask, askText, KV, Pick, Button, Card, Empty, Field, Icon, inputCls, Page, Section, Status, Table, Disclosure, Flow, Waterfall } from "../ui";
@@ -162,7 +162,9 @@ function CloudCard() {
       <Card class="flex flex-wrap items-center justify-between gap-2">
         <span class="text-sm">Devices showing different data? Pick the device that is right and make every device match it.</span>
         <span class="flex flex-wrap gap-2">
-          {u.role === "owner" && <Button variant="outline" onClick={async () => { if (await ask("Send THIS device's data to every device? The cloud copy and all other devices will be replaced with what you see here.", { ok: "Send this device's data", danger: true })) await fullSync("device"); }}>This device is correct</Button>}
+          {u.role === "owner" && <Button variant="outline" onClick={async () => { { const plan = await deviceSyncPlan().catch(() => null); if (!plan) return; const gone = plan.reduce((a, x) => a + x.n, 0);
+            const list = plan.length ? ` This will hide ${gone} record${gone === 1 ? "" : "s"} that exist only in the cloud: ${plan.map((x) => `${x.n} ${x.kind}`).join(", ")}.` : "";
+            if (await ask("Send THIS device's data to every device? The cloud copy and all other devices will be replaced with what you see here." + list, { ok: "Send this device's data", danger: true }) && (gone <= 5 || await ask(`Are you sure? ${gone} records will disappear from every device. If this device is out of date, cancel and use “Load from cloud” instead.`, { ok: "Yes, hide them", danger: true }))) await fullSync("device"); } }}>This device is correct</Button>}
           <Button variant="outline" onClick={async () => { if (await ask("Replace this device's data with the cloud copy? Anything only on this device is removed.", { ok: "Use cloud copy", danger: true })) await fullSync("cloud"); }}>Load from cloud</Button>
         </span>
       </Card>

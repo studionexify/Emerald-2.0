@@ -2,7 +2,7 @@
 //   start    → opens a Google resumable-upload session and hands back only its URL; the browser sends the file to Google directly
 //   confirm  → checks the uploaded file really exists in the right folder with the right size
 //   ticket   → seals a 2-minute download ticket; the Cloudflare Worker (/nexder-dl) streams the file from Drive to the browser
-//   folder / trash / purge / sweep / quota → folder tree, Bin (Drive trash), real deletion, orphan clean-up, free space
+//   folder / trash / purge / quota / inventory → folder tree, Bin (Drive trash), real deletion of unreferenced items, free space, read-only listing (sweep is disabled)
 // Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN (same as drive-media) and NEXDER_TICKET_KEY (32 random bytes, base64,
 // also set on the Cloudflare Worker).
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -13,7 +13,6 @@ const env = (k: string) => Deno.env.get(k) ?? "";
 class Fail extends Error { constructor(public status: number, m: string) { super(m); } }
 /** Space always left free in the Google account (Gmail and Docs share it). */
 const RESERVE = 1024 ** 3;
-const SWEEP_AGE_MS = 24 * 3600 * 1000;
 const TICKET_MS = 120_000;
 const WRITERS = ["owner", "partner", "manager"];
 const FOLDER = "application/vnd.google-apps.folder";
@@ -143,34 +142,32 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    if (act === "purge") { // real deletion, only for items no record (live or in the Bin) still points at
+    if (act === "purge") { // removal of items no record (live or in the Bin) still points at
       needWrite();
       const ids: string[] = (Array.isArray(b.ids) ? b.ids : []).slice(0, 100), done: string[] = [], kept: string[] = [];
       for (const id of ids) {
         const m = await mine(String(id), org); if (!m) { done.push(id); continue; }
         if (await referenced(m.id)) { kept.push(id); continue; }
-        const r = await drive(`/drive/v3/files/${m.id}`, { method: "DELETE" });
+        /* Never a real DELETE: the item goes to Drive's trash, where it stays recoverable for 30 days. */
+        const r = await drive(`/drive/v3/files/${m.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) });
         if (r.ok || r.status === 404) done.push(id); else throw new Fail(502, "Drive error " + r.status);
       }
       return json({ deleted: done, kept });
     }
 
-    if (act === "sweep") { // files and design folders nothing refers to any more (abandoned uploads), older than a day
+    /* Abandoned-upload clean-up is switched OFF. It used to hard-delete (no Drive trash) every Nexder file or folder no live record pointed at,
+       which destroys the originals of any design whose record was lost or wrongly tombstoned. Nothing in Emerald may delete data on its own. */
+    if (act === "sweep") return json({ deleted: 0, disabled: true });
+
+    if (act === "inventory") { // read-only: everything Nexder keeps in Drive for this organisation, to rebuild lost records from
       needWrite();
       const cond = `appProperties has { key='app' and value='nexder' } and appProperties has { key='org' and value='${q(org)}' } and trashed=false`;
-      let page = "", n = 0, scanned = 0;
+      const items: unknown[] = []; let page = "";
       do {
-        const r = await (await drive(`/drive/v3/files?q=${encodeURIComponent(cond)}&fields=nextPageToken,files(id,createdTime,appProperties)&pageSize=200${page ? "&pageToken=" + page : ""}`)).json();
-        for (const f of r.files ?? []) {
-          scanned++;
-          const kind = f.appProperties?.kind;
-          if ((kind !== "file" && kind !== "design") || Date.now() - Date.parse(f.createdTime) < SWEEP_AGE_MS) continue;
-          if (await referenced(f.id)) continue;
-          if ((await drive(`/drive/v3/files/${f.id}`, { method: "DELETE" })).ok) n++;
-        }
-        page = r.nextPageToken ?? "";
-      } while (page && scanned < 2000);
-      return json({ deleted: n });
+        const r = await (await drive(`/drive/v3/files?q=${encodeURIComponent(cond)}&fields=nextPageToken,files(id,name,size,mimeType,parents,createdTime,appProperties)&pageSize=200${page ? "&pageToken=" + page : ""}`)).json();
+        items.push(...(r.files ?? [])); page = r.nextPageToken ?? "";
+      } while (page && items.length < 5000);
+      return json({ items });
     }
 
     throw new Fail(400, "Unknown action");

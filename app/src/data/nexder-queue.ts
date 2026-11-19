@@ -3,6 +3,7 @@
  * the files go to Google Drive one after another while the person keeps working. Tiny on purpose: the dock in the frame reads it.
  */
 import { uploadsSig, type UpJob } from "./upload-state";
+import { dropFile, keepFile } from "./nexder-pending";
 export { uploadsSig, type UpJob };
 
 /** Does the actual transfer and attaches the Drive id to the design. Set by the Nexder data module. */
@@ -19,6 +20,7 @@ export function enqueue(jobs: Omit<UpJob, "id" | "sent" | "state">[]) {
   if (!jobs.length) return;
   /* one job per item: a second request for the same item replaces the old one */
   const keep = uploadsSig.value.filter((o) => !jobs.some((n) => n.designId === o.designId && n.itemId === o.itemId));
+  jobs.forEach((j) => void keepFile(j)); // the original also waits on this device, so a closed tab or a refresh loses nothing
   uploadsSig.value = [...keep, ...jobs.map((j) => ({ ...j, id: `${j.designId}:${j.itemId}:${Date.now()}`, sent: 0, state: "wait" as const }))];
   void pump();
 }
@@ -29,7 +31,7 @@ export async function pump() {
       const j = uploadsSig.value.find((x) => x.state === "wait"); if (!j) break;
       patch(j.id, { state: "run", sent: 0, err: undefined });
       const ac = new AbortController(); aborts.set(j.id, ac);
-      try { await runner(j, ac.signal, (n) => patch(j.id, { sent: n })); patch(j.id, { state: "done", sent: j.size }); }
+      try { await runner(j, ac.signal, (n) => patch(j.id, { sent: n })); patch(j.id, { state: "done", sent: j.size }); void dropFile(j.designId, j.itemId); }
       catch (e) { if (uploadsSig.value.some((x) => x.id === j.id)) patch(j.id, { state: "fail", err: (e as Error).message || "Upload failed" }); }
       aborts.delete(j.id);
     }
@@ -37,7 +39,7 @@ export async function pump() {
   if (!active()) setTimeout(() => { if (!active()) uploadsSig.value = uploadsSig.value.filter((j) => j.state !== "done"); }, 6000);
 }
 /** Stops one upload and takes it off the list. The file stays on its design as "not uploaded yet". */
-export function cancelJob(id: string) { aborts.get(id)?.abort(); uploadsSig.value = uploadsSig.value.filter((j) => j.id !== id); }
+export function cancelJob(id: string) { const j = uploadsSig.value.find((x) => x.id === id); if (j) void dropFile(j.designId, j.itemId); aborts.get(id)?.abort(); uploadsSig.value = uploadsSig.value.filter((j) => j.id !== id); }
 export function cancelDesign(designId: string, itemIds?: string[]) { for (const j of uploadsSig.value) if (j.designId === designId && (!itemIds || itemIds.includes(j.itemId))) cancelJob(j.id); }
 export const retryJob = (id: string) => { patch(id, { state: "wait", err: undefined, sent: 0 }); void pump(); };
 export const dismissJob = (id: string) => { uploadsSig.value = uploadsSig.value.filter((j) => j.id !== id); };

@@ -5,8 +5,8 @@ import { lazy } from "../router";
 import { ask, Button, Empty, isDesktop, Field, Icon, inputCls, Page, Sheet } from "../ui";
 import { inr, log, ordersSig, shortDate, usersSig, can, type Order } from "../data";
 import {
-  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, draftOf, draftReady, fmtBytes, incomplete, priceUndoSig, setPriceUndo, markSeen,
-  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, saveDraft, sharedWithMe, sweepOrphans, syncTrash, unseenShares,
+  addCategory, assignable, catsOf, cleanLink, nexderDesignersSig, assignToOrder, blankDraft, buildPack, canStream, catName, draftOf, draftReady, fmtBytes, incomplete, loadResumable, resumableSig, resumeUploads, priceUndoSig, setPriceUndo, markSeen,
+  MEMORY_ZIP, newBytes, nexderCatsSig, nexderDesignsSig, nexderReady, nextCode, nextNo, openSink, packBytes, packPlan, saveDraft, sharedWithMe, syncTrash, unseenShares,
   type Draft, type DraftItem, type NxDesign, type NxSize, type Progress,
 } from "../data/nexder";
 import { uid } from "../data/store";
@@ -59,12 +59,13 @@ const menuItem = "h-9 px-2.5 !min-h-0 rounded-lg inline-flex items-center gap-2 
 
 /* ---------------------------------------------------------------- page */
 type Panel = null | { k: "new" } | { k: "edit"; id: string } | { k: "view"; id: string };
-type Dlg = null | "pack" | "share" | "assign" | "storage" | "cats" | "manage" | "price" | "dup" | "del";
+type Dlg = null | "recover" | "pack" | "share" | "assign" | "storage" | "cats" | "manage" | "price" | "dup" | "del";
 const AssignCats = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.AssignCats));
 const BulkDialog = lazy<{ kind: "price" | "dup" | "del"; ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.BulkDialog));
 const csv = (ds: NxDesign[]) => import("../data/nexder-cats").then((m) => m.exportCsv(ds));
 const ManageCats = lazy<{ onClose: () => void }>(() => import("./NexderCats").then((m) => m.ManageCats));
 const ViewPanel = lazy<{ d: NxDesign; writable: boolean; inline?: boolean; hidden?: boolean; onClose: () => void; onEdit: () => void; onShare: () => void; onAssign: () => void }>(() => import("./NexderView").then((m) => m.ViewPanel));
+const RecoverSheet = lazy<{ onClose: () => void }>(() => import("./NexderCats").then((m) => m.RecoverSheet));
 const StorageSheet = lazy<{ writable: boolean; onClose: () => void }>(() => import("./NexderCats").then((m) => m.StorageSheet));
 const ShareModal = lazy<{ ds: NxDesign[]; onClose: (done?: boolean) => void }>(() => import("./NexderCats").then((m) => m.ShareModal));
 
@@ -134,7 +135,7 @@ export default function Nexder() {
   const selecting = mode === "pick";
   const writable = can("nexder", "full") && nexderReady;
   const shared = sharedWithMe(), unseen = unseenShares().length;
-  useEffect(() => { if (nexderReady) { syncTrash(); if (can("nexder", "full")) sweepOrphans(); } }, []);
+  useEffect(() => { if (nexderReady) { syncTrash(); void loadResumable(); } }, []);
   useEffect(() => { if (view === "shared") markSeen(); }, [view, shared.length]);
   const pool = view === "shared" ? designs.filter((d) => shared.some((s) => s.designIds.includes(d.id))) : designs;
   const list = pool.filter((d) => (!cat || (cat === "__none" ? !catsOf(d).length : catsOf(d).includes(cat))) && (!q.trim() || d.name.toLowerCase().includes(q.trim().toLowerCase()) || d.no.includes(q.trim()) || (d.designer ?? "").toLowerCase().includes(q.trim().toLowerCase())));
@@ -170,6 +171,7 @@ export default function Nexder() {
         {(writable || sorted.length > 0 || (nexderReady && designs.length > 0)) && <Pop label="More" icon="more" menu>
           {writable && <button type="button" class={menuItem} onClick={() => setDlg("manage")}><Icon name="folder" size={14} /> Categories</button>}
           {sorted.length > 0 && <button type="button" class={menuItem} onClick={() => csv(sorted)}><Icon name="out" size={14} /> Export CSV</button>}
+          {writable && <button type="button" class={menuItem} onClick={() => setDlg("recover")}><Icon name="archive" size={14} /> Recover from Drive</button>}
           {nexderReady && designs.length > 0 && <button type="button" class={menuItem} onClick={() => setDlg("storage")}><Icon name="archive" size={14} /> Storage</button>}
         </Pop>}
         {writable && <Button icon="plus" onClick={() => { setPanel({ k: "new" }); }}>New design</Button>}</>}
@@ -205,7 +207,10 @@ export default function Nexder() {
         <span class="min-w-0 flex-1 break-words">Prices changed for {priceUndoSig.value[0].items.length} design{priceUndoSig.value[0].items.length > 1 ? "s" : ""} ({priceUndoSig.value[0].label || "bulk change"}){priceUndoSig.value.length > 1 ? ` · ${priceUndoSig.value.length - 1} earlier change${priceUndoSig.value.length > 2 ? "s" : ""} can be undone after` : ""}.{undoNote && <b> {undoNote}</b>}</span>
         <button type="button" onClick={() => import("../data/nexder-cats").then((m) => { const r = m.undoPrice(); setUndoNote(`${r.restored} restored${r.skipped ? `, ${r.skipped} left as they are (edited since)` : ""}.`); })} class="h-8 px-3 !min-h-0 rounded-full bg-c4 text-c0 text-[13px] font-semibold cursor-pointer">Undo price change</button>
         <button type="button" onClick={() => { setPriceUndo([]); setUndoNote(""); }} class="text-[12px] text-c3 underline underline-offset-2 cursor-pointer !min-h-0">Keep, dismiss</button></div>}
-      {writable && !uploadsSig.value.length && designs.some((d) => incomplete(d).length) && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Some files were saved but never reached Google Drive, because the tab was closed or the upload was stopped. Open a design marked “Upload incomplete” and press Upload again for each file.</p>}
+      {writable && resumableSig.value.length > 0 && !uploadsSig.value.some((j) => j.state === "run" || j.state === "wait") && <div role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px] flex items-center gap-3 flex-wrap">
+        <span class="min-w-0 flex-1 break-words">{resumableSig.value.length} file{resumableSig.value.length > 1 ? "s were" : " was"} still uploading when this tab was closed or refreshed. Your designs are all here; the files are saved on this device. Continue from this same device to finish sending them to Google Drive.</span>
+        <button type="button" onClick={resumeUploads} class="h-8 px-3 !min-h-0 rounded-full bg-c4 text-c0 text-[13px] font-semibold cursor-pointer">Continue upload</button></div>}
+      {writable && !resumableSig.value.length && !uploadsSig.value.length && designs.some((d) => incomplete(d).length) && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Some files were saved but never reached Google Drive, and they are not on this device. Continue from the device you added them on, or open a design marked “Upload incomplete” and press Upload again for each file.</p>}
       {!nexderReady && <p role="status" class="rounded-xl bg-amb-bg text-amb px-3 py-2 text-[13px]">Nexder keeps its files in Google Drive, so it needs cloud sync. Sign in to cloud sync to add or open files.</p>}
       {!designs.length
         ? <div class="rounded-[var(--radius-card)] bg-c0 p-8"><Empty title="No designs yet" action={writable ? <Button icon="plus" class="mt-2" onClick={() => setPanel({ k: "new" })}>New design</Button> : undefined} /></div>
@@ -271,6 +276,7 @@ export default function Nexder() {
         </div>)}
       {!isDesktop.value && panel?.k === "view" && open && <ViewPanel d={open} writable={writable} hidden={dlg === "share" || dlg === "assign"} onClose={() => setPanel(null)} onEdit={() => setPanel({ k: "edit", id: open.id })}
         onShare={() => { setSel([open.id]); setDlg("share"); }} onAssign={() => { setSel([open.id]); setDlg("assign"); }} />}
+      {dlg === "recover" && <RecoverSheet onClose={() => setDlg(null)} />}
       {dlg === "storage" && <StorageSheet writable={can("nexder", "full")} onClose={() => setDlg(null)} />}
       {windowOpen && <DesignWindow key={panel.k === "edit" ? panel.id : "new"} editId={panel.k === "edit" ? panel.id : undefined} presetCat={cat} onClose={() => setPanel(panel.k === "edit" ? { k: "view", id: panel.id } : null)} onSaved={(d) => setPanel({ k: "view", id: d.id })} />}
       {(dlg === "price" || dlg === "dup" || dlg === "del") && <BulkDialog kind={dlg} ds={picked} onClose={(done) => { setDlg(null); if (done) stopSelect(); }} />}

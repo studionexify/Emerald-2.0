@@ -15,7 +15,10 @@ const shadow = new Map<string, unknown>();
 
 export function persisted<T>(key: string, init: T): Signal<T> {
   let v = init;
-  try { const raw = localStorage.getItem(PREFIX + key); if (raw) v = JSON.parse(raw); } catch {}
+  try {
+    const raw = localStorage.getItem(PREFIX + key);
+    if (raw) { try { v = JSON.parse(raw); } catch { /* unreadable: keep the bytes aside instead of letting the next save overwrite them */ try { localStorage.setItem(PREFIX + "corrupt:" + key + ":" + Date.now(), raw); } catch {} } }
+  } catch {}
   const s = signal<T>(v);
   registry.set(key, s); shadow.set(key, v);
   let first = true;
@@ -37,7 +40,8 @@ function diff(kind: string, prev: unknown, next: unknown): Change[] {
     const before = new Map((prev as { id: string }[] | undefined ?? []).map((r) => [r.id, r]));
     const out: Change[] = [];
     for (const r of next) { const p = before.get(r.id); before.delete(r.id); if (p !== r && JSON.stringify(p) !== JSON.stringify(r)) out.push({ kind, id: r.id, data: r, deleted: false, at }); }
-    before.forEach((_r, id) => out.push({ kind, id, data: null, deleted: true, at })); // tombstone only: the Bin keeps its own copy
+    // A removal made inside the running app is a person's action: it carries a stamp (data._del). The database refuses deletions without one and never empties the row.
+    before.forEach((_r, id) => out.push({ kind, id, data: { _del: { at } }, deleted: true, at }));
     return out;
   }
   return [{ kind, id: "_", data: next, deleted: false, at }];
@@ -87,7 +91,7 @@ if (tabs) tabs.onmessage = (e) => applyRemote(e.data as Change[]);
 export const storageFailed = signal(false);
 const dirty = new Map<string, unknown>();
 let timer: ReturnType<typeof setTimeout> | 0 = 0;
-function flush() {
+export function flush() {
   timer = 0;
   dirty.forEach((v, k) => { try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); storageFailed.value = false; } catch { storageFailed.value = true; } });
   dirty.clear();
