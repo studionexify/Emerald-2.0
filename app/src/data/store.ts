@@ -6,7 +6,8 @@ const PREFIX = "emerald:";
 const LOCAL_ONLY = new Set(["session", "media:queue", "loginAttempts", "seedv", "sync:outbox", "sync:last"]);
 
 /** `at` = when the edit was made on this device (ms). The newest edit wins when devices disagree. */
-export type Change = { kind: string; id: string; data: unknown; deleted: boolean; at?: number };
+/** `keys`: the top-level fields this edit changed (absent = unknown, e.g. a reconcile). The database merges only these onto a newer cloud row. */
+export type Change = { kind: string; id: string; data: unknown; deleted: boolean; at?: number; keys?: string[] };
 type Sink = (changes: Change[]) => void;
 let sink: Sink | null = null;
 let applying = false;
@@ -34,17 +35,24 @@ export function persisted<T>(key: string, init: T): Signal<T> {
 
 const isList = (v: unknown): v is { id: string }[] => Array.isArray(v) && v.every((x) => x && typeof x === "object" && typeof (x as any).id === "string");
 /** Lists of {id} sync row by row; anything else syncs as one row named after its key. */
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+/** Top-level keys whose value differs between two versions of a record (undefined when they are not both plain objects). */
+function keysOf(a: unknown, b: unknown): string[] | undefined {
+  if (!isObj(a) || !isObj(b)) return undefined;
+  const ks = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+  return ks.length ? ks : undefined;
+}
 function diff(kind: string, prev: unknown, next: unknown): Change[] {
   const at = Date.now();
   if (isList(next) && (prev === undefined || isList(prev))) {
     const before = new Map((prev as { id: string }[] | undefined ?? []).map((r) => [r.id, r]));
     const out: Change[] = [];
-    for (const r of next) { const p = before.get(r.id); before.delete(r.id); if (p !== r && JSON.stringify(p) !== JSON.stringify(r)) out.push({ kind, id: r.id, data: r, deleted: false, at }); }
+    for (const r of next) { const p = before.get(r.id); before.delete(r.id); if (p !== r && JSON.stringify(p) !== JSON.stringify(r)) out.push({ kind, id: r.id, data: r, deleted: false, at, keys: keysOf(p, r) }); }
     // A removal made inside the running app is a person's action: it carries a stamp (data._del). The database refuses deletions without one and never empties the row.
     before.forEach((_r, id) => out.push({ kind, id, data: { _del: { at } }, deleted: true, at }));
     return out;
   }
-  return [{ kind, id: "_", data: next, deleted: false, at }];
+  return [{ kind, id: "_", data: next, deleted: false, at, keys: keysOf(prev, next) }];
 }
 
 /** Apply changes that came from another device or tab, without echoing them back out. */

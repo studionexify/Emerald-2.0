@@ -2,7 +2,7 @@ import { lazy, navigate, path } from "./router";
 import { can, isExternal, me, moduleOf, sessionSig, usersSig } from "./data";
 import { Frame } from "./frame/Frame";
 import { Empty, Page } from "./ui";
-import { cloudEnabled, rejectedWrites, syncState } from "./data/sync";
+import { cloudEnabled, rejectedWrites, staleTaken, syncState } from "./data/sync";
 import { signal } from "@preact/signals";
 import { storageFailed } from "./data/store";
 
@@ -92,7 +92,7 @@ export function App() {
   if (isExternal() && !path.value.startsWith("/mauny/gst") && path.value !== "/settings") { navigate("/mauny/gst"); return null; }
   const C = path.value === "/search" ? SearchPage : table.get(path.value) ?? NotFound;
   const ok = path.value === "/search" || path.value === "/settings" || can(moduleOf(path.value));
-  return <Frame>{rejectedWrites.value.length > 0 && <div role="alert" class="bg-amb-bg text-amb text-sm px-3 py-2">The server refused some changes your role is not allowed to make ({rejectedWrites.value.join(", ")}). They exist only on this device — ask the owner.</div>}{storageFailed.value && <div role="alert" class="bg-red-bg text-red text-sm px-3 py-2">This browser could not save your latest changes (storage full or blocked). Do not close this tab — export a backup, free space, or sign in so the cloud keeps them.</div>}{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
+  return <Frame>{staleTaken.value.length > 0 && <div role="alert" class="bg-amb-bg text-amb text-sm px-3 py-2 flex items-center gap-3"><span class="min-w-0 flex-1">Someone changed the same record on another device first, so this device took the newer copy ({staleTaken.value.join(", ")}). Your attempted change is kept in the history — check it still says what you meant.</span><button type="button" class="underline cursor-pointer !min-h-0" onClick={() => (staleTaken.value = [])}>Dismiss</button></div>}{rejectedWrites.value.length > 0 && <div role="alert" class="bg-amb-bg text-amb text-sm px-3 py-2">The server refused some changes your role is not allowed to make ({rejectedWrites.value.join(", ")}). They exist only on this device — ask the owner.</div>}{storageFailed.value && <div role="alert" class="bg-red-bg text-red text-sm px-3 py-2">This browser could not save your latest changes (storage full or blocked). Do not close this tab — export a backup, free space, or sign in so the cloud keeps them.</div>}{ok ? <C key={path.value} /> : <NoAccess />}</Frame>;
 }
 
 /* Fetch a page's code the moment a finger/pointer lands on its link, ahead of the click. */
