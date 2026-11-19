@@ -338,11 +338,12 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
   </Sheet>;
 }
 
+const FAIL_REASONS = ["Bed adhesion / warping", "Spaghetti / layer shift", "Nozzle clog / under-extrusion", "Filament ran out / tangle", "Stringing / poor finish", "Supports / broke on removal", "Power cut / printer stopped", "Wrong colour / settings"];
 /** ■ Finish: pieces off the plates (good + wasted) and grams per plate from the spools picked at Start. */
 export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: number; run: Batch; onClose: () => void; simple?: boolean }) {
   const i = o.items[k], f = floorLine(o, i);
   const cs = run.colours?.length ? run.colours : lineColours(i);
-  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0), [hrs, setHrs] = useState(runHours(run));
+  const [plates, setPlates] = useState(run.plates ?? 1), [per, setPer] = useState(run.perPlate ?? i.perPlate ?? 1), [bad, setBad] = useState(0), [why, setWhy] = useState(""), [hrs, setHrs] = useState(runHours(run));
   const [sp, setSp] = useState<Record<string, string>>(() => Object.fromEntries(cs.map((c, j) => [c, run.spoolIds?.[j] ?? bestSpool(c, run.printer) ?? ""])));
   const [g, setG] = useState<Record<string, number>>(() => Object.fromEntries(cs.map((c) => [c, i.gpp?.[c] ?? 0])));
   const [chg, setChg] = useState<string | null>(null), [w, setW] = useState<Record<string, number>>({}), [pg, setPg] = useState<Record<string, number>>({});
@@ -352,10 +353,10 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
   const [later, setLater] = useState(!simple && f.remaining > pcs);
   /** Spool weighed at the end (gross): grams used = gross before − gross now, spread over every plate since it was loaded. */
   const weigh = (c: string, v: number) => { setW({ ...w, [c]: v }); const n = spoolName(sp[c]); if (n && v > 0) setG({ ...g, [c]: Math.max(0, Math.round((spoolGross(n.s) - v) / allPlates)) }); };
-  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later, hours: hrs, partG: run.partsOn ? pg : undefined }); onClose(); };
+  const done = () => { finishPlates(o, k, run.id, { plates, perPlate: per, wasted, spools: Object.fromEntries(cs.filter((c) => sp[c]).map((c) => [c, sp[c]])), gpp: g, later, hours: hrs, reason: why, partG: run.partsOn ? pg : undefined }); onClose(); };
   const when = run.at ? new Date(run.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
   return <Sheet huge open onClose={onClose} title={`■ Complete print · ${i.name}`}
-    footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs}>Complete log</Button></>}>
+    footer={<><Button variant="outline" class="mr-auto text-red" onClick={() => { cancelRun(run.id); onClose(); }}>Cancel this run</Button><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={done} disabled={!pcs || (wasted > 0 && !why.trim())} title={wasted > 0 && !why.trim() ? "Pick why the pieces failed" : undefined}>Complete log</Button></>}>
     <div class="max-w-[680px] mx-auto"><Head i={i} k={k} f={f}><span class="inline-block rounded-md bg-amb-bg text-amb text-[11px] font-bold px-2 py-0.5 mb-1">ON PLATE{run.printer ? ` · ${run.printer}` : ""}{run.partsOn ? ` · ${run.partsOn.length} parts together` : run.part ? ` · ${run.part}` : ""}{when ? ` · started ${when}` : ""}</span></Head>
     <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1">
       {simple ? <label class="flex flex-col gap-1 text-[11px] text-c2">Pieces printed<input type="number" min={1} class={inp} value={per} onInput={(e) => setPer(Math.max(1, n0((e.target as HTMLInputElement).value)))} /></label> : <>
@@ -367,6 +368,10 @@ export function FinishPrint({ o, k, run, onClose, simple }: { o: Order; k: numbe
     </div>
     <label class="flex items-center gap-2 mt-3 text-[12px] text-c2">Print time (hours)<input type="number" min={0} step="0.1" class={`${inp} w-24`} value={hrs || ""} onInput={(e) => setHrs(Number((e.target as HTMLInputElement).value) || 0)} aria-label="Print time in hours" /><span>{run.printer ? `logged on ${run.printer}: machine hours, service count, failure %, machine and power cost` : "no printer picked, so nothing is logged on a printer"}</span></label>
     {run.partsOn && i.parts?.length ? <div class="mt-1.5 text-[12px] rounded-lg bg-c1 px-3 py-2">This plate printed {run.partsOn.length} parts together: {run.partsOn.join(", ")}. Each good copy counts for every one of them. The grams and hours are for the whole plate. They are shared equally between the parts unless you type what each part used below.</div> : run.part && i.parts?.length ? <div class="mt-1.5 text-[12px] rounded-lg bg-c1 px-3 py-2">This run printed “{run.part}”, one part of each piece. A piece is counted automatically once every part of it has printed good. Grams and hours are logged either way.</div> : null}
+    {wasted > 0 && <div class="mt-3 p-3 rounded-xl border border-red/40 bg-red-bg/30">
+      <div class="text-[10.5px] font-bold tracking-wide text-red uppercase mb-1.5">Why did {wasted} fail? · required</div>
+      <div class="flex flex-wrap gap-1.5 mb-2">{FAIL_REASONS.map((x) => <button key={x} type="button" aria-pressed={why === x} onClick={() => setWhy(why === x ? "" : x)} class={`h-8 px-3 !min-h-0 rounded-full text-[12px] font-semibold cursor-pointer border ${why === x ? "bg-red text-c0 border-red" : "border-line text-c3 bg-c0"}`}>{x}</button>)}</div>
+      <input value={FAIL_REASONS.includes(why) ? "" : why} onInput={(e) => setWhy((e.target as HTMLInputElement).value)} placeholder="Or type the reason, e.g. nozzle clog at layer 40" aria-label="Failure reason" class="h-9 w-full px-2.5 rounded-lg border border-line bg-c0 text-[13px]" /></div>}
     <div class="t-meta mt-1.5">{pcs - wasted} good · {wasted} wasted. A plate halted mid-print counts all its pieces as wasted.</div>
     {!simple && <label class="flex items-start gap-2 mt-4 p-3 rounded-xl border border-line cursor-pointer text-[13px]"><input type="checkbox" class="mt-0.5 accent-grn" checked={later} onChange={(e) => setLater((e.target as HTMLInputElement).checked)} />
       <span><b>Spools stay loaded — weigh at the end</b><span class="block text-[12px] text-c2">Logs pieces only. Print the next plates from the same spools; weigh once when the batch is done and the grams are split over every plate.</span></span></label>}
