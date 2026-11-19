@@ -10,7 +10,7 @@ import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import { sessionSig, usersSig, type Role } from "./auth";
 import { storeMedia, uploadPending } from "./media";
 import { billsSig, photosSig } from "./ledger";
-import { allRecords, applyRemote, flush, isSample, fingerprint, localGet, localSet, setSyncSink, syncedKinds, type Change } from "./store";
+import { allRecords, applyRemote, flush, storageFailed, isSample, fingerprint, localGet, localSet, setSyncSink, syncedKinds, type Change } from "./store";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -33,7 +33,7 @@ const keyOf = (c: Change) => c.kind + "/" + c.id;
 const known = new Map<string, string>(localGet<[string, string][]>("sync:known", []));
 let knownTimer: ReturnType<typeof setTimeout> | 0 = 0;
 /* "known" is only written after the lists themselves are saved: a copy of "known" that is ahead of the saved lists is what once made a device think its own records were gone. */
-const saveKnown = () => { if (!knownTimer) knownTimer = setTimeout(() => { knownTimer = 0; flush(); localSet("sync:known", [...known]); }, 500); };
+const saveKnown = () => { if (!knownTimer) knownTimer = setTimeout(() => { knownTimer = 0; flush(); if (!storageFailed.value) localSet("sync:known", [...known]); /* device storage full: never let "known" run ahead of the saved lists */ }, 500); };
 const markKnown = (c: Change) => { known.set(keyOf(c), c.deleted ? "x" : fingerprint(strip(c).data)); saveKnown(); };
 const strip = (c: Change): Change => (c.kind === "users" && c.data && typeof c.data === "object" ? { ...c, data: { ...(c.data as any), pass: undefined } } : c);
 
@@ -204,6 +204,12 @@ async function fetchAll() {
  * Make this device and the cloud identical. "device": this device's data replaces the cloud copy on every device.
  * "cloud": this device takes the cloud copy. "auto": first connection of a device, no question asked: everything the cloud has is taken (its edits are the newer ones, this device has no edit times yet) and anything only this device has is sent up.
  */
+/** What "This device is correct" would remove from the cloud, per kind, so the person sees it before confirming. */
+export async function deviceSyncPlan(): Promise<{ kind: string; n: number }[]> {
+  const rows = await fetchAll(), local = new Set(allRecords().map(keyOf)), kinds = syncedKinds(), by = new Map<string, number>();
+  for (const r of rows) if (!r.deleted && r.id !== "_" && kinds.has(r.kind) && !local.has(r.kind + "/" + r.id)) by.set(r.kind, (by.get(r.kind) ?? 0) + 1);
+  return [...by].map(([kind, n]) => ({ kind, n })).sort((a, b) => b.n - a.n);
+}
 export async function fullSync(mode: "auto" | "device" | "cloud") {
   const rows = await fetchAll();
   const kinds = syncedKinds();

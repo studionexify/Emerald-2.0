@@ -20,7 +20,7 @@ export async function scanDrive(): Promise<Found[]> {
   const items = r.data?.items ?? [], by = new Map(items.map((i) => [i.id, i]));
   const live = new Set(nexderDesignsSig.value.map((d) => d.folder)), liveNo = new Set(nexderDesignsSig.value.map((d) => d.no)), seen = new Set<string>();
   return items.filter((i) => i.mimeType === FOLDER && i.appProperties?.kind === "design" && !live.has(i.id)).map((f): Found => {
-    const m = /^(\d{5})\s+(.+)$/.exec(f.name), kids = items.filter((k) => k.mimeType !== FOLDER && k.parents?.includes(f.id));
+    const m = /^(\d{5})\s+(.+)$/.exec(f.name), kids = items.filter((k) => k.mimeType !== FOLDER && k.parents?.includes(f.id)).sort((a, b) => (a.createdTime ?? "").localeCompare(b.createdTime ?? ""));
     const to = (k: DItem) => ({ drive: k.id, name: k.name, size: Number(k.size ?? 0), mime: k.mimeType });
     const no = m?.[1] ?? "", out: Found = { folder: f.id, no, name: (m?.[2] ?? f.name).trim(), cat: by.get(f.parents?.[0] ?? "")?.name ?? "Recovered", created: (f.createdTime ?? "").slice(0, 10) || today(), photos: kids.filter((k) => k.mimeType.startsWith("image/")).map(to), files: kids.filter((k) => !k.mimeType.startsWith("image/")).map(to) };
     if (!m) out.problem = "The folder name has no 5-digit number";

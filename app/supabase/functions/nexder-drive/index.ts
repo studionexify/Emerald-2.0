@@ -13,7 +13,6 @@ const env = (k: string) => Deno.env.get(k) ?? "";
 class Fail extends Error { constructor(public status: number, m: string) { super(m); } }
 /** Space always left free in the Google account (Gmail and Docs share it). */
 const RESERVE = 1024 ** 3;
-const SWEEP_AGE_MS = 24 * 3600 * 1000;
 const TICKET_MS = 120_000;
 const WRITERS = ["owner", "partner", "manager"];
 const FOLDER = "application/vnd.google-apps.folder";
@@ -143,7 +142,7 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    if (act === "purge") { // real deletion, only for items no record (live or in the Bin) still points at
+    if (act === "purge") { // removal of items no record (live or in the Bin) still points at
       needWrite();
       const ids: string[] = (Array.isArray(b.ids) ? b.ids : []).slice(0, 100), done: string[] = [], kept: string[] = [];
       for (const id of ids) {
