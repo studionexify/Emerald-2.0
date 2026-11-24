@@ -71,7 +71,7 @@ export function Printers() {
   const r = useRecord<Printer>({
     sig: printersSig, kind: "Printer", title: (p) => p.name, fields: pFields, recall: ["model"],
     blank: () => ({ id: uid(), name: "", model: "", status: "idle", hours: 0, nozzle: "0.4 mm", volume: "256×256×256", serviceEvery: 300, active: true }),
-    facts: (p) => { const m = mlog(p); return [["Status", <Status tone={pTone(machineLive(p))}>{machineLive(p)}</Status>], ["Current job", p.job ?? "—"], ["Utilisation", `${m.util}%`], ["Uptime", `${m.uptime}%`], ["Fail rate", `${m.fail}%`], ["Hours lost to blocks", `${m.lost} h`]]; },
+    facts: (p) => { const m = mlog(p); return [["Status", <Status tone={pTone(machineLive(p))}>{machineLive(p)}</Status>], ["Current job", (() => { const w = machineWork(p); return w.job ? `${w.job.orderNo} · ${w.job.item}` : w.run ? `${w.run.orderNo} · ${w.run.name}` : p.job ?? "—"; })()], ["Utilisation", `${m.util}%`], ["Uptime", `${m.uptime}%`], ["Fail rate", `${m.fail}%`], ["Hours lost to blocks", `${m.lost} h`]]; },
     actions: (p, put) => <>
       <select class="h-9 md:h-10 pl-4 pr-3 rounded-full border border-c4 bg-c0 text-[13px] md:text-sm font-semibold cursor-pointer" value={p.status} aria-label="Set status" onChange={(e) => put({ status: (e.target as HTMLSelectElement).value as Printer["status"] }, `Status → ${(e.target as HTMLSelectElement).value}`)}>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
       <Button variant="outline" onClick={() => put({ lastService: today() }, "Serviced")}>Log service</Button>
