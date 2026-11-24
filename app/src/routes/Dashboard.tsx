@@ -6,7 +6,7 @@ import { Card, Icon, KV, Page, Section, Status, Waterfall } from "../ui";
 import { Initials, StageStrip } from "../ui/stage-strip";
 import { navigate } from "../router";
 import { openOrderSig, segmentOf, SEGMENT_HREF, SEGMENT_LABEL, type Segment } from "../data/inventory";
-import { STAGES } from "../data";
+import { STAGES, machineLive, machineWork } from "../data";
 import { financeSummary, windowFor, attention as attn, batchesSig, inr, logsSig, packSig, spoolsSig, orderCost, orderTotal, shortDate, printersSig, tasksSig, can } from "../data";
 
 export default function Dashboard() {
@@ -21,7 +21,7 @@ export default function Dashboard() {
   const today = todayStr();
   const late = open.filter((o) => o.due && o.due < today);
   const machines = printersSig.value.filter((p) => p.active !== false);
-  const busy = machines.filter((p) => p.status === "printing");
+  const busy = machines.filter((p) => machineLive(p) === "printing");
   const down = machines.filter((p) => p.status === "down").length;
   const todo = tasksSig.value.filter((t) => !t.done);
   const dueSoon = [...open].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
@@ -82,10 +82,10 @@ export default function Dashboard() {
           <Card>
             {machines.length ? <div class="flex flex-col gap-3">{machines.map((p) => (
               <a key={p.id} href="/workshop/printers" class="flex items-center gap-3 min-w-0 -mx-2 px-2 py-1 rounded-xl hover:bg-c1">
-                <span class={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${p.status === "printing" ? "bg-lime text-black" : "bg-c1 text-c2"}`}><Icon name={p.status === "down" ? "wrench" : "printer"} size={16} /></span>
+                <span class={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${machineLive(p) === "printing" ? "bg-lime text-black" : "bg-c1 text-c2"}`}><Icon name={machineLive(p) === "down" ? "wrench" : "printer"} size={16} /></span>
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-baseline justify-between gap-2"><span class="font-semibold truncate">{p.name}</span><Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status></div>
-                  <div class="t-meta truncate num">{p.model}{p.job ? ` · ${p.job}` : ""} · {p.hours}h</div>
+                  <div class="flex items-baseline justify-between gap-2"><span class="font-semibold truncate">{p.name}</span><Status tone={machineLive(p) === "printing" ? "active" : machineLive(p) === "down" ? "blocked" : "idle"}>{machineLive(p)}</Status></div>
+                  <div class="t-meta truncate num">{p.model}{(() => { const w = machineWork(p); const t = w.job ? `${w.job.orderNo} · ${w.job.item}` : w.run ? `${w.run.orderNo} · ${w.run.name}` : p.job; return t ? ` · ${t}` : ""; })()} · {p.hours}h</div>
                 </div>
               </a>))}</div> : <p class="t-meta">No printers yet.</p>}
           </Card>

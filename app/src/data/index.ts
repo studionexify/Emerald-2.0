@@ -279,3 +279,19 @@ export function lineMachines(o: Order, i: Order["items"][number], batches = batc
 export function orderProgress(o: Order, batches = batchesSig.value) {
   return o.items.reduce((t, i) => { const p = lineProgress(o, i, batches); return { qty: t.qty + i.qty, printed: t.printed + p.printed, failed: t.failed + p.failed, pending: t.pending + p.pending }; }, { qty: 0, printed: 0, failed: 0, pending: 0 });
 }
+
+/* ---- Live machine state: what a machine is really doing, not just its stored status ------------------ */
+const ranOnMachine = (printer: string | undefined, name: string) => !!printer && printer.split(" + ").map((x) => x.trim()).includes(name);
+/** The job or plate run on a machine right now, if any. */
+export function machineWork(p: { name: string }) {
+  const job = jobsSig.value.find((j) => j.printer === p.name && j.status === "printing");
+  const run = batchesSig.value.find((b) => b.running && ranOnMachine(b.printer, p.name));
+  return { job, run };
+}
+/** idle / printing / down, derived: "down" is a person's call and wins; otherwise a printing job or a running plate means printing. */
+export function machineLive(p: { name: string; status: "printing" | "idle" | "down" }): "printing" | "idle" | "down" {
+  if (p.status === "down") return "down";
+  if (p.status === "printing") return "printing";
+  const { job, run } = machineWork(p);
+  return job || run ? "printing" : "idle";
+}

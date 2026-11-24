@@ -11,6 +11,7 @@ import { itemLabel, spoolGross, isSpoolItem, nextSpoolNo, bodyTare, filMasterSig
   type ConKind, type Consumption, type Movement, type PackItem, type Printer, type Spool,
   asHuman,
 } from "../data";
+import { machineLive, machineWork } from "../data";
 import { ConsumeForm } from "./work/shared";
 
 const who = () => me.value?.name ?? "You";
@@ -56,7 +57,7 @@ const loadedOn = (p: Printer) => { const s = spoolsSig.value.find((x) => x.print
 function PrinterAct({ p, open }: { p: Printer; open: (p: Printer) => void }) {
   const set = (st: Printer["status"], why: string) => { printersSig.value = printersSig.value.map((x) => (x.id === p.id ? { ...x, status: st } : x)); log(why, p.name); };
   const primary = p.status === "down" ? <Button variant="outline" onClick={() => set("idle", "Back in service")}>Back in service</Button>
-    : p.status === "idle" ? <a href="/work/production" class="inline-flex items-center justify-center h-8 px-3.5 rounded-lg border border-line text-[13px] font-semibold hover:bg-c1">Assign job</a>
+    : machineLive(p) === "idle" ? <a href="/work/production" class="inline-flex items-center justify-center h-8 px-3.5 rounded-lg border border-line text-[13px] font-semibold hover:bg-c1">Assign job</a>
     : <Button variant="outline" onClick={() => open(p)}>View job</Button>;
   return <>{primary}<Menu label={`Actions for ${p.name}`} items={[
     { label: "Open full inspector", on: () => open(p) },
@@ -70,7 +71,7 @@ export function Printers() {
   const r = useRecord<Printer>({
     sig: printersSig, kind: "Printer", title: (p) => p.name, fields: pFields, recall: ["model"],
     blank: () => ({ id: uid(), name: "", model: "", status: "idle", hours: 0, nozzle: "0.4 mm", volume: "256×256×256", serviceEvery: 300, active: true }),
-    facts: (p) => { const m = mlog(p); return [["Status", <Status tone={pTone(p.status)}>{p.status}</Status>], ["Current job", p.job ?? "—"], ["Utilisation", `${m.util}%`], ["Uptime", `${m.uptime}%`], ["Fail rate", `${m.fail}%`], ["Hours lost to blocks", `${m.lost} h`]]; },
+    facts: (p) => { const m = mlog(p); return [["Status", <Status tone={pTone(machineLive(p))}>{machineLive(p)}</Status>], ["Current job", p.job ?? "—"], ["Utilisation", `${m.util}%`], ["Uptime", `${m.uptime}%`], ["Fail rate", `${m.fail}%`], ["Hours lost to blocks", `${m.lost} h`]]; },
     actions: (p, put) => <>
       <select class="h-9 md:h-10 pl-4 pr-3 rounded-full border border-c4 bg-c0 text-[13px] md:text-sm font-semibold cursor-pointer" value={p.status} aria-label="Set status" onChange={(e) => put({ status: (e.target as HTMLSelectElement).value as Printer["status"] }, `Status → ${(e.target as HTMLSelectElement).value}`)}>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
       <Button variant="outline" onClick={() => put({ lastService: today() }, "Serviced")}>Log service</Button>
@@ -92,7 +93,7 @@ export function Printers() {
   const [ps, setPs] = useState<"all" | Printer["status"]>("all");
   const live = printersSig.value.filter((p) => p.active !== false);
   const queued = jobsSig.value.filter((j) => j.status === "queued").length;
-  const rows = byActive(printersSig.value, f).filter((p) => ps === "all" || p.status === ps).sort((a, b) => abc(a.name, b.name));
+  const rows = byActive(printersSig.value, f).filter((p) => ps === "all" || machineLive(p) === ps).sort((a, b) => abc(a.name, b.name));
   const chip = (k: typeof ps, n: number, label: string, warn?: boolean) => (
     <button key={k} onClick={() => setPs(ps === k ? "all" : k)} aria-pressed={ps === k}
       class={`shrink-0 h-11 md:h-8 px-3.5 rounded-full inline-flex items-center gap-1.5 text-[14px] md:text-[13px] font-semibold cursor-pointer ${ps === k ? "bg-c4 text-c0" : "bg-c0 text-c4"}`}>
@@ -102,16 +103,16 @@ export function Printers() {
   return (
     <Shell sub="Machines · status, utilisation, service, spools loaded" actions={<Button icon="plus" onClick={() => r.add()}>Add printer</Button>} toolbar={<ActiveChips v={f} on={setF} />} detail={r.detail}>
       <div class="flex gap-2 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Filter by status">
-        {chip("printing", live.filter((p) => p.status === "printing").length, "Printing")}
-        {chip("idle", live.filter((p) => p.status === "idle").length, "Idle")}
+        {chip("printing", live.filter((p) => machineLive(p) === "printing").length, "Printing")}
+        {chip("idle", live.filter((p) => machineLive(p) === "idle").length, "Idle")}
         {chip("down", live.filter((p) => p.status === "down").length, "Down", true)}
         <a href="/work/production" class="shrink-0 h-11 md:h-8 px-3.5 rounded-full inline-flex items-center gap-1.5 text-[14px] md:text-[13px] font-semibold bg-c0 text-c4"><span class="num">{queued}</span> Queued <Icon name="right" size={12} /></a>
       </div>
       <Card class="!py-1">
         <Table rows={rows} rowKey={(p) => p.id} onRow={r.open} act={(p) => <PrinterAct p={p} open={r.open} />} cols={[
           { key: "n", label: "Printer", render: (p) => <span class="flex flex-col min-w-0"><span class="font-semibold">{p.name}{p.active === false && <span class="ml-2 text-xs text-c3 font-normal">retired</span>}{serviceDue(p) && <span class="ml-2 inline-flex items-center gap-1 text-[11px] font-bold"><span class="w-1.5 h-1.5 rounded-full bg-warn" />Service due</span>}</span><MetaRow items={[p.model, loadedOn(p)]} /></span> },
-          { key: "s", label: "Status", card: "status", render: (p) => <Status tone={pTone(p.status)}>{p.status}</Status> },
-          { key: "j", label: "Now", card: "foot", render: (p) => { const j = jobsSig.value.find((x) => x.printer === p.name && x.status === "printing"); return j ? `${j.orderNo} · ${j.item}` : p.job ? `Printing ${p.job}` : p.status === "down" ? "Needs attention" : p.status === "printing" ? "Printing" : "Free"; } },
+          { key: "s", label: "Status", card: "status", render: (p) => <Status tone={pTone(machineLive(p))}>{machineLive(p)}</Status> },
+          { key: "j", label: "Now", card: "foot", render: (p) => { const { job: j, run } = machineWork(p); return j ? `${j.orderNo} · ${j.item}` : run ? `${run.orderNo} · ${run.name}` : p.job ? `Printing ${p.job}` : p.status === "down" ? "Needs attention" : p.status === "printing" ? "Printing" : "Free"; } },
           { key: "u", label: "Utilisation", level: 2, render: (p) => `${mlog(p).util}%` },
           { key: "f", label: "Fail rate", level: 2, render: (p) => `${mlog(p).fail}%` },
           { key: "up", label: "Uptime", level: 2, render: (p) => `${mlog(p).uptime}%` },

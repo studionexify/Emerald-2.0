@@ -1,11 +1,12 @@
 import { Thumb } from "../../ui/media";
-import { vOrders } from "../../data";
+import { vOrders, machineLive } from "../../data";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { ask, Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { openQuoteSig, quoteOf } from "../../data/quoting";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
 import { OrderDetail, WorkShell , useOpenOrder } from "./shared";
+import { ClientOrderWindow } from "./ClientOrderWindow";
 import { lazy } from "../../router";
 const StockPanel = lazy(() => import("./StockPanel").then((m) => m.StockPanel));
 const QuoteFlow = lazy(() => import("./ClientFlow").then((m) => m.QuoteFlow));
@@ -268,7 +269,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
     .sort((a, b) => sort === "done" ? pctDone(b) - pctDone(a) : sort === "pending" ? orderProgress(b).pending - orderProgress(a).pending : seg === "inhouse" ? b.created.localeCompare(a.created) || b.no.localeCompare(a.no) : Number(!!b.blocked) - Number(!!a.blocked) || a.due.localeCompare(b.due));
   const fleet = printersSig.value.filter((p) => p.active !== false);
   const nos = new Set(mine.map((o) => o.no));
-  const isOn = (p: (typeof fleet)[number]) => p.status === "printing" || batchesSig.value.some((b) => b.running && ranOn(b.printer, p.name));
+  const isOn = (p: (typeof fleet)[number]) => machineLive(p) === "printing";
   const activeFleet = fleet.filter(isOn);
   const myJobs = jobsSig.value.filter((j) => nos.has(j.orderNo));
   const flow = SUGGESTED[seg === "client" ? "client" : seg === "inhouse" ? "inhouse" : "bulk"];
@@ -284,7 +285,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
     : [["To print", all.reduce((t, o) => t + orderProgress(o).pending, 0), "hourglass"], ["Printing now", myJobs.filter((j) => j.status === "printing").length + batchesSig.value.filter((b) => b.running && nos.has(b.orderNo)).length, "printer"]];
   kpis.push(["Queue", queued, "list"]);
   return (
-    <div class="relative flex h-full min-h-0">{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{quote && <QuoteFlow order={quote} onClose={() => setQuote(null)} />}{quick && <QuickCreate onClose={() => setQuick(false)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<div class="flex-1 min-w-0 h-full"><WorkShell actions={<Button variant="outline" onClick={flipStock} aria-pressed={stock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>} detail={open && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
+    <div class="relative flex h-full min-h-0">{floor && <Floor order={floor} onClose={() => setFloor(null)} />}{quote && <QuoteFlow order={quote} onClose={() => setQuote(null)} />}{quick && <QuickCreate onClose={() => setQuick(false)} />}{open && seg === "client" && !edit && !floor && !quote && <ClientOrderWindow order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onEdit={(x) => setEdit(x)} />}{edit && <EditOrder order={edit} onDone={(o) => { setEdit(null); if (o) setOpen(o); }} />}<div class="flex-1 min-w-0 h-full"><WorkShell actions={<Button variant="outline" onClick={flipStock} aria-pressed={stock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>} detail={open && seg !== "client" && <OrderDetail order={vOrders().find((o) => o.id === open.id) ?? open} onClose={() => setOpen(null)} onOpen={setOpen} onStage={(k) => setSt(k)} />} title={`Production · ${SEGMENT_LABEL[seg]}`} sub={SEG_SUB[seg]} toolbar={subs.length > 1 ? <Pick title="Type" value={f} on={setF} items={["all", ...subs]} label={(k) => (k === "all" ? "All types" : k)} /> : undefined}>
       <Summary kpis={kpis} list={list} active={st} onPick={setSt} stages={stages} />
 
       {seg === "inhouse" && <button type="button" onClick={() => setQuick(true)} class="self-start !min-h-0 h-11 px-5 rounded-xl bg-grn text-c0 inline-flex items-center gap-2 text-[15px] font-bold tracking-wide cursor-pointer hover:opacity-90"><Icon name="plus" size={18} />Create</button>}
@@ -308,7 +309,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
             const j = myJobs.find((x) => x.printer === p.name && x.status === "printing");
             const run = batchesSig.value.find((b) => b.running && ranOn(b.printer, p.name));
             const ord = j ? mine.find((o) => o.no === j.orderNo) : run && mine.find((o) => o.no === run.orderNo);
-            const hot = !!j || !!run || p.status === "printing";
+            const hot = !!j || !!run || machineLive(p) === "printing";
             return [j || (run && ord) ? 3 : 2,
               <a key={p.id} href="#" onClick={(e) => { e.preventDefault(); if (ord) setOpen(ord); }}
                 class={`rounded-[var(--radius-card)] p-4 min-w-0 block min-h-[148px] transition-colors ${hot ? "bg-c4 text-c0 border-2 border-c4 shadow-lg" : "bg-c0 border border-line hover:bg-c1/40"}`}>

@@ -1,5 +1,5 @@
 import { sortAbc } from "../../mock/types";
-import { vOrders } from "../../data";
+import { vOrders, machineLive, machineWork } from "../../data";
 import { useState } from "preact/hooks";
 import { signal } from "@preact/signals";
 import { navigate } from "../../router";
@@ -110,9 +110,9 @@ export function Production() {
             return (
               <a key={p.id} href="#workshop" class="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1.4fr)_110px_repeat(4,72px)_minmax(0,1.4fr)] gap-x-3 items-center px-3 py-2 lg:py-1.5 lg:min-h-9 hover:bg-c1/60 text-[13px]">
                 <span class="min-w-0 truncate"><span class="font-mono text-[12px] font-bold mr-2">{p.name}</span><span class="text-c3">{p.model}</span></span>
-                <span><Status tone={p.status === "printing" ? "active" : p.status === "down" ? "blocked" : "idle"}>{p.status}</Status></span>
+                <span><Status tone={machineLive(p) === "printing" ? "active" : machineLive(p) === "down" ? "blocked" : "idle"}>{machineLive(p)}</Status></span>
                 <span class="hidden lg:block num text-right">{m.util}%</span><span class="hidden lg:block num text-right">{m.uptime}%</span><span class="hidden lg:block num text-right">{m.lost}h</span><span class="hidden lg:block num text-right">{m.fail}%</span>
-                <span class="hidden lg:block t-meta truncate">{p.job ? `Printing ${p.job}` : `${p.hours} lifetime h`}</span>
+                <span class="hidden lg:block t-meta truncate">{(() => { const w = machineWork(p); const t = w.job ? `${w.job.orderNo} · ${w.job.item}` : w.run ? `${w.run.orderNo} · ${w.run.name}` : p.job; return t ? `Printing ${t}` : `${p.hours} lifetime h`; })()}</span>
               </a>
             );
           })}
