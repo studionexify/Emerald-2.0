@@ -2,7 +2,7 @@ export type NavItem = { href: string; label: string; icon: string };
 
 /** Sidebar groups. Production is split by who the work is for. */
 export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
-  { label: "", items: [{ href: "/", label: "Dashboard", icon: "home" }] },
+  { label: "", items: [{ href: "/", label: "Dashboard", icon: "home" }, { href: "/quotation", label: "Quotation", icon: "doc" }] },
   { label: "Production", items: [
     { href: "/work", label: "Client", icon: "user" },
     { href: "/work/b2b", label: "Bulk & B2B", icon: "work" },
@@ -25,6 +25,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 
 export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "home" },
+  { href: "/quotation", label: "Quotation", icon: "doc" },
   { href: "/work", label: "Production", icon: "work" },
   { href: "/workshop", label: "Store", icon: "box" },
   { href: "/calculator", label: "Nexcal", icon: "calc" },
@@ -51,7 +52,6 @@ export const WORK_TABS = [
   { href: "/work/bulk", label: "Bulk batches" },
   { href: "/work/failures", label: "Failures" },
   { href: "/work/clients", label: "Clients" },
-  { href: "/work/quotes", label: "Quotes" },
   { href: "/work/documents", label: "Documents" },
 ];
 

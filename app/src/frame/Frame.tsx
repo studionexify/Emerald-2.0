@@ -148,12 +148,12 @@ function TopBar() {
 type NewItem = { label: string; href: string; text?: string; focus?: string; icon: string };
 const N = (label: string, href: string, icon: string, how: string): NewItem => (how.startsWith("#") || how.startsWith("[") ? { label, href, icon, focus: how } : { label, href, icon, text: how });
 const NEW_MAP: [string, NewItem[]][] = [
-  ["/work", [N("Order", "/work/orders", "box", "New order"), N("Quotation", "/work/quotes", "doc", "New quotation"), N("Invoice", "/work/invoice", "receipt", "New invoice"), N("Bulk order", "/work/bulk", "work", "New bulk order"), N("Print job", "/work/production", "printer", "New job"), N("Client", "/work/clients", "user", "Add client")]],
+  ["/work", [N("Order", "/work/orders", "box", "New order"), N("Quotation", "/quotation", "doc", "New quotation"), N("Invoice", "/work/invoice", "receipt", "New invoice"), N("Bulk order", "/work/bulk", "work", "New bulk order"), N("Print job", "/work/production", "printer", "New job"), N("Client", "/work/clients", "user", "Add client")]],
   ["/workshop", [N("Spool", "/workshop", "box", "Add spool"), N("Printer", "/workshop/printers", "printer", "Add printer"), N("Part", "/workshop/parts", "wrench", "Add part"), N("Packing item", "/workshop/packing", "box", "Add packing item"), N("Stock movement", "/workshop/movements", "rows", "Log movement")]],
   ["/mauny", [N("Entry", "/mauny", "cash", "#mauny-amount"), N("Expense", "/mauny/finance", "wallet", "Add expense"), N("Bank statement", "/mauny/accounts", "doc", "#mauny-statement"), N("Goal", "/mauny/goals", "trend", "New goal")]],
   ["/todo", [N("Task", "/todo", "check", "#todo-add")]],
   ["/settings/users", [N("Person", "/settings/users", "user", "Add person")]],
-  ["/", [N("Order", "/work/orders", "box", "New order"), N("Quotation", "/work/quotes", "doc", "New quotation"), N("Money entry", "/mauny", "cash", "#mauny-amount"), N("Task", "/todo", "check", "#todo-add"), N("Spool", "/workshop", "box", "Add spool")]],
+  ["/", [N("Order", "/work/orders", "box", "New order"), N("Quotation", "/quotation", "doc", "New quotation"), N("Money entry", "/mauny", "cash", "#mauny-amount"), N("Task", "/todo", "check", "#todo-add"), N("Spool", "/workshop", "box", "Add spool")]],
 ];
 const newFor = (path: string) => (path === "/" ? NEW_MAP.find(([p]) => p === "/")![1] : NEW_MAP.find(([p]) => p !== "/" && (path === p || path.startsWith(p + "/")))?.[1] ?? null);
 function runNew(it: NewItem) {

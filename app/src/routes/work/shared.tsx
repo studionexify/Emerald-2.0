@@ -183,7 +183,7 @@ export function OrderDetail({ order, onClose, onOpen, onStage }: { order: Order;
       </Fold>
 
       <Fold id={F("docs")} hue={H.docs} title="Documents & photos" meta={String(docN)} action={<label class="text-xs underline cursor-pointer">+ Photo<input type="file" accept="image/*" capture="environment" class="sr-only" onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; shrinkImage(f).then((data) => { photosSig.value = [...photosSig.value, { id: uid(), ref: order.no, stage: STAGE_LABEL[order.stage], name: f.name, data: storeMedia(data, order.no + " " + f.name), at: nowS() }]; onOpen({ ...order }); }); }} /></label>}>
-        {qs.map((q) => <Doc key={q.id} label={`Quotation ${q.no}`} sub={`${shortDate(q.date)} · ${q.outcome}`} href="/work/quotes" />)}
+        {qs.map((q) => <Doc key={q.id} label={`Quotation ${q.no}`} sub={`${shortDate(q.date)} · ${q.outcome}`} href="/quotation" />)}
         {order.po && <Doc label={`Purchase order ${order.po}`} href="/work/orders" />}
         {invs.map((i) => <Doc key={i.id} label={`${i.kind === "credit" ? "Credit note" : "Invoice"} ${i.no}`} sub={`${shortDate(i.date)}${i.paidOn ? " · paid" : ""}${i.status === "cancelled" ? " · cancelled" : ""}`} href="/work/invoice" />)}
         {ships.map((x) => <Doc key={x.id} label={`Shipment · ${x.courier}`} sub={x.tracking || shortDate(x.date)} href="/work/shipping" />)}

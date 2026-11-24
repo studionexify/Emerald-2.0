@@ -35,7 +35,8 @@ const routes: [string, any][] = [
   ["/work/archive", L(work, "Archive")],
   ["/work/invoice", L(invp, "Invoice")],
   ["/work/clients", L(rec, "Clients")],
-  ["/work/quotes", L(rec, "Quotes")],
+  ["/quotation", L(() => import("./routes/Quotation"), "Quotation")],
+  ["/work/quotes", L(() => import("./routes/Quotation"), "Quotation")], // old link
   ["/work/documents", L(rec, "Documents")],
   ["/workshop/parts", L(ws, "Parts")],
   ["/workshop/movements", L(ws, "Movements")],

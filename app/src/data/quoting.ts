@@ -8,7 +8,7 @@ import { addDays, today, uid } from "./store";
 import { clientsSig } from "./inventory";
 import { nextNo, quotesSig, type Quote } from "./ledger";
 import { rate } from "./rates";
-import { log, moveTo, ordersSig, patchOrder, type Order } from "./index";
+import { createOrder, log, moveTo, ordersSig, patchOrder, type Order } from "./index";
 
 /** Set to an order id to open its quotation (for example straight after "Use in quotation" in Nexcal). */
 export const openQuoteSig = signal<string | null>(null);
@@ -51,7 +51,7 @@ export function approveOrder(o: Order, d: { note?: string; po?: string; items?: 
   let items = d.items ?? o.items;
   if (q && q.outcome !== "lost") {
     putQuote(q.id, { outcome: "approved" });
-    items = items.map((i, k) => (q.lines[k] ? { ...i, price: q.lines[k].rate, qty: q.lines[k].qty || i.qty } : i)); // the approved quote is the price the client agreed to
+    if (q.lines.length === items.length) items = items.map((i, k) => ({ ...i, price: q.lines[k].rate, qty: q.lines[k].qty || i.qty })); // the approved quote is the price the client agreed to; images and print details stay on the items
   }
   const n = patchOrder(o, { approved: true, blocked: undefined, items, ...(d.po?.trim() ? { po: d.po.trim() } : {}) });
   log(`Approved${d.note?.trim() ? ` (${d.note.trim()})` : ""}`, o.no);
@@ -66,3 +66,35 @@ export function declineQuote(o: Order, why: string): Order {
 }
 export const reopenQuote = (o: Order): Order => { const q = quoteOf(o); if (q) putQuote(q.id, { outcome: "open", lostWhy: undefined }); return patchOrder(o, { blocked: undefined }); };
 export const orderById = (id: string) => ordersSig.value.find((x) => x.id === id);
+
+/* ------------------------------------------------------------------ the Quotation tab: a quote is the start of an order */
+export type QuoteDraft = {
+  kind: "client" | "bulk" | "b2b"; customer: string; phone: string; email: string; address: string; due: string; valid: string; tech: string;
+  /** the order's lines: images, material, colour, qty and ex-GST price live here and become the order's lines on approval */ items: Order["items"];
+};
+export const blankDraft = (): QuoteDraft => ({ kind: "client", customer: "", phone: "", email: "", address: "", due: "", valid: addDays(today(), rate("quoteValid")), tech: "",
+  items: [{ name: "", material: "PLA", colour: "", qty: 1, price: 0, cost: 0 }] });
+export const draftOf = (o: Order, q: Quote): QuoteDraft => {
+  const c = clientsSig.value.find((x) => x.name.trim().toLowerCase() === o.customer.trim().toLowerCase());
+  return { kind: o.size === "b2b" ? "b2b" : o.type === "bulk" || o.size === "bulk" ? "bulk" : "client", customer: isPlaceholderName(o.customer) ? "" : o.customer, phone: c?.phone ?? "", email: c?.email ?? "", address: q.address ?? c?.address ?? "",
+    due: o.due, valid: q.valid, tech: q.tech ?? "", items: o.items.map((i) => ({ ...i })) };
+};
+/** Save the draft: the order and its quote are made (or updated) together, and the quote's lines always mirror the order's items one to one. */
+export function saveQuotation(d: QuoteDraft, existing?: Order): { order: Order; quote: Quote } {
+  const items = d.items.filter((i) => i.name.trim()).map((i) => ({ ...i, name: i.name.trim() }));
+  let o = existing;
+  if (!o) {
+    o = createOrder({ type: d.kind === "client" ? "client" : "bulk", size: d.kind === "client" ? undefined : d.kind, customer: d.customer.trim() || "New client", item: items[0]?.name ?? "Item", qty: 1, price: 0, medium: "Quotation", due: d.due });
+  }
+  const dueP = d.due ? { due: d.due } : {};
+  o = patchOrder(o, { customer: d.customer.trim() || o.customer, ...dueP, items: items.length ? items : o.items });
+  o = saveClient(o, { name: d.customer, phone: d.phone, email: d.email, address: d.address });
+  let q = quoteOf(o);
+  const lines = quoteLines(o, false);
+  if (!q) { q = ensureQuote(o); }
+  putQuote(q.id, { lines, inclGst: false, valid: d.valid, address: d.address.trim() || undefined, tech: d.tech.trim() || undefined, customer: o.customer });
+  log(existing ? "Edited quotation" : "Created quotation", `${q.no} · ${o.no}`);
+  return { order: o, quote: quotesSig.value.find((x) => x.id === q!.id)! };
+}
+/** Duplicate a quote as a fresh open order + quote (never touches the original). */
+export const duplicateDraft = (o: Order, q: Quote): QuoteDraft => ({ ...draftOf(o, q), valid: addDays(today(), rate("quoteValid")) });

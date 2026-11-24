@@ -459,8 +459,8 @@ export function Reports() {
   const approved = band("approved"), qTot = quotes.reduce((s, q) => s + qVal(q), 0), aTot = approved.reduce((s, q) => s + qVal(q), 0);
   const archived = orders.filter((x) => x.stage === "archived");
   const funnel: [string, number, number | null, string][] = [
-    ["Quoted", quotes.length, qTot, "/work/quotes"], ["Approved", approved.length, aTot, "/work/quotes"], ["Open (awaiting answer)", band("open").length, band("open").reduce((s, q) => s + qVal(q), 0), "/work/quotes"],
-    ["Lost", band("lost").length, band("lost").reduce((s, q) => s + qVal(q), 0), "/work/quotes"], ["Outcome unrecorded", band("unrecorded").length, band("unrecorded").reduce((s, q) => s + qVal(q), 0), "/work/quotes"],
+    ["Quoted", quotes.length, qTot, "/quotation"], ["Approved", approved.length, aTot, "/quotation"], ["Open (awaiting answer)", band("open").length, band("open").reduce((s, q) => s + qVal(q), 0), "/quotation"],
+    ["Lost", band("lost").length, band("lost").reduce((s, q) => s + qVal(q), 0), "/quotation"], ["Outcome unrecorded", band("unrecorded").length, band("unrecorded").reduce((s, q) => s + qVal(q), 0), "/quotation"],
     ["In production", orders.filter((x) => x.stage === "production").length, null, "/work/production"], ["Archived", archived.length, archived.reduce((s, x) => s + val(x), 0), "/work/archive"]];
 
   /* Channels — sorted by rate, margin shown; volume is not the insight. */

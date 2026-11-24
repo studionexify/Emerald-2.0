@@ -1,11 +1,12 @@
-/** The quotation as a real PDF (selectable text, A4, several pages when it has many lines), laid out like the on-screen QuoteSheet. */
+/** The quotation as a real PDF (selectable text, A4): page 1 pricing, page 2 terms & conditions. Pictures and print details are internal and never printed here. */
 import type { jsPDF as JsPDF } from "jspdf";
 import { invTax } from "../../data";
 import { invoiceBiz } from "../../data/invoicing";
-import { amt, longDate, QUOTE_NOTES, QUOTE_TERMS, type DocData } from "./Doc";
+import { amt, longDate, QUOTE_NOTES, QUOTE_TERMS, words, type DocData } from "./Doc";
 import { b64, FONTS } from "./pdf";
 
-const L = 16, R = 194, W = R - L, BOTTOM = 280;
+const L = 14, R = 196, W = R - L, BOTTOM = 266;
+const INK: [number, number, number] = [23, 25, 28], GREY: [number, number, number] = [110, 116, 124], LINE: [number, number, number] = [214, 217, 221];
 
 export async function quotePdf(d: DocData): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
@@ -14,76 +15,118 @@ export async function quotePdf(d: DocData): Promise<Blob> {
   const pdf: JsPDF = new jsPDF({ unit: "mm", format: "a4", compress: true });
   FONTS.forEach(([f, fam, style], i) => { pdf.addFileToVFS(f, fonts[i]); pdf.addFont(f, fam, style, undefined, "Identity-H"); });
   pdf.setProperties({ title: `Quotation ${d.no}`, subject: d.party, creator: "Emerald" });
-  const t = invTax({ id: "", kind: "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: false, status: "issued" });
-  const gst = t.cgst + t.sgst + t.igst, total = t.total;
+  const t = invTax({ id: "", kind: "invoice", no: d.no, date: d.date, customer: d.party, lines: d.lines, gstRate: d.gstRate, interstate: d.interstate, status: "issued" });
+  const LH = 300 / 573;
 
   let y = 0;
   const font = (style: "normal" | "bold", pt = 8, fam = "Montserrat") => { pdf.setFont(fam, style); pdf.setFontSize(pt); };
-  const T = (s: string, x: number, top: number, align: "left" | "center" | "right" = "left") => pdf.text(s, x, top, { align, baseline: "top" });
+  const T = (s: string, x: number, top: number, align: "left" | "center" | "right" = "left", angle?: number) => pdf.text(s, x, top, { align, baseline: "top", ...(angle ? { angle } : {}) });
   const wrap = (s: string, w: number) => pdf.splitTextToSize(s, w) as string[];
-  const rule = (yy: number, g = 190) => { pdf.setDrawColor(g, g, g); pdf.setLineWidth(0.2); pdf.line(L, yy, R, yy); };
-  const ink = (g = 0) => pdf.setTextColor(g, g, g);
-  const line = (s: string, x: number, step: number, w: number) => { for (const part of wrap(s, w)) { T(part, x, y); y += step; } };
-  const room = (h: number) => { if (y + h > BOTTOM) { pdf.addPage(); y = 18; return true; } return false; };
+  const ink = (c: [number, number, number] = INK) => pdf.setTextColor(c[0], c[1], c[2]);
+  const rule = (yy: number, x1 = L, x2 = R, c = LINE) => { pdf.setDrawColor(c[0], c[1], c[2]); pdf.setLineWidth(0.25); pdf.line(x1, yy, x2, yy); };
+  const heading = (s: string) => { font("bold", 7.8); ink(); T(s.toUpperCase(), L, y); const w = pdf.getTextWidth(s.toUpperCase()) + 4; rule(y + 1.4, L + w, R); y += 6; };
+  const band = () => { pdf.setFillColor(...INK); pdf.rect(0, 0, 210, 5, "F"); pdf.setFillColor(143, 194, 158); pdf.rect(L, 5, 34, 1.2, "F"); };
+  const room = (h: number) => { if (y + h > BOTTOM) { pdf.addPage(); band(); y = 16; return true; } return false; };
 
-  /* header */
-  ink(); font("bold", 12); T(b.name.toUpperCase(), L, 14);
-  font("normal", 7.6); let hy = 20;
-  for (const s of [b.address, `Mo: ${b.phone}  |  ${b.email}`, b.website ?? "", b.gstin ? `GSTIN: ${b.gstin}` : ""].filter(Boolean)) { for (const p of wrap(s, 110)) { T(p, L, hy); hy += 3.9; } }
-  pdf.addImage(logo, "PNG", R - 36, 12, 36, 36 * (300 / 573));
-  y = Math.max(hy, 12 + 36 * (300 / 573)) + 6; rule(y); y += 6;
-  font("bold", 17, "Comfortaa"); T("QUOTATION", L, y); y += 11;
-  font("normal", 8.4);
-  T("Quote number", L, y); T("Date", L + 62, y); T("Valid until", L + 112, y); y += 4.2;
-  font("bold", 9.2); T(d.no, L, y); T(longDate(d.date), L + 62, y); T(longDate(d.valid ?? ""), L + 112, y); y += 8;
-  font("normal", 8.4); T("To", L, y); y += 4.2; font("bold", 10.5); line(d.party || "—", L, 4.8, W);
-  if (d.address) { font("normal", 8.4); line(d.address, L, 3.9, W); }
-  y += 4;
+  /* ───────── page 1 header ───────── */
+  band();
+  pdf.addImage(logo, "PNG", L, 11, 38, 38 * LH);
+  font("bold", 22, "Comfortaa"); ink(); T("QUOTATION", R, 11, "right");
+  font("bold", 10); T(d.no, R, 22, "right");
+  const days = d.valid ? Math.max(0, Math.round((+new Date(d.valid) - +new Date(d.date)) / 86400000)) : 0;
+  if (days) { const txt = `VALID FOR ${days} DAYS`; font("bold", 6.8); const w = pdf.getTextWidth(txt) + 7; pdf.setFillColor(232, 243, 236); pdf.roundedRect(R - w, 26, w, 5.6, 2.8, 2.8, "F"); pdf.setTextColor(42, 107, 67); T(txt, R - w / 2, 27.5, "center"); ink(); }
+  y = 11 + 38 * LH + 5;
+  font("bold", 9.6); T(b.name.toUpperCase(), L, y); y += 5; font("normal", 7.3); ink(GREY);
+  for (const s of [b.address, `${b.phone}  ·  ${b.email}`, [b.website, b.gstin ? `GSTIN ${b.gstin}` : ""].filter(Boolean).join("  ·  ")].filter(Boolean)) { T(s, L, y); y += 3.7; }
+  y += 5;
 
-  /* table: Sr | Description | Price | Qty | GST | Amount */
-  const C = { sr: L, desc: L + 11, price: R - 78, qty: R - 52, gst: R - 36, amt: R };
+  /* client + dates */
+  const addr = wrap(d.address ?? "", 100).slice(0, 4), boxH = Math.max(20, 13 + addr.length * 3.7 + 4);
+  pdf.setDrawColor(...LINE); pdf.setLineWidth(0.25); pdf.roundedRect(L, y, W, boxH, 2, 2, "S"); pdf.line(R - 62, y, R - 62, y + boxH);
+  font("bold", 6.2); ink(GREY); T("QUOTATION FOR", L + 4, y + 3.4);
+  font("bold", 9.6); ink(); T(d.party || "—", L + 4, y + 7.6);
+  font("normal", 7.4); ink(GREY); addr.forEach((s, i) => T(s, L + 4, y + 12.8 + i * 3.7));
+  font("bold", 6.2); T("DATE", R - 31, y + 3.4, "right"); T("VALID UNTIL", R - 4, y + 3.4, "right");
+  font("bold", 8.6); ink(); T(longDate(d.date), R - 31, y + 7.6, "right"); T(longDate(d.valid ?? ""), R - 4, y + 7.6, "right");
+  y += boxH + 6;
+
+  /* ───────── pricing table ───────── */
+  heading("Scope & pricing");
+  const C = { sr: L + 2, desc: L + 11, qty: R - 74, rate: R - 50, gst: R - 31, amt: R - 2 };
   const head = () => {
-    pdf.setFillColor(0, 0, 0); pdf.rect(L, y, W, 6.4, "F"); pdf.setTextColor(255, 255, 255); font("bold", 7.6);
-    T("Sr.", C.sr + 2, y + 1.9); T("Description", C.desc, y + 1.9); T("Price", C.price, y + 1.9, "right"); T("Qty", C.qty, y + 1.9, "right"); T(`GST ${d.gstRate}%`, C.gst, y + 1.9, "right"); T("Amount", C.amt - 1.5, y + 1.9, "right"); ink(); y += 8;
+    pdf.setFillColor(...INK); pdf.rect(L, y, W, 6.6, "F"); pdf.setTextColor(255, 255, 255); font("bold", 6.8);
+    T("#", C.sr, y + 2.1); T("DESCRIPTION", C.desc, y + 2.1); T("QTY", C.qty, y + 2.1, "right"); T("RATE (₹)", C.rate, y + 2.1, "right"); T("GST", C.gst, y + 2.1, "right"); T("AMOUNT (₹)", C.amt, y + 2.1, "right"); ink(); y += 6.6;
   };
   head();
   d.lines.forEach((l, i) => {
-    font("normal", 8.4);
-    const desc = wrap(l.desc || "—", C.price - C.desc - 22), h = Math.max(6.4, desc.length * 4 + 2.4);
+    const [name, ...rest] = (l.desc || "—").split(" · "), sub = rest.join(" · ");
+    font("bold", 8.6); const nm = wrap(name, C.qty - C.desc - 14); const sb = sub ? (font("normal", 7), wrap(sub, C.qty - C.desc - 14)) : [];
+    const h = Math.max(9, nm.length * 4.2 + sb.length * 3.4 + 4.4);
     if (room(h + 2)) head();
-    const v = l.qty * l.rate, lg = Math.round(v * d.gstRate) / 100;
-    T(String(i + 1), C.sr + 2, y); desc.forEach((s, k) => T(s, C.desc, y + k * 4));
-    T(amt(l.rate), C.price, y, "right"); T(String(l.qty), C.qty, y, "right"); T(amt(lg), C.gst, y, "right"); T(amt(v + lg), C.amt - 1.5, y, "right");
-    y += h; rule(y - 1.4, 215);
+    if (i % 2) { pdf.setFillColor(250, 251, 251); pdf.rect(L, y, W, h, "F"); }
+    ink(); font("normal", 8.4); T(String(i + 1), C.sr, y + 2.4);
+    font("bold", 8.6); nm.forEach((s, k) => T(s, C.desc, y + 2.4 + k * 4.2));
+    font("normal", 7); ink(GREY); sb.forEach((s, k) => T(s, C.desc, y + 2.4 + nm.length * 4.2 + k * 3.4));
+    ink(); font("normal", 8.4); const v = l.qty * l.rate;
+    T(String(l.qty), C.qty, y + 2.4, "right"); T(amt(l.rate), C.rate, y + 2.4, "right"); T(`${d.gstRate}%`, C.gst, y + 2.4, "right"); T(amt(v), C.amt, y + 2.4, "right");
+    y += h; rule(y, L, R, [227, 230, 233]);
   });
-  y += 3;
+  y += 7;
 
-  /* totals (right) with notes and technical data (left) */
-  const top = y; room(40);
-  const ty = y; let k0 = y;
-  font("normal", 8.4); T("Sub-total", R - 60, y); T(amt(t.taxable), R, y, "right"); y += 5.2;
-  T(`GST (${d.gstRate}%)`, R - 60, y); T(amt(gst), R, y, "right"); y += 5.2;
-  if (t.roundOff !== 0) { T("Round-off", R - 60, y); T((t.roundOff < 0 ? "-" : "") + amt(t.roundOff), R, y, "right"); y += 5.2; }
-  pdf.setFillColor(0, 0, 0); pdf.rect(R - 62, y - 1.4, 62, 8, "F"); pdf.setTextColor(255, 255, 255); font("bold", 9.6); T("Total", R - 60, y + 0.6); T("₹" + amt(total), R - 2, y + 0.6, "right"); ink(); y += 9;
-  const endTotals = y;
-  y = ty; k0 = top === ty ? ty : ty;
-  font("bold", 8.4); T("Notes", L, y); y += 4.6; font("normal", 7.6);
-  QUOTE_NOTES(b).forEach((n, i) => line(`${i + 1}. ${n}`, L, 3.7, 100));
-  if (d.tech?.trim()) { y += 2; font("bold", 8.4); T("Technical data", L, y); y += 4.6; font("normal", 7.6); d.tech.split("\n").filter(Boolean).forEach((s, i) => line(`${i + 1}. ${s}`, L, 3.7, 100)); }
-  y = Math.max(y, endTotals) + 8; void k0;
+  /* totals */
+  room(46);
+  const tx = R - 66;
+  font("normal", 8.6); ink();
+  const row = (k: string, v: string) => { T(k, tx + 2, y); T(v, R, y, "right"); y += 5.6; };
+  row("Sub-total", "₹ " + amt(t.taxable));
+  if (t.igst) row(`IGST ${d.gstRate}%`, "₹ " + amt(t.igst)); else { row(`CGST ${d.gstRate / 2}%`, "₹ " + amt(t.cgst)); row(`SGST ${d.gstRate / 2}%`, "₹ " + amt(t.sgst)); }
+  if (t.roundOff !== 0) row("Round-off", (t.roundOff < 0 ? "-" : "") + "₹ " + amt(t.roundOff));
+  rule(y - 1, tx, R, INK); pdf.setLineWidth(0.5); pdf.line(tx, y - 1, R, y - 1);
+  y += 1.5; font("bold", 11); T("Total", tx + 2, y); T("₹ " + amt(t.total), R, y, "right"); y += 7;
+  font("normal", 7); ink(GREY); T(`Rupees ${words(t.total)} only`, R, y, "right"); y += 9;
 
-  /* contact and payment */
-  room(36); rule(y); y += 4; font("bold", 8); T("PAYMENT INFORMATION", L, y); T(b.name.toUpperCase(), R, y, "right"); y += 5; font("normal", 7.8);
-  const pay = [b.upi && `UPI: ${b.upi}`, b.upiNumber && `UPI Number: ${b.upiNumber}`, ...(b.bankName ? [`Bank: ${b.bankName}`, `A/C Name: ${b.accName ?? ""}`, `A/C: ${b.accNo ?? ""}`, `IFSC: ${b.ifsc ?? ""}`] : [b.bank])].filter(Boolean) as string[];
-  pay.forEach((s, i) => T(s, L, y + i * 3.9));
-  font("normal", 15, "DancingScript"); pdf.setTextColor(26, 63, 191); T(b.signName || "Ankit P", R, y - 1, "right"); ink(); font("normal", 6.4); T("Authorised Signatory", R, y + 7.4, "right");
-  font("normal", 7.6); [b.phone, b.email, b.addressShort || b.address].forEach((s, i) => T(s, R, y + 12 + i * 3.8, "right"));
+  /* bank details: their own box */
+  room(36);
+  const bank: [string, string][] = [["BANK DETAILS", b.bankName || b.bank || ""], ["ACCOUNT NAME", b.accName || b.name], ["ACCOUNT NO.", b.accNo || ""], ["IFSC", b.ifsc || ""], ["UPI", b.upi || ""]].filter(([, v]) => v) as [string, string][];
+  if (bank.length) {
+    pdf.setDrawColor(...LINE); pdf.roundedRect(L, y, W, 13, 2, 2, "S");
+    const gap = (W - 8) / bank.length;
+    bank.forEach(([k, v], i) => { font("bold", 6.2); ink(GREY); T(k, L + 4 + i * gap, y + 3); font("bold", 8); ink(); T(v, L + 4 + i * gap, y + 7.2); });
+    y += 13 + 6;
+  }
 
-  /* terms and conditions: their own page(s) */
-  pdf.addPage(); y = 18; font("bold", 10.5); T("Terms & Conditions", L, y); y += 8; font("normal", 7.8);
-  QUOTE_TERMS.forEach((s, i) => { const parts = wrap(`${i + 1}. ${s.replace("Studio Nexify", b.name)}`, W); if (y + parts.length * 3.9 > BOTTOM) { pdf.addPage(); y = 18; } parts.forEach((p) => { T(p, L, y); y += 3.9; }); y += 1.8; });
+  /* payment terms & notes */
+  room(34);
+  heading("Payment terms & notes");
+  const notes = ["3D-printed products: 100% advance before production. Services: 50% to start, 50% before delivery.", ...QUOTE_NOTES(b), ...(d.tech?.trim() ? d.tech.split("\n").map((x) => x.trim()).filter(Boolean) : []), "Full terms & conditions are on page 2."];
+  font("normal", 7.4); ink([68, 72, 78]);
+  notes.forEach((n, i) => { const parts = wrap(`${i + 1}. ${n}`, W - 4); room(parts.length * 3.7 + 1); parts.forEach((s, k) => { T(s, L + (k ? 3.4 : 0), y); y += 3.7; }); y += 0.9; });
 
-  /* page numbers */
-  const n = pdf.getNumberOfPages(); for (let i = 1; i <= n; i++) { pdf.setPage(i); font("normal", 6.8); ink(120); T(`${d.no} · page ${i} of ${n}`, R, 289, "right"); }
+  /* acceptance + signature */
+  room(30); y += 4;
+  font("normal", 7.4); ink(GREY); wrap("To accept, reply “Approved” on WhatsApp or e-mail, or sign and return this quotation.", 100).forEach((s, k) => T(s, L, y + 8 + k * 3.7));
+  const sx = R - 62; pdf.setDrawColor(...INK); pdf.setLineWidth(0.25); pdf.line(sx, y + 14, R, y + 14);
+  font("normal", 21, "DancingScript"); pdf.setTextColor(27, 42, 92); T(b.signName || "Ankit P", sx + 31, y + 4.2, "center", 2);
+  font("normal", 7.2); ink(); T(`Authorised signatory · ${b.name}`, sx + 31, y + 15.6, "center");
+
+  /* ───────── page 2: terms & conditions ───────── */
+  pdf.addPage(); band(); pdf.addImage(logo, "PNG", L, 11, 30, 30 * LH);
+  font("bold", 9); ink(); T(`QUOTATION ${d.no}`, R, 13, "right"); font("normal", 7.4); ink(GREY); T(`${b.name} · Terms & conditions`, R, 18, "right");
+  y = 11 + 30 * LH + 9; heading("Terms & conditions");
+  QUOTE_TERMS.forEach((s, i) => {
+    const m = /^([^:]{3,45}):\s(.*)$/.exec(s.replace("Studio Nexify", b.name)), title = m && !s.startsWith("Payments can") ? m[1] : "", body = m && title ? m[2] : s.replace("Studio Nexify", b.name);
+    font("normal", 7.9); const parts = wrap(body, W - 6); room(parts.length * 3.9 + (title ? 4.4 : 0) + 3);
+    font("bold", 7.9); ink(); if (title) { T(`${i + 1}.`, L, y); T(title, L + 6, y); y += 4.4; } else T(`${i + 1}.`, L, y);
+    font("normal", 7.9); ink([51, 55, 60]); parts.forEach((p) => { T(p, L + 6, y); y += 3.9; }); y += 2.6;
+  });
+  room(24); y += 8; font("normal", 7.4); ink(GREY); T("Accepted by client (name, signature & date)", L, y + 8);
+  pdf.setDrawColor(...INK); pdf.line(R - 62, y + 6, R, y + 6); font("normal", 7.2); ink(); T("Client signature", R - 31, y + 7.6, "center");
+
+  /* footer and page numbers on every page */
+  const n = pdf.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    pdf.setPage(i); rule(285, L, R); font("normal", 6.8); ink(GREY);
+    T(`${b.name} · ${b.website ?? ""}`, L, 287); T("Thank you for considering us.", 105, 287, "center"); T(`Page ${i} of ${n}`, R, 287, "right");
+  }
   return pdf.output("blob");
 }
