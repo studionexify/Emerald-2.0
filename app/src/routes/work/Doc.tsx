@@ -17,7 +17,6 @@ export const words = (n: number): string => {
 const rs = (n: number) => (n < 0 ? "−" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const amt = (n: number) => Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const longDate = (d: string) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-") : "");
-const quoteDate = (d: string) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "");
 
 export const INVOICE_TERMS = (b: Biz) => [
   `Any disputes will be subject to the jurisdiction of ${b.jurisdiction || "Vadodara, Gujarat"}.`,
@@ -53,19 +52,6 @@ export const fromInvoice = (i: Invoice): DocData => ({
   billTo: i.billTo, shipToParty: i.sameShip ? i.billTo : i.shipToParty, seller: i.seller?.biz, draft: i.no === "Draft",
 });
 export const fromQuote = (q: Quote): DocData => ({ kind: "quote", title: "Quotation", no: q.no, date: q.date, party: q.customer, address: q.address, lines: q.lines, gstRate: q.gstRate, interstate: false, valid: q.valid, tech: q.tech });
-
-function PayInfo({ b }: { b: Biz }) {
-  return (
-    <div class="text-[11px]">
-      <div class="font-bold mb-0.5">PAYMENT INFORMATION</div>
-      {b.upi && <div>UPI: {b.upi}</div>}{b.upiNumber && <div>UPI Number: {b.upiNumber}</div>}
-      {b.bankName ? <><div>Bank: {b.bankName}</div><div>A/C Name: {b.accName}</div><div>A/C: {b.accNo}</div><div>IFSC: {b.ifsc}</div></> : <div>{b.bank}</div>}
-    </div>
-  );
-}
-function Contact({ b }: { b: Biz }) {
-  return <div class="text-[11px] text-right"><div class="font-bold">{b.name.toUpperCase()}</div><div>{b.phone}</div><div>{b.email}</div><div>{b.addressShort || b.address}</div>{b.website && <div>{b.website}</div>}</div>;
-}
 
 /* Fonts used by the studio's invoice PDFs, loaded only when a document is shown. */
 let fontsIn = false;
@@ -164,29 +150,51 @@ export function DocSheet({ d, copy }: { d: DocData; copy?: string }) {
 }
 
 function QuoteSheet({ d, b, t }: { d: DocData; b: Biz; t: ReturnType<typeof invTax> }) {
+  const days = d.valid ? Math.max(0, Math.round((+new Date(d.valid) - +new Date(d.date)) / 86400000)) : 0;
+  const notes = ["3D-printed products: 100% advance before production. Services: 50% to start, 50% before delivery.", ...QUOTE_NOTES(b), ...(d.tech?.trim() ? d.tech.split("\n").map((x) => x.trim()).filter(Boolean) : []), "Full terms & conditions are on page 2."];
+  const bank = [["Bank details", b.bankName || b.bank], ["Account name", b.accName || b.name], ["Account no.", b.accNo], ["IFSC", b.ifsc], ["UPI", b.upi]].filter(([, v]) => v) as [string, string][];
+  const lab = "text-[9px] font-bold uppercase tracking-[0.1em] text-gray-500";
+  const Head = ({ children }: { children: string }) => <h2 class="flex items-center gap-3 text-[10.5px] font-bold uppercase tracking-[0.12em] mt-5 mb-2">{children}<span class="flex-1 h-px bg-gray-300" /></h2>;
+  const Foot = ({ n }: { n: number }) => <footer class="flex justify-between border-t border-gray-300 pt-1.5 mt-6 text-[9px] text-gray-500"><span>{b.name}{b.website ? ` · ${b.website}` : ""}</span><span>Thank you for considering us.</span><span>Page {n} of 2</span></footer>;
+  const page = "relative bg-white text-black border border-gray-300 rounded-xl overflow-hidden px-4 md:px-9 pb-5 text-[12px] leading-snug";
+  const base = import.meta.env.BASE_URL;
   return (
-    <article class="print-area bg-white text-black rounded-xl p-4 md:p-8 text-[12px] leading-snug border border-c2 max-w-[820px] @container overflow-x-auto [&_td.text-right]:whitespace-nowrap">
-      <h1 class="text-2xl font-bold mb-3">QUOTATION</h1>
-      <div class="flex flex-wrap justify-between gap-3 mb-2"><span>Date: <b>{quoteDate(d.date)}</b></span><span>Valid until date: <b>{quoteDate(d.valid ?? "")}</b></span><span>Quote Number: <b>{d.no}</b></span></div>
-      <div class="flex flex-wrap justify-between gap-3 mb-3"><span>To: <b>{d.party}</b></span>{d.address && <span>Address: {d.address}</span>}</div>
-      <table class="w-full border-collapse mb-3 [&_td]:px-1 [&_th]:px-1">
-        <thead><tr class="border-y border-black text-left"><th class="py-1 w-12">Sr. No</th><th>Description</th><th class="text-right">Price</th><th class="text-right">QTY</th><th class="text-right">GST ({d.gstRate}%)</th><th class="text-right">Amount</th></tr></thead>
-        <tbody>{d.lines.map((l, i) => { const v = l.qty * l.rate, lg = Math.round(v * d.gstRate) / 100; return <tr key={i} class="border-b border-gray-300"><td class="py-1 text-center">{i + 1}</td><td>{l.desc}</td><td class="text-right">{rs(l.rate)}</td><td class="text-right">{l.qty}</td><td class="text-right">{rs(lg)}</td><td class="text-right">{rs(v + lg)}</td></tr>; })}</tbody>
-      </table>
-      <section class="grid @lg:grid-cols-[1fr_auto] gap-4 sm:gap-6">
-        <div>
-          <div class="font-bold">Notes</div><ol class="list-decimal pl-4">{QUOTE_NOTES(b).map((x) => <li key={x}>{x}</li>)}</ol>
-          {d.tech && <><div class="font-bold mt-2">Technical Data:</div><ol class="list-decimal pl-4">{d.tech.split("\n").filter(Boolean).map((x) => <li key={x}>{x}</li>)}</ol></>}
+    <article class="print-area grid gap-4 max-w-[820px] @container [&_td.r]:text-right [&_th.r]:text-right" style={{ fontFamily: "Montserrat, sans-serif" }}>
+      <section class={page}>
+        <div class="absolute inset-x-0 top-0 h-[7px] bg-black" /><div class="absolute left-4 md:left-9 top-[7px] h-[2px] w-12 bg-grn" />
+        <header class="flex justify-between items-start gap-4 pt-7">
+          <div><img src={`${base}nexify-logo.png`} alt={b.name} class="w-32" />
+            <div class="mt-2 text-[10px] leading-relaxed text-gray-500"><b class="block text-[12px] tracking-wide text-black">{b.name.toUpperCase()}</b>{b.address}<br />{b.phone} · {b.email}<br />{[b.website, b.gstin ? `GSTIN ${b.gstin}` : ""].filter(Boolean).join(" · ")}</div></div>
+          <div class="text-right"><h1 class="text-[26px] font-bold tracking-[0.06em]" style={{ fontFamily: "Comfortaa, sans-serif" }}>QUOTATION</h1><div class="font-bold text-[12px]">{d.no}</div>{days > 0 && <span class="inline-block mt-1.5 rounded-full bg-grn-bg text-grn text-[9px] font-bold tracking-wider px-2.5 py-0.5">VALID FOR {days} DAYS</span>}</div>
+        </header>
+        <div class="mt-5 grid grid-cols-[1fr_auto] border border-gray-300 rounded-lg">
+          <div class="p-3"><div class={lab}>Quotation for</div><div class="font-bold text-[13px] mt-0.5">{d.party || "—"}</div>{d.address && <div class="text-[10px] text-gray-500 whitespace-pre-line mt-0.5">{d.address}</div>}</div>
+          <div class="p-3 border-l border-gray-300 flex gap-6 text-right"><div><div class={lab}>Date</div><div class="font-bold text-[12px] mt-0.5">{longDate(d.date)}</div></div><div><div class={lab}>Valid until</div><div class="font-bold text-[12px] mt-0.5">{longDate(d.valid ?? "")}</div></div></div>
         </div>
-        <table class="w-full @lg:w-64 h-fit whitespace-nowrap [&_td]:pl-3 [&_td:first-child]:pl-0"><tbody>
-          <tr><td>Sub-Total</td><td class="text-right">{rs(t.taxable)}</td></tr>
-          <tr><td>GST ({d.gstRate}%)</td><td class="text-right">{rs(t.cgst + t.sgst + t.igst)}</td></tr>
-          {t.roundOff !== 0 && <tr><td>Round-off</td><td class="text-right">{(t.roundOff < 0 ? "−" : "") + amt(t.roundOff)}</td></tr>}
-          <tr class="border-t-2 border-black font-bold"><td class="py-1">Total</td><td class="text-right">{rs(t.total)}</td></tr>
-        </tbody></table>
+        <Head>Scope &amp; pricing</Head>
+        <table class="w-full border-collapse"><thead><tr class="bg-black [&_th]:!text-white text-[9px] uppercase tracking-wider text-left"><th class="py-1.5 px-2 w-8">#</th><th class="px-2">Description</th><th class="r px-2">Qty</th><th class="r px-2">Rate (₹)</th><th class="r px-2">GST</th><th class="r px-2">Amount (₹)</th></tr></thead>
+          <tbody>{d.lines.map((l, i) => { const [name, ...rest] = (l.desc || "—").split(" · "); return <tr key={i} class={`border-b border-gray-200 align-top ${i % 2 ? "bg-gray-50" : ""}`}><td class="py-2 px-2 align-top">{i + 1}</td><td class="px-2"><b class="block">{name}</b>{rest.length > 0 && <span class="text-[10px] text-gray-500">{rest.join(" · ")}</span>}</td><td class="r px-2">{l.qty}</td><td class="r px-2">{amt(l.rate)}</td><td class="r px-2">{d.gstRate}%</td><td class="r px-2">{amt(l.qty * l.rate)}</td></tr>; })}</tbody></table>
+        <table class="mt-4 ml-auto w-64 text-[12px]"><tbody>
+          <tr><td class="py-0.5">Sub-total</td><td class="r">{rs(t.taxable)}</td></tr>
+          {t.igst ? <tr><td class="py-0.5">IGST {d.gstRate}%</td><td class="r">{rs(t.igst)}</td></tr> : <><tr><td class="py-0.5">CGST {d.gstRate / 2}%</td><td class="r">{rs(t.cgst)}</td></tr><tr><td class="py-0.5">SGST {d.gstRate / 2}%</td><td class="r">{rs(t.sgst)}</td></tr></>}
+          {t.roundOff !== 0 && <tr><td class="py-0.5">Round-off</td><td class="r">{(t.roundOff < 0 ? "−" : "") + rs(Math.abs(t.roundOff))}</td></tr>}
+          <tr class="border-t-2 border-black font-bold text-[14px]"><td class="pt-1.5">Total</td><td class="r pt-1.5">{rs(t.total)}</td></tr></tbody></table>
+        <div class="text-right text-[9.5px] text-gray-500 mt-1">Rupees {words(t.total)} only</div>
+        {bank.length > 0 && <div class="mt-5 grid gap-3 border border-gray-300 rounded-lg p-3" style={{ gridTemplateColumns: `repeat(${bank.length}, minmax(0, 1fr))` }}>{bank.map(([k, v]) => <div key={k} class="min-w-0"><div class={lab}>{k}</div><div class="font-bold text-[10.5px] break-words mt-0.5">{v}</div></div>)}</div>}
+        <Head>Payment terms &amp; notes</Head>
+        <ol class="list-decimal pl-4 text-[10px] text-gray-700 leading-relaxed">{notes.map((x) => <li key={x}>{x}</li>)}</ol>
+        <div class="mt-6 flex justify-between items-end gap-6"><p class="text-[10px] text-gray-500 max-w-[45%]">To accept, reply “Approved” on WhatsApp or e-mail, or sign and return this quotation.</p>
+          <div class="w-56 text-center"><div class="text-[28px] leading-none text-indigo-900 -rotate-2" style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 600 }}>{b.signName || "Ankit P"}</div><div class="border-t border-black mt-1 pt-1 text-[10px]">Authorised signatory · {b.name}</div></div></div>
+        <Foot n={1} />
       </section>
-      <footer class="mt-4 flex justify-between items-end gap-4"><Contact b={b} /><PayInfo b={b} /></footer>
-      <section class="mt-6 break-before-page"><div class="font-bold mb-1">Terms &amp; Conditions</div><ol class="list-decimal pl-4 space-y-1">{QUOTE_TERMS.map((x) => <li key={x}>{x.replace("Studio Nexify", b.name)}</li>)}</ol></section>
+      <section class={page}>
+        <div class="absolute inset-x-0 top-0 h-[7px] bg-black" /><div class="absolute left-4 md:left-9 top-[7px] h-[2px] w-12 bg-grn" />
+        <header class="flex justify-between items-start gap-4 pt-7"><img src={`${base}nexify-logo.png`} alt={b.name} class="w-24" /><div class="text-right"><b class="text-[12px]">QUOTATION {d.no}</b><div class="text-[10px] text-gray-500">{b.name} · Terms &amp; conditions</div></div></header>
+        <Head>Terms &amp; conditions</Head>
+        <ol class="list-none space-y-2.5 text-[10.5px] text-gray-700 leading-relaxed">{QUOTE_TERMS.map((x, i) => { const s = x.replace("Studio Nexify", b.name), m = /^([^:]{3,45}):\s(.*)$/.exec(s), title = m && !s.startsWith("Payments can") ? m[1] : ""; return <li key={i} class="flex gap-2"><span class="w-4 shrink-0 font-bold text-black">{i + 1}.</span><span>{title && <b class="block text-black">{title}</b>}{title ? m![2] : s}</span></li>; })}</ol>
+        <div class="mt-8 flex justify-between items-end gap-6"><span class="text-[10px] text-gray-500">Accepted by client (name, signature &amp; date)</span><div class="w-56 text-center border-t border-black pt-1 text-[10px]">Client signature</div></div>
+        <Foot n={2} />
+      </section>
     </article>
   );
 }
