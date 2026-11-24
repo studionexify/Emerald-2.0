@@ -11,11 +11,13 @@ import { pdfName, quoteBlob, saveBlob } from "./quotation/pdf-lazy";
 const QuoteWindow = lazy<{ order?: Order; quote?: Quote; seed?: QuoteDraft; onClose: () => void; onSaved: (o: Order, q: Quote) => void }>(() => import("./quotation/QuoteWindow").then((m) => m.QuoteWindow));
 const QuoteFlow = lazy<{ order: Order; onClose: () => void; start?: "approve" }>(() => import("./work/ClientFlow").then((m) => m.QuoteFlow));
 
-/** The quotation exactly as the client gets it: the real PDF, shown in the window. */
+/** The quotation exactly as the client gets it: the real PDF, both pages side by side, each fitted to the window so nothing scrolls. */
 function PdfView({ q }: { q: Quote }) {
   const [url, setUrl] = useState(""), [err, setErr] = useState("");
   useEffect(() => { let u = ""; let live = true; quoteBlob(q).then((b) => { if (live) { u = URL.createObjectURL(b); setUrl(u); } }, (e) => setErr((e as Error).message)); return () => { live = false; if (u) URL.revokeObjectURL(u); }; }, [q.id, JSON.stringify(q.lines), q.valid, q.address, q.tech, q.customer]);
-  return err ? <p class="p-4 text-[13px] text-red">Could not show the PDF: {err}</p> : url ? <iframe src={url} title={`Quotation ${q.no}`} class="w-full h-full border-0 bg-c1" /> : <p class="p-4 t-meta">Making the PDF…</p>;
+  if (err) return <p class="p-4 text-[13px] text-red">Could not show the PDF: {err}</p>;
+  if (!url) return <p class="p-4 t-meta">Making the PDF…</p>;
+  return <div class="h-full w-full flex gap-3 p-3 bg-c1 max-md:flex-col max-md:overflow-y-auto">{[1, 2].map((n) => <iframe key={n} src={`${url}#page=${n}&view=Fit&toolbar=0&navpanes=0&scrollbar=0`} title={`Quotation ${q.no} page ${n}`} class="flex-1 min-w-0 max-md:min-h-[90dvh] h-full border-0 rounded-lg bg-c0" />)}</div>;
 }
 const val = (q: Quote) => q.lines.reduce((s, l) => s + l.qty * l.rate, 0) * (1 + q.gstRate / 100);
 const tone = (q: Quote) => (q.outcome === "approved" ? "done" : q.outcome === "lost" ? "blocked" : q.sent ? "active" : "waiting") as "done";

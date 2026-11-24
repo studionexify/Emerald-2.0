@@ -170,7 +170,7 @@ export function ClientOrderWindow({ order, onClose, onOpen, onEdit }: { order: O
             <span><span class="text-c3">Printed</span> <b class="num">{prog.printed}/{prog.qty}</b></span><span class={order.paid ? "text-grn font-semibold" : ""}>{pay}</span>
             <span class="ml-auto flex gap-1" role="tablist">{TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} class={`h-8 !min-h-0 px-3 rounded-full text-[12.5px] font-semibold cursor-pointer ${tab === k ? "bg-c4 text-c0" : "bg-c1"}`}>{l}</button>)}</span>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">{tab === "step" ? stepBody() : tab === "items" ? itemsBody() : tab === "client" ? clientBody() : historyBody()}</div>
+          <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">{tab === "step" ? <div class="grid gap-4 min-[1400px]:grid-cols-2 items-start"><div>{stepBody()}</div><div class="hidden min-[1400px]:grid gap-4"><Box title={`Items · ${order.items.length}`}>{itemsBody()}</Box>{clientBody()}</div></div> : tab === "items" ? itemsBody() : tab === "client" ? clientBody() : historyBody()}</div>
         </div>
       </div>
     </Sheet>
