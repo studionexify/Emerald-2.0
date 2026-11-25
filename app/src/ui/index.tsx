@@ -326,7 +326,7 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
   return <Pick value={value} on={onChange} items={items.map(([k]) => k)} label={(k) => m.get(k) ?? k} />;
 }
 
-/** Phone: the view tabs fold away while the list is scrolled down and come back on any scroll up (or near the top),
+/** Phone: the view tabs (and any strip part marked .fold-x) fold away while the list is scrolled down and come back on any scroll up (or near the top),
     so a long list gets the whole screen. Toggles are held while the fold animates, so its own resize never flips it back. */
 function useHeadFold(on: boolean) {
   const [open, setOpen] = useState(true);
@@ -353,10 +353,10 @@ export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detai
   /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
   const phone = isPhone.value;
-  const fold = useHeadFold(phone && !!tabs);
+  const fold = useHeadFold(phone && (!!tabs || !!strip));
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-6 pt-1.5 pb-2 md:pt-3 md:pb-2.5 bg-canvas">
+      <div data-folded={phone && !fold.open ? "" : undefined} class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-6 pt-1.5 pb-2 md:pt-3 md:pb-2.5 bg-canvas">
         <header class="flex items-center gap-2 md:gap-3 min-w-0 max-md:min-h-10">
           <div class="min-w-0 flex-1 flex items-center gap-2">
             <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2 md:gap-2.5 max-md:text-[18px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 max-md:h-5 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
