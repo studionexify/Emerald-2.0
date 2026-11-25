@@ -146,11 +146,11 @@ export function ClientOrderWindow({ order, onClose, onOpen, onEdit }: { order: O
   return (
     <Sheet win open onClose={onClose}
       title={<span class="flex items-center gap-2.5 flex-wrap min-w-0"><span class="truncate">{order.no} · {order.customer}</span><Status tone={last ? "done" : "active"}>{STAGE_LABEL[cur]}</Status></span>}
-      footer={<div class="flex-1 min-w-0 !h-auto flex items-center gap-2 flex-wrap [&_button]:!h-10 [&>*]:!flex-none">
-        <p class="text-[12.5px] min-w-0 flex-1 basis-40" role="status">{msg || (last ? "Order complete." : next ? `Next: ${STAGE_LABEL[next]}` : "")}</p>
+      footer={<div class="flex-1 min-w-0 !h-auto flex items-center gap-2 flex-wrap max-md:grid max-md:grid-cols-2 [&_button]:!h-10 max-md:[&_button]:!h-12 [&>*]:!flex-none max-md:[&>*]:!flex-1">
+        <p class="text-[12.5px] min-w-0 flex-1 basis-40 max-md:col-span-2" role="status">{msg || (last ? "Order complete." : next ? `Next: ${STAGE_LABEL[next]}` : "")}</p>
         {prev && <Button variant="outline" onClick={() => go(prev)}>← {STAGE_LABEL[prev]}</Button>}
         <Button variant="outline" icon="edit" onClick={() => onEdit(order)}>Edit details</Button>
-        {next && <Button onClick={() => go(next)}>{next === "archived" ? "Complete order" : `Move to ${STAGE_LABEL[next]}`} →</Button>}
+        {next && <Button class="max-md:col-span-2" onClick={() => go(next)}>{next === "archived" ? "Complete order" : `Move to ${STAGE_LABEL[next]}`} →</Button>}
       </div>}>
       {qf && <QuoteFlow order={order} start={qf === "approve" ? "approve" : undefined} onClose={() => { setQf(""); refresh(); }} />}
       {fl && <Floor order={order} onClose={() => { setFl(false); refresh(); }} />}

@@ -18,7 +18,7 @@ export function Lightbox({ v, preview, alt, onClose }: { v: string; preview?: st
   const full = useMedia(v), small = useMedia(preview && preview !== v ? preview : undefined);
   const src = full || small;
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && (e.stopPropagation(), onClose()); addEventListener("keydown", k, true); return () => removeEventListener("keydown", k, true); }, []);
-  return <div class="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-3 sm:p-6 cursor-zoom-out sheet-fade" onClick={onClose} role="dialog" aria-label={alt}>
+  return <div data-zoomable class="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-3 sm:p-6 cursor-zoom-out sheet-fade" onClick={onClose} role="dialog" aria-label={alt}>
     {src ? <img src={src} alt={alt} class={`w-full h-full object-contain ${full ? "" : "blur-[2px]"}`} /> : <span class="text-white/70 text-sm">Loading…</span>}
     <span class="absolute top-3 right-4 text-white/80 text-[13px]">{alt}{src && !full ? " · loading full size…" : ""} · Esc to close</span>
   </div>;

@@ -281,10 +281,10 @@ function SpoolPick({ value, onChange, taken, n }: { value: string; onChange: (id
   const mats = [...new Set(all.map((x) => x.material))].sort();
   const cols = [...new Set(all.filter((x) => x.material === mat).map((x) => x.colour))].sort();
   const nums = all.filter((x) => x.material === mat && x.colour === col).sort((a, b) => b.grams - a.grams);
-  const c = "h-8 px-2 rounded-lg border border-line bg-c0 text-xs min-w-0";
+  const c = "h-11 md:h-8 px-2 rounded-lg border border-line bg-c0 text-sm md:text-xs min-w-0 w-full";
   const pickMat = (m: string) => { setMat(m); setCol(""); onChange(""); const cs = [...new Set(all.filter((x) => x.material === m).map((x) => x.colour))]; if (cs.length === 1) pickCol(cs[0], m); };
   const pickCol = (cl: string, m = mat) => { setCol(cl); const ns = all.filter((x) => x.material === m && x.colour === cl); onChange(ns.length ? ns.sort((a, b) => b.grams - a.grams)[0].id : ""); };
-  return <div class="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,1fr)] gap-1.5 flex-1 min-w-0">
+  return <div class="grid grid-cols-1 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,1fr)] gap-1.5 flex-1 min-w-0">
     <select class={c} value={mat} onChange={(e) => pickMat((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n} material`}><option value="">Type…</option>{mats.map((m) => <option key={m}>{m}</option>)}</select>
     <select class={c} value={col} disabled={!mat} onChange={(e) => pickCol((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n} colour`}><option value="">Colour…</option>{cols.map((x) => <option key={x}>{x}</option>)}</select>
     <select class={c} value={value} disabled={!col} onChange={(e) => onChange((e.target as HTMLSelectElement).value)} aria-label={`Spool ${n}`}><option value="">Spool no…</option>{nums.map((x) => <option key={x.id} value={x.id}>#{x.slot ?? x.spoolNo}{x.brand ? ` · ${x.brand}` : ""} · {x.grams} g</option>)}</select>

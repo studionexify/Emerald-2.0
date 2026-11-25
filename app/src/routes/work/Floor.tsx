@@ -3,7 +3,7 @@ import { sortAbc } from "../../mock/types";
 import { Fragment } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Thumb } from "../../ui/media";
-import { Button, Sheet } from "../../ui";
+import { Button, isPhone, Sheet } from "../../ui";
 import { ordersSig, printersSig, filMasterSig, spoolsSig, batchesSig, shortDate, shrinkImage, storeMedia, patchOrder, type Order, type LineItem, type Spool, type Batch, spoolGross, runHours } from "../../data";
 import { StockPanel } from "./StockPanel";
 import { PartsButton } from "./Parts";
@@ -183,7 +183,7 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked, taken }: { 
       <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{spoolGross(s)} g</span></button>); };
   const chip = (on: boolean, l: string, f: () => void) => <button type="button" onClick={f} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${on ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>;
   return <div>
-    <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search colour, material, brand, spool no." class="w-full h-11 md:h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] mb-2 sticky top-0 z-10" />
+    <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search colour, brand, spool no." class="w-full h-11 md:h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] mb-2 sticky top-0 z-10" />
     <div class="flex gap-1.5 mb-2 overflow-x-auto hide-scroll md:flex-wrap [&>*]:shrink-0">{chip(!mat, "All materials", () => setMat(""))}{mats.map((m) => chip(mat === m, m, () => setMat(mat === m ? "" : m)))}
       <select value={brand} onChange={(e) => setBrand((e.target as HTMLSelectElement).value)} class="h-7 px-2 rounded-full border border-line text-[11px] bg-c0 cursor-pointer"><option value="">Brand ▾</option>{brands.map((b) => <option key={b}>{b}</option>)}</select></div>
     <div class="md:max-h-[38vh] md:overflow-y-auto md:pr-1">
@@ -270,7 +270,7 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
     if (pt) { const mach = pt.printer || r.machine, pcs = pt.colour ? [pt.colour] : cs, left = Math.max(1, i.qty - runTotals(o, i, pt.name).good); return [{ ...r, part: pt.name, machine: mach, per: left, sp: Object.fromEntries(pcs.map((c) => [c, bestSpool(c, mach) ?? ""])), tab: pcs[0] ?? "" }]; }
     return [{ ...r, tab: cs.find((c) => !r.sp[c]) ?? cs[0] ?? "" }];
   });
-  const [open, setOpen] = useState(0), [bad, setBad] = useState(0), [why, setWhy] = useState("");
+  const [cfg, setCfg] = useState(""), [open, setOpen] = useState(0), [bad, setBad] = useState(0), [why, setWhy] = useState("");
   const partOf = (name: string) => i.parts?.find((x) => x.name === name);
   /** a part prints in its own colour; a plain run uses the line's colours */
   const gcols = group && group.length > 1 ? [...new Set(group.map((n) => partOf(n)?.colour).filter(Boolean) as string[])] : null;
@@ -308,7 +308,8 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
           {rows.length > 1 && <button type="button" onClick={() => drop(n)} class="text-[12px] text-red underline cursor-pointer !min-h-0 shrink-0">Remove</button>}
         </div>
         {on && <div class="px-3 pb-3 border-t border-line pt-3">
-          <div class="flex flex-wrap items-end gap-2 p-3 rounded-xl bg-c1 mb-1">
+          {isPhone.value && cfg !== r.key && <button type="button" onClick={() => setCfg(r.key)} class="w-full flex items-center gap-2 p-3 rounded-xl bg-c1 mb-1 text-left cursor-pointer"><span class="min-w-0 flex-1 text-[13px]"><b>{r.machine || "Any machine"}</b> · {simple ? `${r.per} pcs` : `${r.plates} × ${r.per} = ${pcs} pcs`}{r.part ? ` · ${r.part}` : ""}</span><span class="text-[12px] font-semibold underline">Change</span></button>}
+          <div class={`${isPhone.value && cfg !== r.key ? "hidden" : "flex"} flex-wrap items-end gap-2 p-3 rounded-xl bg-c1 mb-1`}>
             <label class="flex flex-col gap-1 text-[11px] text-c2">Machine<MachineSelect value={r.machine} onChange={(v) => set(n, { machine: v })} cls="!h-9 !bg-c0 border border-line" /></label>
             {simple ? <label class="flex flex-col gap-1 text-[11px] text-c2">Quantity to print<input type="number" min={1} class={inp} value={r.per} onInput={(e) => set(n, { per: Math.max(1, n0((e.target as HTMLInputElement).value)) })} /></label> : <>
             <label class="flex flex-col gap-1 text-[11px] text-c2">Plates<input type="number" min={1} class={inp} value={r.plates} onInput={(e) => set(n, { plates: Math.max(1, n0((e.target as HTMLInputElement).value)) })} /></label>

@@ -197,7 +197,7 @@ function Dock() {
   const urgent = Object.values(attention(vOrders(), spoolsSig.value, packSig.value, batchesSig.value)).flat().filter((a) => a.t === "danger").length;
   const items = isExternal()
     ? [{ href: "/mauny/gst", label: "GST desk", icon: "money" }, { href: "/settings", label: "Settings", icon: "settings" }]
-    : [NAV[0], NAV[1], NAV[2], NAV.find((n) => n.href === "/mauny")!, { href: "/more", label: "More", icon: "grid" }].filter((n) => n.href === "/more" || can(moduleOf(n.href)));
+    : [NAV[0], NAV[2], NAV.find((n) => n.href === "/workshop")!, NAV.find((n) => n.href === "/mauny")!, { href: "/more", label: "More", icon: "grid" }].filter((n) => n.href === "/more" || can(moduleOf(n.href)));
   const moreOn = !items.filter((n) => n.href !== "/more").some((n) => isActive(path, n.href));
   return (
     <nav class="md:hidden relative z-30 isolate shrink-0 bg-c0 rounded-t-[22px] shadow-[0_-1px_0_var(--line)] [transform:translateZ(0)] flex px-[max(4px,env(safe-area-inset-left))] pb-[env(safe-area-inset-bottom)]" aria-label="Main">
