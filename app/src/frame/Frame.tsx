@@ -115,7 +115,7 @@ function TopBar() {
           <Icon name="menu" size={16} />
         </button>
         <a href="/" aria-label="Emerald home" class="flex items-center gap-2 shrink-0 md:w-[148px] pl-1.5 md:pl-0 min-h-11">
-          <span data-mod="home" class="w-6 h-6 rounded-md bg-acc text-on-acc flex items-center justify-center text-[12px] font-bold">E</span>
+          <img src="./icons/favicon-48.png" alt="" width="24" height="24" class="w-6 h-6 rounded-md" />
           <span class="hidden md:inline text-[15px] font-semibold tracking-tight">Emerald</span>
         </a>
         <div class="md:hidden flex-1 min-w-0 flex items-center gap-2 pl-1">
