@@ -204,7 +204,7 @@ function Dock() {
       {items.map((n) => {
         const on = n.href === "/more" ? moreOn : isActive(path, n.href);
         return (
-          <a key={n.href} href={n.href} data-mod={n.href === "/more" ? undefined : modOf(n.href)} aria-current={on ? "page" : undefined}
+          <a key={n.href} href={n.href === "/work" ? "/work/b2b" : n.href} data-mod={n.href === "/more" ? undefined : modOf(n.href)} aria-current={on ? "page" : undefined}
             class={`flex-1 relative flex flex-col items-center justify-center h-14 gap-0.5 text-[10px] min-w-0 ${on ? "text-c4 font-semibold" : "text-c2 font-medium"}`}>
             <span class={`relative inline-flex items-center justify-center h-8 w-12 rounded-full ${on ? "bg-acc text-on-acc" : ""}`}><Icon name={n.icon} size={20} />
               {n.href === "/more" && urgent > 0 && <span class="absolute -top-1.5 -right-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-warn text-black text-[9px] leading-[14px] text-center num">{urgent}</span>}
