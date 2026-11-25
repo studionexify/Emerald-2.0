@@ -75,7 +75,8 @@ function Sidebar() {
         {groups.map((g, gi) => (
           <div key={g.label || gi} class={gi ? "mt-2 pt-2 border-t border-line" : ""}>
             {g.label && (c
-              ? <div class="text-[9px] font-bold uppercase tracking-[0.08em] text-c2 text-center pb-1">{g.label === "Production" ? "Prod." : g.label === "Operations" ? "Ops" : "Space"}</div>
+              ? <div class="text-[9px] font-bold uppercase tracking-[0.08em] text-c2 text-center pb-1">{g.label === "Production" ? <a href="/work/b2b">Prod.</a> : g.label === "Operations" ? "Ops" : "Space"}</div>
+              : g.label === "Production" ? <a href="/work/b2b" class="block px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-c2 hover:text-c4">{g.label}</a>
               : <div class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-c2">{g.label}</div>)}
             <div class={`flex flex-col gap-0.5 ${g.label === "Production" && !c ? "rounded-2xl bg-c1/50 p-1" : ""}`}>{g.items.map(item)}</div>
           </div>

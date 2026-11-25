@@ -4,8 +4,8 @@ export type NavItem = { href: string; label: string; icon: string };
 export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "", items: [{ href: "/", label: "Dashboard", icon: "home" }, { href: "/quotation", label: "Quotation", icon: "doc" }] },
   { label: "Production", items: [
-    { href: "/work", label: "Client", icon: "user" },
     { href: "/work/b2b", label: "Bulk & B2B", icon: "work" },
+    { href: "/work", label: "Client", icon: "user" },
     { href: "/work/inhouse", label: "In-house", icon: "wrench" },
   ] },
   { label: "Operations", items: [
