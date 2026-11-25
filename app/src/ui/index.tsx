@@ -326,17 +326,23 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
   return <Pick value={value} on={onChange} items={items.map(([k]) => k)} label={(k) => m.get(k) ?? k} />;
 }
 
-/** Phone: the view tabs (and any strip part marked .fold-x) fold away while the list is scrolled down and come back on any scroll up (or near the top),
+/** Phone: the page head (title, tabs, any strip part marked .fold-x) and the action bar fold away while the list is scrolled down and come back on any scroll up (or near the top),
     so a long list gets the whole screen. Toggles are held while the fold animates, so its own resize never flips it back. */
 function useHeadFold(on: boolean) {
   const [open, setOpen] = useState(true);
-  const st = useRef({ y: 0, hold: 0 });
+  const st = useRef<{ y: number; hold: number; el?: HTMLElement }>({ y: 0, hold: 0 });
+  const { path } = useLocation();
   useEffect(() => { if (!on) setOpen(true); }, [on]);
+  useEffect(() => { st.current = { y: 0, hold: 0 }; setOpen(true); }, [path]); // a new view starts with its head shown
+  // after any re-render (filter, new data): if the list is back at the top or no longer scrolls, bring the head back
+  useEffect(() => { const el = st.current.el; if (!open && el && (!el.isConnected || el.scrollTop < 40 || el.scrollHeight - el.clientHeight < 4)) setOpen(true); });
   const onScroll = (e: Event) => {
     if (!on) return;
     const el = e.target as HTMLElement;
     if (!(el instanceof HTMLElement) || el.scrollHeight - el.clientHeight < 160) return; // short pages never fold
-    const y = el.scrollTop, s = st.current, dy = y - s.y;
+    const s = st.current;
+    if (s.el !== el) { s.el = el; s.y = el.scrollTop; return; }
+    const y = el.scrollTop, dy = y - s.y;
     if (Math.abs(dy) < 6) return;
     s.y = y;
     if (Date.now() < s.hold) return;
@@ -353,24 +359,27 @@ export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detai
   /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
   const phone = isPhone.value;
-  const fold = useHeadFold(phone && (!!tabs || !!strip));
+  const fold = useHeadFold(phone);
+  const folded = phone && !fold.open;
+  const head = (
+    <header class="flex items-center gap-2 md:gap-3 min-w-0 max-md:min-h-10">
+      <div class="min-w-0 flex-1 flex items-center gap-2">
+        <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2 md:gap-2.5 max-md:text-[18px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 max-md:h-5 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
+        {sub && <Tip text={sub} />}
+      </div>
+      {toolbar && phone && <FilterSheet compact>{toolbar}</FilterSheet>}
+      {tabs && <div class="hidden md:block w-48 shrink-0"><Tabs tabs={tabs} /></div>}
+      {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
+    </header>
+  );
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div data-folded={phone && !fold.open ? "" : undefined} class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-6 pt-1.5 pb-2 md:pt-3 md:pb-2.5 bg-canvas">
-        <header class="flex items-center gap-2 md:gap-3 min-w-0 max-md:min-h-10">
-          <div class="min-w-0 flex-1 flex items-center gap-2">
-            <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2 md:gap-2.5 max-md:text-[18px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 max-md:h-5 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
-            {sub && <Tip text={sub} />}
-          </div>
-          {toolbar && phone && <FilterSheet compact>{toolbar}</FilterSheet>}
-          {tabs && <div class="hidden md:block w-48 shrink-0"><Tabs tabs={tabs} /></div>}
-          {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
-        </header>
-        {tabs && (phone
-          ? <div class="disc-x grid min-w-0 -mt-1.5" data-open={fold.open ? "" : undefined} {...{ inert: !fold.open || undefined }}><div class="min-h-0 overflow-hidden pt-1.5"><PhoneTabs tabs={tabs} primary={primary} /></div></div>
-          : <PhoneTabs tabs={tabs} primary={primary} />)}
-        {toolbar && !phone && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}
-        {strip}
+      {/* Phone: title row, view tabs and any .fold-x part of the strip fold away while scrolling down; the rest of the strip stays. */}
+      <div data-folded={folded ? "" : undefined} class={`shrink-0 flex flex-col md:gap-2 px-3 md:px-5 2xl:px-6 md:pt-3 md:pb-2.5 bg-canvas transition-[padding] duration-200 ${folded ? "pt-0 pb-0" : "pt-1.5 pb-2"}`}>
+        {phone
+          ? <div class="disc-x grid min-w-0" data-open={fold.open ? "" : undefined} {...{ inert: folded || undefined }}><div class="min-h-0 overflow-hidden flex flex-col gap-1.5">{head}{tabs && <PhoneTabs tabs={tabs} primary={primary} />}</div></div>
+          : <>{head}{tabs && <PhoneTabs tabs={tabs} primary={primary} />}{toolbar && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}</>}
+        {strip && (phone ? <div class={`transition-[margin] duration-200 ${folded ? "" : "mt-1.5"}`}>{strip}</div> : strip)}
       </div>
       <div class="flex-1 min-h-0" onScrollCapture={fold.onScroll}>
         {detail !== undefined ? (
@@ -383,7 +392,9 @@ export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detai
           </div>
         )}
       </div>
-      {actions && <ActionDock>{actions}</ActionDock>}
+      {actions && (phone
+        ? <div class="disc-x grid min-w-0" data-open={fold.open ? "" : undefined} {...{ inert: folded || undefined }}><div class="min-h-0 overflow-hidden"><ActionDock>{actions}</ActionDock></div></div>
+        : <ActionDock>{actions}</ActionDock>)}
     </div>
   );
 }

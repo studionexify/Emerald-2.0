@@ -151,6 +151,7 @@ tbody td:first-child { font-weight: 600; }
 .fold-x { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s cubic-bezier(.32,.72,0,1); }
 [data-folded] .fold-x { grid-template-rows: 0fr; }
 [data-folded] .fold-x > * { visibility: hidden; transition: visibility 0s .2s; }
+[data-folded] .fold-bar { margin-top: 0; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px); } }
 .pop-in { animation: pop-in .12s ease-out; }
 @media (prefers-reduced-motion: reduce) { .fold-x, .disc-x, .pop-in, .sheet-up { transition: none; animation: none; } }
