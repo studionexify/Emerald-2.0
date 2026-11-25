@@ -68,8 +68,27 @@ function TabStrip({ tabs, current }: { tabs: { href: string; label: string }[]; 
   useEffect(() => { ref.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [current]);
   return (
     <nav ref={ref} aria-label="Sections" class="md:hidden -mx-3 px-3 flex gap-1.5 overflow-x-auto hide-scroll snap-x [&>*]:shrink-0">
-      {tabs.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`snap-start h-10 px-4 inline-flex items-center rounded-full text-[14px] whitespace-nowrap ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c3 font-medium"}`}>{t.label}</a>)}
+      {tabs.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`snap-start h-11 px-4 inline-flex items-center rounded-full text-[14px] whitespace-nowrap ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c3 font-medium"}`}>{t.label}</a>)}
     </nav>
+  );
+}
+/** Phone, progressive: only the main views are shown as one equal-width row; every other view opens from "More views". */
+function PrimaryTabs({ tabs, primary, current }: { tabs: { href: string; label: string }[]; primary: { href: string; label: string }[]; current?: string }) {
+  const rest = tabs.filter((t) => !primary.some((p) => p.href === t.href)), here = rest.find((t) => t.href === current);
+  const [open, setOpen] = useState(false);
+  return (
+    <div class="md:hidden flex flex-col gap-2">
+      <nav aria-label="Main views" class="grid gap-1 p-1 rounded-full bg-c0" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>
+        {primary.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`h-11 px-2 inline-flex items-center justify-center text-center rounded-full text-[14px] leading-tight ${t.href === current ? "bg-acc text-on-acc font-semibold" : "text-c3 font-medium"}`}>{t.label}</a>)}
+      </nav>
+      {rest.length > 0 && <>
+        <button type="button" aria-expanded={open || !!here} onClick={() => setOpen(!open)} class={`h-11 px-4 rounded-xl border text-[14px] font-semibold inline-flex items-center gap-2 cursor-pointer ${here ? "border-acc bg-acc-bg" : "border-line bg-c0"}`}>
+          <span class={`inline-flex transition-transform ${open ? "rotate-90" : ""}`}><Icon name="right" size={13} /></span>
+          {here ? `View: ${here.label}` : "More views"}<span class="ml-auto t-meta">{rest.length}</span>
+        </button>
+        {open && <div class="grid grid-cols-2 gap-1.5 pop-in">{rest.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`min-h-11 px-3 py-2 rounded-xl text-[14px] leading-tight inline-flex items-center ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c4 font-medium"}`}>{t.label}</a>)}</div>}
+      </>}
+    </div>
   );
 }
 export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
@@ -86,10 +105,10 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
     </label>
   );
 }
-export function PhoneTabs({ tabs }: { tabs: { href: string; label: string }[] }) {
+export function PhoneTabs({ tabs, primary }: { tabs: { href: string; label: string }[]; primary?: { href: string; label: string }[] }) {
   const { path } = useLocation();
   const current = [...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => path === t.href || path.startsWith(t.href + "/"));
-  return <TabStrip tabs={tabs} current={current?.href} />;
+  return primary ? <PrimaryTabs tabs={tabs} primary={primary} current={current?.href} /> : <TabStrip tabs={tabs} current={current?.href} />;
 }
 
 /** Filter control: chips for up to 3 options, a dropdown beyond that. */
@@ -138,9 +157,9 @@ export function Progress({ value }: { value: number }) {
 /** Small (i) next to a title; the explanation shows only on hover / focus. */
 export function Tip({ text, children }: { text?: string; children?: ComponentChildren }) {
   return (
-    <span class="relative inline-flex group align-middle shrink-0" tabIndex={0} aria-label={text}>
+    <span class="relative inline-flex group align-middle shrink-0 max-md:w-11 max-md:h-11 max-md:-m-3.5 max-md:items-center max-md:justify-center" tabIndex={0} aria-label={text}>
       <span class="w-4 h-4 grid place-items-center text-c3 hover:text-c4 cursor-help"><Icon name="info" size={14} /></span>
-      <span role="tooltip" class="pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 z-50 w-max max-w-[280px] rounded-lg bg-c4 text-c0 text-[12px] font-medium leading-snug px-2.5 py-1.5 shadow-lg hidden group-hover:block group-focus:block whitespace-normal normal-case tracking-normal">{text ?? children}</span>
+      <span role="tooltip" class="pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 z-50 w-max max-w-[280px] max-md:fixed max-md:left-3 max-md:right-3 max-md:top-20 max-md:translate-x-0 max-md:w-auto max-md:max-w-none max-md:text-[14px] rounded-lg bg-c4 text-c0 text-[12px] font-medium leading-snug px-2.5 py-1.5 shadow-lg hidden group-hover:block group-focus:block whitespace-normal normal-case tracking-normal">{text ?? children}</span>
     </span>
   );
 }
@@ -308,8 +327,8 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
 }
 
 /** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
-export function Page({ title, sub, actions, tabs, toolbar, strip, detail, children }: {
-  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; toolbar?: ComponentChildren; /** Always-visible band under the toolbar (outside the scroll area). */ strip?: ComponentChildren;
+export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detail, children }: {
+  title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; /** Phone: only these views are shown on top, the rest open from "More views". */ primary?: { href: string; label: string }[]; toolbar?: ComponentChildren; /** Always-visible band under the toolbar (outside the scroll area). */ strip?: ComponentChildren;
   /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
   return (
@@ -323,7 +342,7 @@ export function Page({ title, sub, actions, tabs, toolbar, strip, detail, childr
           {tabs && <div class="hidden md:block w-48 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
-        {tabs && <PhoneTabs tabs={tabs} />}
+        {tabs && <PhoneTabs tabs={tabs} primary={primary} />}
         {toolbar && (isPhone.value ? <FilterSheet>{toolbar}</FilterSheet> : <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>)}
         {strip}
       </div>

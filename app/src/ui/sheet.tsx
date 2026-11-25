@@ -89,7 +89,7 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
           </div>
         )}
         <div data-sheet-body class={`flex-1 min-h-0 ${xl ? "overflow-hidden" : win ? "overflow-y-auto md:overflow-hidden overscroll-contain" : "overflow-y-auto overscroll-contain px-4 pb-4"}`}>{children}</div>
-        {footer && <div class="shrink-0 border-t border-line px-4 pt-2 flex gap-2 [&>*]:flex-1 [&_button]:h-12" style={{ paddingBottom: kb.value ? 8 : "max(8px, env(safe-area-inset-bottom))" }}>{footer}</div>}
+        {footer && <div class="shrink-0 border-t border-line px-4 pt-2 flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:min-w-fit [&_button]:min-h-12 [&_button]:h-auto" style={{ paddingBottom: kb.value ? 8 : "max(8px, env(safe-area-inset-bottom))" }}>{footer}</div>}
         {!footer && <div class="shrink-0 h-[env(safe-area-inset-bottom)]" />}
       </div>
     </div>

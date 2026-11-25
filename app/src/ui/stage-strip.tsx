@@ -1,5 +1,6 @@
 import { Fragment } from "preact";
 import { Icon } from "./icon";
+import { isPhone } from "./sheet";
 import { inr, orderTotal, STAGES, type Order, type Stage } from "../data";
 
 /** Stage glyphs, shared by the strip, stage pills and order rows. */
@@ -20,6 +21,13 @@ export const STAGE_HREF: Record<Stage, string> = {
  */
 export function StageStrip({ orders, showValue, active }: { orders: Order[]; showValue: boolean; active?: Stage }) {
   const stages = STAGES.filter((s) => s.key !== "archived");
+  const phone = isPhone.value;
+  if (phone) return (
+    <nav aria-label="Orders by stage" class="-mx-3 px-3 flex gap-1.5 overflow-x-auto hide-scroll snap-x [&>*]:shrink-0">
+      {stages.map((s) => { const n = orders.filter((o) => o.stage === s.key).length, on = active === s.key; return (
+        <a key={s.key} href={STAGE_HREF[s.key]} aria-label={`${s.label}: ${n} order${n === 1 ? "" : "s"}`} class={`snap-start h-11 px-3.5 rounded-full inline-flex items-center gap-2 text-[14px] whitespace-nowrap ${on ? "bg-c4 text-c0 font-semibold" : "bg-c0 text-c3 font-medium"}`}>{s.label}<span class="num font-bold">{n}</span></a>); })}
+    </nav>
+  );
   return (
     <nav aria-label="Orders by stage" class="flex overflow-x-auto hide-scroll snap-x md:grid md:overflow-visible md:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-1.5 min-[1400px]:flex min-[1400px]:items-stretch min-[1400px]:gap-1 rounded-[22px] bg-panel p-2">
       {stages.map((s, i) => {

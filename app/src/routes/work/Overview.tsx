@@ -1,7 +1,7 @@
 import { Thumb } from "../../ui/media";
 import { vOrders, machineLive } from "../../data";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { ask, Button, Icon, Section, Sheet, Status, Waterfall } from "../../ui";
+import { ask, Button, Icon, isPhone, Section, Sheet, Status, Waterfall } from "../../ui";
 import { b2bFor } from "../../data/inventory";
 import { openQuoteSig, quoteOf } from "../../data/quoting";
 import { inr, orderTotal, ordersSig, shortDate, STAGES, type Order, printersSig, jobsSig, batchesSig, today, clientsSig, toBin, log, me, duplicateOrder, STAGE_LABEL, TYPE_LABEL, SIZE_LABEL, B2B_TYPES, shrinkImage, storeMedia, lineProgress, orderProgress, lineMachines, SUGGESTED, orderPace, type OrderSize, type Client } from "../../data";
@@ -154,16 +154,33 @@ function Summary({ kpis, list, active, onPick, stages }: { kpis: [string, string
   const tile = "px-3 py-2.5 min-w-0 text-left bg-c0";
   const lab = "t-meta flex flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-1.5 leading-tight";
   const grid = "grid gap-px bg-line";
+  const [more, setMore] = useState(false);
+  const stageBtns = stages.map((s) => { const n = list.filter((o) => o.stage === s.key).length, on = active === s.key; return (
+    <button key={s.key} type="button" onClick={() => onPick(on ? "" : s.key)} aria-pressed={on} class={`${tile} cursor-pointer !min-h-0 ${on ? "!bg-c4 text-c0" : "!bg-c1 hover:!bg-c2/20"}`}>
+      <div class={`${lab} ${on ? "opacity-80" : ""}`}><Icon name={STAGE_GLYPH[s.key] ?? "rows"} size={14} /><span>{s.label}</span></div>
+      <div class="num text-[22px] font-semibold leading-tight">{n}</div></button>); });
+  if (isPhone.value) return <div class="flex flex-col gap-2">
+    {/* phone: the stages are the filter (one swipeable row); the key numbers open on demand */}
+    <div role="group" aria-label="Filter by stage" class="-mx-3 px-3 flex gap-1.5 overflow-x-auto hide-scroll snap-x [&>*]:shrink-0">
+      {stages.map((s) => { const n = list.filter((o) => o.stage === s.key).length, on = active === s.key; return (
+        <button key={s.key} type="button" onClick={() => onPick(on ? "" : s.key)} aria-pressed={on} class={`snap-start h-11 px-3.5 rounded-full inline-flex items-center gap-2 text-[14px] whitespace-nowrap cursor-pointer ${on ? "bg-c4 text-c0 font-semibold" : "bg-c0 text-c3 font-medium"}`}>{s.label}<span class="num font-bold">{n}</span></button>); })}
+    </div>
+    <button type="button" aria-expanded={more} onClick={() => setMore(!more)} class="h-11 px-4 rounded-xl bg-c0 border border-line text-[14px] font-semibold inline-flex items-center gap-2 cursor-pointer text-left">
+      <span class={`inline-flex transition-transform ${more ? "rotate-90" : ""}`}><Icon name="right" size={13} /></span>
+      <span class="min-w-0 flex-1">{kpis.slice(0, 2).map(([k, v]) => `${k} ${v}`).join(" · ")}</span><span class="t-meta">{more ? "Hide" : "Details"}</span>
+    </button>
+    {more && <div class={`${grid} grid-cols-2 rounded-[var(--radius-card)] border border-line overflow-hidden pop-in`}>
+      {kpis.map(([k, v, ic, cl]) => <div key={k} class={tile}><div class={lab}><Icon name={ic} size={14} /><span>{k}</span></div><div class={`num text-[22px] font-semibold leading-tight ${cl ?? ""}`}>{v}</div></div>)}
+      {kpis.length % 2 === 1 && <div class="bg-c0" />}
+    </div>}
+  </div>;
   return <div class="flex flex-col xl:flex-row gap-px bg-line rounded-[var(--radius-card)] border border-line overflow-hidden" style={{ "--k": kpis.length, "--s": stages.length } as never}>
     <div class={`${grid} grid-cols-2 sm:grid-cols-[repeat(var(--k),minmax(0,1fr))] xl:flex-[var(--k)]`}>
       {kpis.map(([k, v, ic, cl]) => <div key={k} class={tile}><div class={lab}><Icon name={ic} size={14} /><span>{k}</span></div><div class={`num text-[22px] font-semibold leading-tight ${cl ?? ""}`}>{v}</div></div>)}
       {kpis.length % 2 === 1 && <div class="bg-c0 sm:hidden" />}
     </div>
     <div class={`${grid} grid-cols-4 xl:grid-cols-[repeat(var(--s),minmax(0,1fr))] xl:flex-[var(--s)]`}>
-      {stages.map((s) => { const n = list.filter((o) => o.stage === s.key).length, on = active === s.key; return (
-        <button key={s.key} type="button" onClick={() => onPick(on ? "" : s.key)} aria-pressed={on} class={`${tile} cursor-pointer !min-h-0 ${on ? "!bg-c4 text-c0" : "!bg-c1 hover:!bg-c2/20"}`}>
-          <div class={`${lab} ${on ? "opacity-80" : ""}`}><Icon name={STAGE_GLYPH[s.key] ?? "rows"} size={14} /><span>{s.label}</span></div>
-          <div class="num text-[22px] font-semibold leading-tight">{n}</div></button>); })}
+      {stageBtns}
       {Array.from({ length: (4 - (stages.length % 4)) % 4 }, (_, i) => <div key={`f${i}`} class="bg-c1 xl:hidden" />)}
     </div>
   </div>;
@@ -291,7 +308,7 @@ export default function Overview({ seg = "client" }: { seg?: Segment }) {
       {seg === "inhouse" && <button type="button" onClick={() => setQuick(true)} class="self-start !min-h-0 h-11 px-5 rounded-xl bg-grn text-c0 inline-flex items-center gap-2 text-[15px] font-bold tracking-wide cursor-pointer hover:opacity-90"><Icon name="plus" size={18} />Create</button>}
       <Section title={st ? `${STAGES.find((x) => x.key === st)?.label} orders` : "Live orders"} note={String(live.length)} action={st ? <button class="t-meta underline cursor-pointer !min-h-0" onClick={() => setSt("")}>Show all live</button> : undefined}>
           <div class="flex flex-wrap items-center gap-2 mb-2">
-            <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search orders or products" aria-label="Search live orders" class="h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] flex-1 min-w-[180px]" />
+            <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search orders" aria-label="Search live orders" class="h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] flex-1 min-w-[180px] max-md:basis-full" />
             <select value={sort} onChange={(e) => setSort((e.target as HTMLSelectElement).value as typeof sort)} aria-label="Sort live orders" class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px] cursor-pointer">
               <option value="due">{seg === "inhouse" ? "Sort: newest" : "Sort: deadline"}</option>{seg !== "client" && <option value="done">Sort: most done</option>}{seg !== "client" && <option value="pending">Sort: most pending</option>}
             </select>

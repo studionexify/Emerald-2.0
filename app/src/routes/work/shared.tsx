@@ -31,7 +31,7 @@ export function useOpenOrder() {
 const goStage = (o: Order, st: Stage) => { returnSig.value = { path: path.value, no: o.no, scroll: document.querySelector("[data-split-main]")?.scrollTop ?? 0 }; openOrderSig.value = o.no; navigate(STAGE_HREF[st]); };
 export function WorkShell({ title, sub, actions, toolbar, detail, children, stage }: { stage?: Stage; title: string; sub?: string; actions?: ComponentChildren; toolbar?: ComponentChildren; detail?: ComponentChildren | null; children: ComponentChildren }) {
   const r = returnSig.value; const back = r && r.path !== path.value ? r : null;
-  return <Page title={title} sub={sub} actions={<>{back && <Button variant="outline" icon="left" onClick={() => navigate(back.path)}>Back to {back.no}</Button>}{actions}</>} tabs={WORK_TABS} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={vOrders()} showValue={can("mauny")} active={stage} />}{children}</Page>;
+  return <Page title={title} sub={sub} actions={<>{back && <Button variant="outline" icon="left" onClick={() => navigate(back.path)}>Back to {back.no}</Button>}{actions}</>} tabs={WORK_TABS} primary={[{ href: "/work", label: "Client" }, { href: "/work/b2b", label: "Bulk" }, { href: "/work/inhouse", label: "In-house" }]} toolbar={toolbar} detail={detail}>{stage && <StageStrip orders={vOrders()} showValue={can("mauny")} active={stage} />}{children}</Page>;
 }
 
 export type TypeFilter = "all" | OrderType;

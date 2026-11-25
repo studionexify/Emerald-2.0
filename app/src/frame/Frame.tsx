@@ -113,7 +113,7 @@ function TopBar() {
           class="hidden md:flex w-8 h-8 rounded-lg hover:bg-c1 items-center justify-center cursor-pointer shrink-0">
           <Icon name="menu" size={16} />
         </button>
-        <a href="/" aria-label="Emerald home" class="flex items-center gap-2 shrink-0 md:w-[148px] pl-1.5 md:pl-0">
+        <a href="/" aria-label="Emerald home" class="flex items-center gap-2 shrink-0 md:w-[148px] pl-1.5 md:pl-0 min-h-11">
           <span data-mod="home" class="w-6 h-6 rounded-md bg-acc text-on-acc flex items-center justify-center text-[12px] font-bold">E</span>
           <span class="hidden md:inline text-[15px] font-semibold tracking-tight">Emerald</span>
         </a>

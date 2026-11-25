@@ -159,3 +159,17 @@ tbody td:first-child { font-weight: 600; }
 .doc-a4 tbody td { font-weight: 400; }
 .doc-a4 tbody td.font-bold { font-weight: 700; }
 .doc-a4 table { font-variant-numeric: normal; }
+
+/* Phone reading size: small text is lifted so nothing needs squinting, and every button has a thumb-sized hit box. */
+@media (max-width: 767px) {
+  body { font-size: 14px; }
+  .t-meta { font-size: 12px; }
+  .t-section { font-size: 12.5px; }
+  [class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"], [class*="text-[10.5px]"] { font-size: 11.5px !important; }
+  [class*="text-[11px]"], [class*="text-[11.5px]"], [class*="text-xs"] { font-size: 12.5px !important; }
+  [class*="text-[12px]"], [class*="text-[12.5px]"] { font-size: 13px !important; }
+  [class*="text-[13px]"] { font-size: 14px !important; }
+  button, [role="button"], summary, select { min-height: 40px !important; }
+  /* wrapping, never cutting */
+  .truncate, [class*="line-clamp"] { overflow: visible !important; text-overflow: clip !important; white-space: normal !important; -webkit-line-clamp: unset !important; overflow-wrap: anywhere; }
+}
