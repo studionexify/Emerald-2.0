@@ -326,7 +326,7 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
   return <Pick value={value} on={onChange} items={items.map(([k]) => k)} label={(k) => m.get(k) ?? k} />;
 }
 
-/** Phone: the page head (title, tabs, any strip part marked .fold-x) and the action bar fold away while the list is scrolled down and come back on any scroll up (or near the top),
+/** Phone: the page head (title, tabs, any strip part marked .fold-x) folds away while the list is scrolled down and comes back on any scroll up (or near the top),
     so a long list gets the whole screen. Toggles are held while the fold animates, so its own resize never flips it back. */
 function useHeadFold(on: boolean) {
   const [open, setOpen] = useState(true);
@@ -392,9 +392,7 @@ export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detai
           </div>
         )}
       </div>
-      {actions && (phone
-        ? <div class="disc-x grid min-w-0" data-open={fold.open ? "" : undefined} {...{ inert: folded || undefined }}><div class="min-h-0 overflow-hidden"><ActionDock>{actions}</ActionDock></div></div>
-        : <ActionDock>{actions}</ActionDock>)}
+      {actions && <ActionDock>{actions}</ActionDock>}
     </div>
   );
 }
