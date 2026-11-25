@@ -3,9 +3,9 @@
  * - Hashed assets: cache-first, but only real JS/CSS/etc. are cached — never the HTML that Cloudflare's
  *   SPA fallback returns for a missing old chunk (caching that froze pages until a hard refresh).
  * - Old builds' assets are trimmed so the cache never grows without bound. */
-const C = "emerald-v2";
+const C = "emerald-v3";
 const MAX_ASSETS = 120;
-self.addEventListener("install", (e) => { e.waitUntil(caches.open(C).then((c) => c.addAll(["./", "./manifest.webmanifest"])).catch(() => {})); self.skipWaiting(); });
+self.addEventListener("install", (e) => { e.waitUntil(caches.open(C).then((c) => c.addAll(["./", "./manifest.webmanifest", "./icons/icon-192.png"])).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== C).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 const isHtml = (res) => (res.headers.get("content-type") || "").includes("text/html");
 async function trim(c) {
@@ -27,16 +27,13 @@ self.addEventListener("fetch", (e) => {
       });
     }));
   } else if (r.mode === "navigate") {
+    /* Network first: a new deploy shows on the very next open. The cached page is used only when offline or the network is slow (3 s). */
     const net = fetch(r).then(async (res) => {
-      if (res.ok && isHtml(res)) {
-        const c = await caches.open(C), old = await c.match("./"), fresh = await res.clone().text();
-        await c.put("./", res.clone());
-        // New build deployed: tell open tabs so they switch over quietly (when hidden or on next tap).
-        if (old && (await old.text()) !== fresh) (await self.clients.matchAll()).forEach((w) => w.postMessage("emerald:update"));
-      }
+      if (res.ok && isHtml(res)) { const c = await caches.open(C); await c.put("./", res.clone()); }
       return res;
     });
+    const slow = new Promise((ok) => setTimeout(() => caches.match("./").then(ok), 3000));
     e.waitUntil(net.catch(() => {}));
-    e.respondWith(caches.match("./").then((hit) => hit || net).catch(() => net));
+    e.respondWith(Promise.race([net.catch(() => caches.match("./")), slow]).then((res) => res || net));
   }
 });
