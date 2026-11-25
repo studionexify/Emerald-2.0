@@ -2,7 +2,8 @@ import { render } from "preact";
 import { App } from "./app";
 import "./styles.css";
 import "./ui/paste";
-import "./ui/zoom-lock";
+/* loaded right after first paint: keeps the entry chunk inside its size budget */
+addEventListener("DOMContentLoaded", () => void import("./ui/zoom-lock"), { once: true });
 
 if (import.meta.env.MODE === "artifact") await import("./data/demo");
 
