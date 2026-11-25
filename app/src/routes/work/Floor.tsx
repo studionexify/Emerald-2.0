@@ -71,16 +71,16 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
   const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[20px] sm:text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
-    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class={`absolute top-[2.5dvh] bottom-[2.5dvh] left-1/2 -translate-x-1/2 ${stock ? "w-[95vw]" : "w-max min-w-[min(900px,95vw)] max-w-[95vw]"} bg-c0 rounded-2xl shadow-2xl flex flex-col max-[640px]:inset-0 max-[640px]:translate-x-0 max-[640px]:left-0 max-[640px]:w-full max-[640px]:min-w-0 max-[640px]:max-w-none max-[640px]:rounded-none`}>
-      <button type="button" aria-label="Close Floor" onClick={onClose} class="absolute -top-3 -right-3 max-[640px]:top-2 max-[640px]:right-2 max-[640px]:w-11 max-[640px]:h-11 max-[640px]:text-[20px] z-20 w-13 h-13 ring-4 ring-c0 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
+    <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class={`absolute top-[2.5dvh] bottom-[2.5dvh] left-1/2 -translate-x-1/2 ${stock ? "w-[95vw]" : "w-max min-w-[min(900px,95vw)] max-w-[95vw]"} bg-c0 rounded-2xl shadow-2xl flex flex-col max-[640px]:inset-0 max-[640px]:translate-x-0 max-[640px]:left-0 max-[640px]:w-full max-[640px]:min-w-0 max-[640px]:max-w-none max-[640px]:rounded-none max-[640px]:pt-[env(safe-area-inset-top)] max-[640px]:pb-[env(safe-area-inset-bottom)]`}>
+      <button type="button" aria-label="Close Floor" onClick={onClose} class="absolute -top-3 -right-3 max-[640px]:top-[calc(env(safe-area-inset-top)+8px)] max-[640px]:right-2 max-[640px]:w-11 max-[640px]:h-11 max-[640px]:text-[20px] z-20 w-13 h-13 ring-4 ring-c0 !min-h-0 rounded-full bg-c4 text-c0 grid place-items-center text-[26px] leading-none cursor-pointer shadow-lg">✕</button>
       <div class={`flex-1 min-h-0 flex rounded-2xl max-[640px]:rounded-none overflow-hidden ${stock ? "max-[900px]:flex-col" : ""}`}>
       <div class={`flex-1 min-h-0 min-w-0 overflow-y-auto ${stock ? "overflow-x-auto" : "overflow-x-hidden"} overscroll-contain`}><div class="px-[clamp(12px,2vw,28px)] pt-6 pb-8 max-[640px]:pt-4 max-[640px]:pb-6">
-        <div class="flex flex-wrap items-start gap-3 pr-16">
-          <div class="mr-auto min-w-0"><h2 class="text-[20px] font-semibold leading-tight">{o.no} · {o.customer}</h2>
+        <div class="flex flex-wrap items-start gap-3 pr-16 max-[640px]:pr-12 min-w-0">
+          <div class="mr-auto min-w-0"><h2 class="text-[20px] max-[640px]:text-[17px] font-semibold leading-tight break-words">{o.no} · {o.customer}</h2>
             <div class="t-meta mt-1">Due {shortDate(o.due)} · {rows.length} designs · {tot.q} pcs</div></div>
           {done > 0 && <label class="h-9 inline-flex items-center gap-2 px-3 rounded-full border border-line text-[13px] font-semibold cursor-pointer select-none">
             <input type="checkbox" checked={showDone} onChange={toggleDone} class="accent-grn w-4 h-4 !min-h-0 cursor-pointer" />Show completed ({done})</label>}
-          <div class="flex gap-2 w-full md:w-auto overflow-x-auto hide-scroll md:overflow-visible [&>*]:shrink-0 -mr-16 pr-16 md:m-0 md:p-0 max-md:order-last">
+          <div class="flex flex-wrap gap-2 w-full md:w-auto min-w-0 -mr-16 max-[640px]:-mr-12 md:m-0 max-md:order-last max-md:[&>*]:flex-1 max-md:[&>*]:min-w-fit">
             <Button variant="outline" onClick={() => setLines(true)}>✎ Edit line items</Button>
             <Button variant="outline" onClick={() => setCols(true)}>✎ Edit colours</Button>
             <Button variant="outline" onClick={toggleStock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>
@@ -127,9 +127,9 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
             <tr><td colSpan={11} class="px-1 py-1.5 text-right">Balance after job (g)</td>{columns.map((c) => { const b = store[c] - need[c]; return <td key={c} class={`${td} font-semibold ${b < 0 ? "text-red" : "text-grn"} ${store[c] ? "" : "floor-empty"}`}>{b > 0 ? "+" : ""}{b}</td>; })}</tr>
           </tfoot>
         </table></div>
-        <div class={`${stock ? "min-[1800px]:hidden" : "min-[1100px]:hidden"} grid gap-2`}>
+        <div class={`${stock ? "min-[1800px]:hidden" : "min-[1100px]:hidden"} grid grid-cols-1 gap-2 min-w-0`}>
           {shown.map(({ i, k, f }) => { const fin = !f.remaining, cs = lineColours(i); return (
-            <div key={k} class={`rounded-xl border border-line p-3 ${fin ? "bg-c1 text-c2 grayscale opacity-70" : "bg-c0"}`}>
+            <div key={k} class={`min-w-0 rounded-xl border border-line p-3 ${fin ? "bg-c1 text-c2 grayscale opacity-70" : "bg-c0"}`}>
               <div class="flex items-center gap-3">
                 <Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-11 h-11 shrink-0" onAdd={(fl) => attach(k, fl)} />
                 <div class="min-w-0 flex-1"><div class="font-semibold text-[14px] leading-snug">{k + 1}. {i.name}</div>

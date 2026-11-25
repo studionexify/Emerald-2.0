@@ -75,11 +75,11 @@ export function Sheet({ open = true, onClose, title, children, footer, full, wid
   };
 
   return (
-    <div class={`fixed inset-0 z-50 flex flex-col justify-end ${wide || huge ? "md:justify-center" : ""} ${xl || win ? "md:items-center md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
+    <div class={`fixed inset-0 z-50 flex flex-col justify-end max-md:pt-[calc(env(safe-area-inset-top)+8px)] ${wide || huge ? "md:justify-center" : ""} ${xl || win ? "md:items-center md:justify-center" : ""}`} style={{ paddingBottom: kb.value }}>
       <div class="absolute inset-0 bg-black/40 sheet-fade" onClick={onClose} aria-hidden="true" />
       <div ref={panel} role="dialog" aria-modal="true" tabIndex={-1} aria-label={typeof title === "string" ? title : undefined}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 ${huge || xl || win ? "" : "md:w-full"} ${win ? "md:w-[84vw] md:h-[88dvh] h-[94dvh] max-h-[98dvh] md:rounded-2xl" : ""} ${xl ? "md:w-[min(1880px,99vw)] md:h-[min(1060px,98dvh)] h-[94dvh] max-h-[98dvh] md:mb-0" : ""} ${huge ? "md:w-fit md:min-w-[min(560px,90vw)] md:max-w-[min(1100px,90vw)] md:max-h-[90dvh] max-h-[94dvh]" : wide ? "md:max-w-2xl md:max-h-[min(680px,84dvh)] max-h-[88dvh]" : xl || win ? "" : "md:max-w-lg"} md:mx-auto ${wide || huge || xl || win ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge || xl || win ? "" : "max-h-[92dvh]"}`}
+        class={`relative sheet-up outline-none bg-c0 rounded-t-2xl shadow-2xl flex flex-col min-h-0 min-w-0 max-md:!max-h-full ${huge || xl || win ? "" : "md:w-full"} ${win ? "md:w-[84vw] md:h-[88dvh] h-[94dvh] max-h-[98dvh] md:rounded-2xl" : ""} ${xl ? "md:w-[min(1880px,99vw)] md:h-[min(1060px,98dvh)] h-[94dvh] max-h-[98dvh] md:mb-0" : ""} ${huge ? "md:w-fit md:min-w-[min(560px,90vw)] md:max-w-[min(1100px,90vw)] md:max-h-[90dvh] max-h-[94dvh]" : wide ? "md:max-w-2xl md:max-h-[min(680px,84dvh)] max-h-[88dvh]" : xl || win ? "" : "md:max-w-lg"} md:mx-auto ${wide || huge || xl || win ? "" : "md:mb-[8vh]"} md:rounded-2xl pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${full ? "h-[92dvh]" : wide || huge || xl || win ? "" : "max-h-[92dvh]"}`}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dy ? "none" : undefined, touchAction: "pan-y" }}>
         <div data-sheet-grab class="shrink-0 pt-2 pb-1 flex justify-center cursor-grab" aria-hidden="true"><span class="w-9 h-1.5 rounded-full bg-c1" /></div>
         {title && (
