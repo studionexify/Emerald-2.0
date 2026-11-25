@@ -68,26 +68,26 @@ function TabStrip({ tabs, current }: { tabs: { href: string; label: string }[]; 
   useEffect(() => { ref.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [current]);
   return (
     <nav ref={ref} aria-label="Sections" class="md:hidden -mx-3 px-3 flex gap-1.5 overflow-x-auto hide-scroll snap-x [&>*]:shrink-0">
-      {tabs.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`snap-start h-11 px-4 inline-flex items-center rounded-full text-[14px] whitespace-nowrap ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c3 font-medium"}`}>{t.label}</a>)}
+      {tabs.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`snap-start h-9 px-3.5 inline-flex items-center rounded-full text-[14px] whitespace-nowrap ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c3 font-medium"}`}>{t.label}</a>)}
     </nav>
   );
 }
-/** Phone, progressive: only the main views are shown as one equal-width row; every other view opens from "More views". */
+/** Phone, progressive: the main views and a "More" segment share one compact row; every other view opens from "More". */
 function PrimaryTabs({ tabs, primary, current }: { tabs: { href: string; label: string }[]; primary: { href: string; label: string }[]; current?: string }) {
   const rest = tabs.filter((t) => !primary.some((p) => p.href === t.href)), here = rest.find((t) => t.href === current);
   const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [current]);
+  const seg = "h-9 px-2 inline-flex items-center justify-center text-center rounded-full text-[14px] leading-tight";
   return (
-    <div class="md:hidden flex flex-col gap-2">
-      <nav aria-label="Main views" class="grid gap-1 p-1 rounded-full bg-c0" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>
-        {primary.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`h-11 px-2 inline-flex items-center justify-center text-center rounded-full text-[14px] leading-tight ${t.href === current ? "bg-acc text-on-acc font-semibold" : "text-c3 font-medium"}`}>{t.label}</a>)}
+    <div class="md:hidden flex flex-col gap-1.5">
+      <nav aria-label="Main views" class="grid gap-0.5 p-0.5 rounded-full bg-c0" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))${rest.length ? " auto" : ""}` }}>
+        {primary.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`${seg} ${t.href === current ? "bg-acc text-on-acc font-semibold" : "text-c3 font-medium"}`}>{t.label}</a>)}
+        {rest.length > 0 && <button type="button" aria-expanded={open} aria-label={here ? `View: ${here.label}. More views` : `More views (${rest.length})`} onClick={() => setOpen(!open)}
+          class={`${seg} !h-auto !min-h-9 py-1 gap-1 px-3 cursor-pointer max-w-[9.5rem] ${here ? "bg-acc text-on-acc font-semibold" : open ? "bg-c1 text-c4 font-semibold" : "text-c3 font-medium"}`}>
+          <span class="min-w-0">{here ? here.label : "More"}</span><span class={`inline-flex shrink-0 transition-transform ${open ? "rotate-180" : ""}`}><Icon name="down" size={12} /></span>
+        </button>}
       </nav>
-      {rest.length > 0 && <>
-        <button type="button" aria-expanded={open || !!here} onClick={() => setOpen(!open)} class={`h-11 px-4 rounded-xl border text-[14px] font-semibold inline-flex items-center gap-2 cursor-pointer ${here ? "border-acc bg-acc-bg" : "border-line bg-c0"}`}>
-          <span class={`inline-flex transition-transform ${open ? "rotate-90" : ""}`}><Icon name="right" size={13} /></span>
-          {here ? `View: ${here.label}` : "More views"}<span class="ml-auto t-meta">{rest.length}</span>
-        </button>
-        {open && <div class="grid grid-cols-2 gap-1.5 pop-in">{rest.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`min-h-11 px-3 py-2 rounded-xl text-[14px] leading-tight inline-flex items-center ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c4 font-medium"}`}>{t.label}</a>)}</div>}
-      </>}
+      {open && <div class="grid grid-cols-2 gap-1.5 pop-in">{rest.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`min-h-10 px-3 py-1.5 rounded-xl text-[14px] leading-tight inline-flex items-center ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c4 font-medium"}`}>{t.label}</a>)}</div>}
     </div>
   );
 }
@@ -326,27 +326,53 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
   return <Pick value={value} on={onChange} items={items.map(([k]) => k)} label={(k) => m.get(k) ?? k} />;
 }
 
+/** Phone: the view tabs fold away while the list is scrolled down and come back on any scroll up (or near the top),
+    so a long list gets the whole screen. Toggles are held while the fold animates, so its own resize never flips it back. */
+function useHeadFold(on: boolean) {
+  const [open, setOpen] = useState(true);
+  const st = useRef({ y: 0, hold: 0 });
+  useEffect(() => { if (!on) setOpen(true); }, [on]);
+  const onScroll = (e: Event) => {
+    if (!on) return;
+    const el = e.target as HTMLElement;
+    if (!(el instanceof HTMLElement) || el.scrollHeight - el.clientHeight < 160) return; // short pages never fold
+    const y = el.scrollTop, s = st.current, dy = y - s.y;
+    if (Math.abs(dy) < 6) return;
+    s.y = y;
+    if (Date.now() < s.hold) return;
+    if (dy < 0 && y >= el.scrollHeight - el.clientHeight - 4) return; // iOS bounce at the bottom is not a scroll up
+    const next = y < 40 || dy < 0;
+    if (next !== open) { s.hold = Date.now() + 260; setOpen(next); }
+  };
+  return { open, onScroll };
+}
+
 /** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
 export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detail, children }: {
   title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; /** Phone: only these views are shown on top, the rest open from "More views". */ primary?: { href: string; label: string }[]; toolbar?: ComponentChildren; /** Always-visible band under the toolbar (outside the scroll area). */ strip?: ComponentChildren;
   /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
+  const phone = isPhone.value;
+  const fold = useHeadFold(phone && !!tabs);
   return (
     <div class="flex flex-col h-full min-h-0">
-      <div class="shrink-0 flex flex-col gap-2 px-3 md:px-5 2xl:px-6 pt-3 pb-2.5 bg-canvas">
-        <header class="flex items-center gap-2 md:gap-3 min-w-0">
+      <div class="shrink-0 flex flex-col gap-1.5 md:gap-2 px-3 md:px-5 2xl:px-6 pt-1.5 pb-2 md:pt-3 md:pb-2.5 bg-canvas">
+        <header class="flex items-center gap-2 md:gap-3 min-w-0 max-md:min-h-10">
           <div class="min-w-0 flex-1 flex items-center gap-2">
-            <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2.5 max-md:text-[19px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
+            <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2 md:gap-2.5 max-md:text-[18px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 max-md:h-5 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
             {sub && <Tip text={sub} />}
           </div>
+          {toolbar && phone && <FilterSheet compact>{toolbar}</FilterSheet>}
           {tabs && <div class="hidden md:block w-48 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
-        {tabs && <PhoneTabs tabs={tabs} primary={primary} />}
-        {toolbar && (isPhone.value ? <FilterSheet>{toolbar}</FilterSheet> : <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>)}
+        {tabs && (phone
+          ? <div class="disc-x grid min-w-0 -mt-1.5" data-open={fold.open ? "" : undefined} {...{ inert: !fold.open || undefined }}><div class="min-h-0 overflow-hidden pt-1.5"><PhoneTabs tabs={tabs} primary={primary} /></div></div>
+          : <PhoneTabs tabs={tabs} primary={primary} />)}
+        {toolbar && !phone && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}
         {strip}
       </div>
-      <div class="flex-1 min-h-0">
+      <div class="flex-1 min-h-0" onScrollCapture={fold.onScroll}>
         {detail !== undefined ? (
           <Split detail={detail}>{children}</Split>
         ) : (
@@ -365,7 +391,7 @@ export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detai
 /** Phone-only sticky action bar at the foot of a page, directly above the dock: primary CTAs in thumb reach. */
 export function ActionDock({ children }: { children: ComponentChildren }) {
   return (
-    <div class="md:hidden shrink-0 border-t border-line bg-c0/90 backdrop-blur-md px-3 py-2 grid grid-flow-col auto-cols-[minmax(96px,1fr)] gap-2 overflow-x-auto hide-scroll [&_button]:h-12 [&_button]:!px-2 [&_button]:!text-[13px] [&_button]:leading-tight [&_button]:whitespace-normal [&_button]:justify-center [&_a]:min-h-12">
+    <div class="md:hidden shrink-0 border-t border-line bg-c0/90 backdrop-blur-md px-3 py-1.5 grid grid-flow-col auto-cols-[minmax(96px,1fr)] gap-2 overflow-x-auto hide-scroll [&_button]:h-11 [&_button]:!px-2 [&_button]:!text-[13px] [&_button]:leading-tight [&_button]:whitespace-normal [&_button]:justify-center [&_a]:min-h-12">
       {children}
     </div>
   );

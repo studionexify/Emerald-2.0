@@ -2,6 +2,21 @@ import { render } from "preact";
 import { App } from "./app";
 import "./styles.css";
 import "./ui/paste";
+
+/* iOS home-screen app: 100% / innerHeight can come up short by the status-bar inset, leaving a dead band under the dock.
+   Size the app to the whole screen there instead (the dock already pads for the home indicator). */
+if ((navigator as { standalone?: boolean }).standalone) {
+  const fit = () => {
+    const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+    const [w, h] = innerWidth > innerHeight ? [long, short] : [short, long];
+    // only when the window fills the screen (not iPad split view), and never taller than the gap it fixes
+    const full = Math.abs(innerWidth - w) < 2 && h - innerHeight < 80 ? h : innerHeight;
+    document.documentElement.style.setProperty("--app-h", `${Math.max(innerHeight, full)}px`);
+  };
+  fit();
+  addEventListener("resize", fit);
+  addEventListener("orientationchange", () => setTimeout(fit, 300));
+}
 /* loaded right after first paint: keeps the entry chunk inside its size budget */
 addEventListener("DOMContentLoaded", () => void import("./ui/zoom-lock"), { once: true });
 

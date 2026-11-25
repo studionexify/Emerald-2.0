@@ -139,13 +139,15 @@ export function AskHost() {
 }
 
 /* ── Filter & Sort: phone collapses a toolbar into one trigger that opens a sheet. ── */
-export function FilterSheet({ children, label = "Filter & sort" }: { children: ComponentChildren; label?: string }) {
+export function FilterSheet({ children, label = "Filter & sort", compact }: { children: ComponentChildren; label?: string; /** small pill for the page title row */ compact?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button onClick={() => setOpen(true)} class="h-11 w-full px-3 rounded-lg border border-line bg-c0 text-c4 text-[14px] font-semibold inline-flex items-center justify-center gap-2 cursor-pointer">
-        <Icon name="rows" size={15} /> {label}
-      </button>
+      {compact
+        ? <button onClick={() => setOpen(true)} aria-label={label} class="shrink-0 h-10 px-3 rounded-full border border-line bg-c0 text-c4 text-[13px] font-semibold inline-flex items-center gap-1.5 cursor-pointer"><Icon name="rows" size={14} /> Filter</button>
+        : <button onClick={() => setOpen(true)} class="h-11 w-full px-3 rounded-lg border border-line bg-c0 text-c4 text-[14px] font-semibold inline-flex items-center justify-center gap-2 cursor-pointer">
+          <Icon name="rows" size={15} /> {label}
+        </button>}
       <Sheet open={open} onClose={() => setOpen(false)} title={label} footer={<button onClick={() => setOpen(false)} class="rounded-lg bg-c4 text-c0 text-[15px] font-semibold cursor-pointer">Done</button>}>
         <div class="flex flex-col items-stretch gap-3 pt-1 [&_select]:w-full [&_label]:w-full [&_label]:block">{children}</div>
       </Sheet>
