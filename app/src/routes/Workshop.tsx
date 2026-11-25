@@ -299,7 +299,7 @@ export function Filament() {
   const stripRef = useRef<HTMLDivElement>(null); const [cur, setCur] = useState<string | null>(null);
   useLayoutEffect(() => {
     const f = () => { const secs = document.querySelectorAll<HTMLElement>("section[data-mat]"); const sc = secs[0]?.closest(".overflow-y-auto");
-      const b = sc ? sc.getBoundingClientRect().top : 0; let c: string | null = null;
+      const hd = sc?.closest("[data-page]")?.querySelector("[data-page-head]"); const b = Math.max(sc ? sc.getBoundingClientRect().top : 0, hd ? hd.getBoundingClientRect().bottom : 0); let c: string | null = null;
       secs.forEach((el) => { if (el.getBoundingClientRect().top <= b + 1) c = el.dataset.mat!; }); setCur(c); };
     f(); addEventListener("scroll", f, true); addEventListener("resize", f); return () => { removeEventListener("scroll", f, true); removeEventListener("resize", f); };
   });
@@ -347,9 +347,9 @@ export function Filament() {
   return (
     <Shell sub="Every spool — weight, colour, brand, cost, storage · tap a spool for weigh-in and history" actions={<><Button variant="outline" icon="settings" onClick={() => setSet(true)}>Filament settings</Button><Button variant="outline" icon="in" onClick={() => navigate("/workshop/movements")}>Log movement</Button><Button icon="plus" onClick={() => r.add()}>Add spool</Button></>}
       strip={(() => { const ms = (mat === "all" ? mats : [mat]).filter((m) => shown.some((s) => s.material === m)); const c = cur && ms.includes(cur) ? cur : null; return <div ref={stripRef} class="min-w-0 relative">
-        {ms.length > 1 && <div class="fold-x"><div class="min-h-0 overflow-hidden"><nav class="flex gap-1.5 overflow-x-auto pt-1">{ms.map((m) => <button key={m} class={`shrink-0 inline-flex items-center gap-1.5 h-7 !min-h-0 px-2.5 rounded-full border text-[12px] font-semibold ${m === c ? "bg-c1 border-c3" : "bg-c0 border-line"}`} onClick={() => document.getElementById(matId(m))?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-          <i class="w-2 h-2 rounded-full" style={{ background: matC(m) }} />{m}<span class="text-c2 font-medium">{shown.filter((s) => s.material === m).length}</span></button>)}</nav></div></div>}
-        {c && (() => { const k = c; const g = tot.filter((s) => s.material === k).reduce((s, x) => s + x.grams, 0); return <div class="fold-bar absolute left-0 right-0 top-full mt-2 md:mt-2.5 z-20 bg-canvas flex items-center gap-2 pb-2 shadow-[0_6px_8px_-4px_rgba(0,0,0,.6)]" style={{ borderBottom: `2px solid ${matC(k)}` }}>
+        {ms.length > 1 && <nav class="flex gap-1.5 overflow-x-auto pt-1">{ms.map((m) => <button key={m} class={`shrink-0 inline-flex items-center gap-1.5 h-7 !min-h-0 px-2.5 rounded-full border text-[12px] font-semibold ${m === c ? "bg-c1 border-c3" : "bg-c0 border-line"}`} onClick={() => document.getElementById(matId(m))?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+          <i class="w-2 h-2 rounded-full" style={{ background: matC(m) }} />{m}<span class="text-c2 font-medium">{shown.filter((s) => s.material === m).length}</span></button>)}</nav>}
+        {c && (() => { const k = c; const g = tot.filter((s) => s.material === k).reduce((s, x) => s + x.grams, 0); return <div class="absolute left-0 right-0 top-full mt-2 md:mt-2.5 z-20 bg-canvas flex items-center gap-2 pb-2 shadow-[0_6px_8px_-4px_rgba(0,0,0,.6)]" style={{ borderBottom: `2px solid ${matC(k)}` }}>
           <b class="text-[14px] tracking-[0.04em]" style={{ color: matC(k) }}>{k}</b><span class="t-meta">{shown.filter((s) => s.material === k).length} spools</span>
           <span class="ml-auto t-meta num whitespace-nowrap">{(g / 1000).toFixed(2)} kg net · {inr(tot.filter((s) => s.material === k).reduce((s, x) => s + spoolValue(x), 0))}</span></div>; })()}
       </div>; })()}

@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useLocation } from "../router";
 import { Icon } from "./icon";
 import { FilterSheet, isPhone, Sheet } from "./sheet";
@@ -300,7 +300,7 @@ export function Split({ detail, children }: { detail: ComponentChildren | null; 
   };
   return (
     <div style={detail && !phone && w ? { gridTemplateColumns: `minmax(0,1fr) min(${w}px, max(320px, calc(100% - 560px)))` } : undefined} class={`min-h-0 h-full ${detail && !phone ? "md:grid md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : ""}`}>
-      <div data-split-main class="min-w-0 min-h-0 h-full overflow-y-auto overflow-x-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
+      <div data-split-main class="page-scroll min-w-0 min-h-0 h-full overflow-y-auto overflow-x-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
         <div class="flex flex-col gap-4">{children}</div>
       </div>
       {detail && !phone && <div class="relative min-w-0 min-h-0 h-full">
@@ -326,40 +326,50 @@ export function SubTabs<T extends string>({ value, onChange, items }: { value: T
   return <Pick value={value} on={onChange} items={items.map(([k]) => k)} label={(k) => m.get(k) ?? k} />;
 }
 
-/** Phone: the page head (title, tabs, any strip part marked .fold-x) folds away while the list is scrolled down and comes back on any scroll up (or near the top),
-    so a long list gets the whole screen. Toggles are held while the fold animates, so its own resize never flips it back. */
-function useHeadFold(on: boolean) {
+/** Phone: the page head floats over the list and slides away (transform only, so nothing reflows and the list never
+    jumps) once you have scrolled down a little; any deliberate scroll up, or reaching the top, slides it back. */
+function useHeadFold(on: boolean, headH: () => number) {
   const [open, setOpen] = useState(true);
-  const st = useRef<{ y: number; hold: number; el?: HTMLElement }>({ y: 0, hold: 0 });
+  const [under, setUnder] = useState(false); // list content is under the head → hairline edge
+  const st = useRef<{ y: number; acc: number; el?: HTMLElement }>({ y: 0, acc: 0 });
   const { path } = useLocation();
   useEffect(() => { if (!on) setOpen(true); }, [on]);
-  useEffect(() => { st.current = { y: 0, hold: 0 }; setOpen(true); }, [path]); // a new view starts with its head shown
+  useEffect(() => { st.current = { y: 0, acc: 0 }; setOpen(true); setUnder(false); }, [path]); // a new view starts with its head shown
   // after any re-render (filter, new data): if the list is back at the top or no longer scrolls, bring the head back
-  useEffect(() => { const el = st.current.el; if (!open && el && (!el.isConnected || el.scrollTop < 40 || el.scrollHeight - el.clientHeight < 4)) setOpen(true); });
+  useEffect(() => { const el = st.current.el; if (!open && el && (!el.isConnected || el.scrollTop <= headH() || el.scrollHeight - el.clientHeight < 4)) setOpen(true); });
   const onScroll = (e: Event) => {
     if (!on) return;
     const el = e.target as HTMLElement;
-    if (!(el instanceof HTMLElement) || el.scrollHeight - el.clientHeight < 160) return; // short pages never fold
+    if (!(el instanceof HTMLElement) || el.scrollHeight - el.clientHeight < 4) return; // sideways rows, short pages
     const s = st.current;
-    if (s.el !== el) { s.el = el; s.y = el.scrollTop; return; }
-    const y = el.scrollTop, dy = y - s.y;
-    if (Math.abs(dy) < 6) return;
+    if (s.el !== el) { s.el = el; s.y = el.scrollTop; s.acc = 0; }
+    const y = el.scrollTop, dy = y - s.y, max = el.scrollHeight - el.clientHeight;
     s.y = y;
-    if (Date.now() < s.hold) return;
-    if (dy < 0 && y >= el.scrollHeight - el.clientHeight - 4) return; // iOS bounce at the bottom is not a scroll up
-    const next = y < 40 || dy < 0;
-    if (next !== open) { s.hold = Date.now() + 260; setOpen(next); }
+    const u = y > 1; if (u !== under) setUnder(u);
+    if (y <= headH()) { s.acc = 0; if (!open) setOpen(true); return; } // near the top the head always shows
+    if (y < 0 || y > max) return; // iOS rubber-band, either end
+    if (dy > 0 !== s.acc > 0) s.acc = 0; // direction changed: start counting afresh
+    s.acc += dy;
+    if (open && s.acc > 28) setOpen(false);
+    else if (!open && s.acc < -20) setOpen(true);
   };
-  return { open, onScroll };
+  return { open, under, onScroll };
 }
 
-/** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Nothing scrolls under the head. */
+/** A page: fixed head (title, actions, tabs, toolbar) + its own scroll area. Phone: the head floats over the list and slides away while scrolling down. */
 export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detail, children }: {
   title: string; sub?: string; actions?: ComponentChildren; tabs?: { href: string; label: string }[]; /** Phone: only these views are shown on top, the rest open from "More views". */ primary?: { href: string; label: string }[]; toolbar?: ComponentChildren; /** Always-visible band under the toolbar (outside the scroll area). */ strip?: ComponentChildren;
   /** Pass to show an inline detail column (undefined = plain page). */ detail?: ComponentChildren | null; children: ComponentChildren;
 }) {
   const phone = isPhone.value;
-  const fold = useHeadFold(phone);
+  const headRef = useRef<HTMLDivElement>(null);
+  const [hh, setHh] = useState(0);
+  useLayoutEffect(() => {
+    const el = headRef.current; if (!phone || !el) return;
+    const m = () => setHh(Math.round(el.offsetHeight)); m();
+    const ro = new ResizeObserver(m); ro.observe(el); return () => ro.disconnect();
+  }, [phone]);
+  const fold = useHeadFold(phone, () => hh);
   const folded = phone && !fold.open;
   const head = (
     <header class="flex items-center gap-2 md:gap-3 min-w-0 max-md:min-h-10">
@@ -373,19 +383,22 @@ export function Page({ title, sub, actions, tabs, primary, toolbar, strip, detai
     </header>
   );
   return (
-    <div class="flex flex-col h-full min-h-0">
-      {/* Phone: title row, view tabs and any .fold-x part of the strip fold away while scrolling down; the rest of the strip stays. */}
-      <div data-folded={folded ? "" : undefined} class={`shrink-0 flex flex-col md:gap-2 px-3 md:px-5 2xl:px-6 md:pt-3 md:pb-2.5 bg-canvas transition-[padding] duration-200 ${folded ? "pt-0 pb-0" : "pt-1.5 pb-2"}`}>
-        {phone
-          ? <div class="disc-x grid min-w-0" data-open={fold.open ? "" : undefined} {...{ inert: folded || undefined }}><div class="min-h-0 overflow-hidden flex flex-col gap-1.5">{head}{tabs && <PhoneTabs tabs={tabs} primary={primary} />}</div></div>
-          : <>{head}{tabs && <PhoneTabs tabs={tabs} primary={primary} />}{toolbar && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}</>}
-        {strip && (phone ? <div class={`transition-[margin] duration-200 ${folded ? "" : "mt-1.5"}`}>{strip}</div> : strip)}
+    <div data-page class="relative flex flex-col h-full min-h-0" style={phone ? { "--head-h": `${hh}px`, "--sticky-top": folded ? "0px" : `${hh}px` } : undefined}>
+      <div ref={headRef} data-page-head {...{ inert: folded || undefined }}
+        class={phone
+          ? `head-float absolute inset-x-0 top-0 z-20 flex flex-col gap-1.5 px-3 pt-1.5 pb-2 bg-canvas ${fold.under && !folded ? "head-edge" : ""}`
+          : "shrink-0 flex flex-col gap-2 px-5 2xl:px-6 pt-3 pb-2.5 bg-canvas"}
+        style={phone ? { transform: folded ? "translate3d(0,-100%,0)" : "translate3d(0,0,0)" } : undefined}>
+        {head}
+        {tabs && <PhoneTabs tabs={tabs} primary={primary} />}
+        {toolbar && !phone && <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>}
+        {strip}
       </div>
       <div class="flex-1 min-h-0" onScrollCapture={fold.onScroll}>
         {detail !== undefined ? (
           <Split detail={detail}>{children}</Split>
         ) : (
-          <div class="h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
+          <div class="page-scroll h-full overflow-y-auto overscroll-contain px-3 md:px-5 2xl:px-6 py-3 md:py-4">
             <div class="flex flex-col gap-4">
               {children}
             </div>
