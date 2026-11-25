@@ -131,16 +131,26 @@ export function addCategory(name: string): { cat?: NxCat; error?: string } {
 /* ---------------------------------------------------------------- previews (private Supabase bucket; the browser cache is disposable) */
 const urls = new Map<string, string>();
 const CACHE = "emerald-nexder-previews";
-/** Object URL of one photo's preview, or "" when it is not there. */
+/** Object URL of one photo's preview, or "" when it is not there. A missing preview is rebuilt from the Drive original and stored again. */
 export async function previewUrl(id: string): Promise<string> {
   const have = urls.get(id); if (have) return have;
   const cache = "caches" in self ? await caches.open(CACHE).catch(() => null) : null, key = new Request(location.origin + "/__nexder/" + id);
   let blob = await (await cache?.match(key))?.blob();
   if (!blob) {
-    blob = (await (await backend()).previewGet(id).catch(() => null)) ?? undefined; if (!blob) return "";
+    blob = (await (await backend()).previewGet(id).catch(() => null)) ?? undefined;
+    if (!blob) blob = await rebuildPreview(id);
+    if (!blob) return "";
     await cache?.put(key, new Response(blob, { headers: { "Content-Type": "image/jpeg" } })).catch(() => {});
   }
   const u = URL.createObjectURL(blob); urls.set(id, u); return u;
+}
+async function rebuildPreview(id: string): Promise<Blob | undefined> {
+  const ph = nexderDesignsSig.value.flatMap((d) => d.photos).find((p) => p.id === id); if (!ph?.drive) return undefined;
+  try {
+    const b = await backend(), [u] = await b.links([{ drive: ph.drive, name: ph.name }]), r = await fetch(u); if (!r.ok) return undefined;
+    const pv = await makePreview(new File([await r.blob()], ph.name, { type: ph.mime }));
+    await b.previewPut(id, pv).catch(() => {}); return pv;
+  } catch { return undefined; }
 }
 export const previewBytes = () => nexderDesignsSig.value.reduce((a, d) => a + d.photos.reduce((s, p) => s + (p.psize ?? 0), 0), 0);
 
@@ -314,11 +324,34 @@ export async function checkDrive(): Promise<Check[]> {
 }
 
 /* ---------------------------------------------------------------- download */
-/** Starts a download of one original from Drive. Returns an error text, or null when the browser took over. */
+/** Biggest file saved through memory; bigger ones go to the browser's own download manager (after the link has been proven to work). */
+const BLOB_MAX = 150 * 1024 * 1024;
+const fail = async (r: Response) => ((await r.text().catch(() => "")).trim().slice(0, 200) || `The download failed (${r.status}).`);
+/**
+ * Downloads one original from Drive. Never fails silently: the link is tried first with a 1-byte request, so an expired or
+ * misconfigured link shows its real reason instead of a download that "does nothing". Returns an error text, or null when saved/started.
+ */
 export async function downloadFile(f: { drive?: string; name: string }): Promise<string | null> {
-  if (!f.drive) return "This file was saved before Nexder used Google Drive. Edit the design and add it again.";
-  try { const [u] = await (await backend()).links([{ drive: f.drive, name: f.name }]); const a = document.createElement("a"); a.href = u; a.rel = "noopener"; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); return null; }
-  catch (e) { return (e as Error).message; }
+  if (!f.drive) return "This file is not in Google Drive yet. Use “Upload again” on it, or edit the design and add it again.";
+  try {
+    const [u] = await (await backend()).links([{ drive: f.drive, name: f.name }]);
+    const probe = await fetch(u, { headers: { Range: "bytes=0-0" } }).catch(() => null);
+    if (!probe) return "No connection. Check the network and press Get again.";
+    if (!probe.ok && probe.status !== 206) return await fail(probe);
+    const total = Number(/\/(\d+)$/.exec(probe.headers.get("Content-Range") ?? "")?.[1] ?? 0);
+    if (total > 0 && total <= BLOB_MAX) {
+      const r = await fetch(u).catch(() => null); if (!r) return "The connection dropped during the download. Press Get again."; if (!r.ok) return await fail(r);
+      saveBlob(await r.blob(), f.name); return null;
+    }
+    const a = document.createElement("a"); a.href = u; a.rel = "noopener"; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); return null;
+  } catch (e) { return (e as Error).message || "The download failed."; }
+}
+/** Saves one photo: the original from Drive when it is there, else the preview kept in the cloud (so a photo can always be downloaded). */
+export async function downloadPhoto(p: { id: string; name: string; drive?: string }): Promise<string | null> {
+  if (p.drive) return downloadFile(p);
+  const b = await (await backend()).previewGet(p.id).catch(() => null);
+  if (!b) return "This photo is not available yet. If it was added on another device, wait for its upload to finish.";
+  saveBlob(b, p.name.replace(/\.[A-Za-z0-9]{1,5}$/, "") + "-preview.jpg"); return null;
 }
 export function saveBlob(b: Blob, name: string) { const a = document.createElement("a"), u = URL.createObjectURL(b); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
 

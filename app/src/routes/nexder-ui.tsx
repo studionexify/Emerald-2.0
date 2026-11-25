@@ -13,7 +13,14 @@ export function usePreview(id?: string, ref?: { current: Element | null }): stri
     const io = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: "400px" });
     io.observe(ref.current); return () => io.disconnect();
   }, [near, id]);
-  useEffect(() => { let live = true; setU(""); if (id && near) previewUrl(id).then((x) => live && setU(x)); return () => { live = false; }; }, [id, near]);
+  const [tries, setTries] = useState(0);
+  /* a preview that is not there yet (sign-in still finishing, flaky network, photo just added on another device) is asked for again a few times */
+  useEffect(() => {
+    let live = true, t: ReturnType<typeof setTimeout> | undefined; if (!tries) setU("");
+    if (id && near) previewUrl(id).then((x) => { if (!live) return; if (x) setU(x); else if (tries < 4) t = setTimeout(() => live && setTries(tries + 1), [1500, 4000, 9000, 20000][tries]); });
+    return () => { live = false; clearTimeout(t); };
+  }, [id, near, tries]);
+  useEffect(() => setTries(0), [id]);
   return u;
 }
 export const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);

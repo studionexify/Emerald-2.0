@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ask, Button, DetailHead, Icon, Sheet } from "../ui";
 import { inr, shortDate } from "../data";
-import { buildPack, catName, catsOf, cleanLink, deleteDesign, downloadFile, materialUsage, openSink, reupload, usedIn, type NxDesign } from "../data/nexder";
+import { buildPack, catName, catsOf, cleanLink, deleteDesign, downloadFile, downloadPhoto, materialUsage, openSink, reupload, usedIn, type NxDesign } from "../data/nexder";
 import { isQueued } from "../data/nexder-queue";
 import { chipCls, g, kind, mb, mins, Pic } from "./nexder-ui";
 
@@ -12,6 +12,7 @@ export function ViewPanel({ d, writable, inline, hidden, onClose, onEdit, onShar
   const usage = materialUsage(d.id), total = usage.reduce((a, u) => a + u.total, 0), link = d.source ? cleanLink(d.source) : null;
   useEffect(() => { setI(0); setMissing(""); }, [d.id]);
   const get = async (f: { id: string; name: string; drive?: string }) => { setBusy(f.id); setMissing(""); setMissing((await downloadFile(f)) ?? ""); setBusy(""); };
+  const getPhoto = async (p: { id: string; name: string; drive?: string }) => { setBusy("ph" + p.id); setMissing(""); setMissing((await downloadPhoto(p)) ?? ""); setBusy(""); };
   const all = async () => { for (const f of d.files) { await get(f); await new Promise((r) => setTimeout(r, 600)); } };
   /* the browser asks where to save first (needs the click), then the photos are fetched from Drive one by one into the zip */
   const zipPhotos = async () => {
@@ -24,7 +25,8 @@ export function ViewPanel({ d, writable, inline, hidden, onClose, onEdit, onShar
   const pend = d.photos.filter((p) => p.pend && !p.drive);
   const photos = (
         <div class={`min-w-0 flex flex-col gap-2 ${inline ? "" : "md:min-h-0"}`}>
-          <div class={`rounded-2xl overflow-hidden bg-c1 ${inline ? "aspect-[4/3]" : "aspect-square md:aspect-auto md:flex-1 md:min-h-0"}`}><Pic id={ph?.id} alt={d.name} class="!object-contain" /></div>
+          <div class={`rounded-2xl overflow-hidden bg-c1 ${inline ? "aspect-[4/3]" : "aspect-square md:aspect-auto md:flex-1 md:min-h-0"}`}><div class="relative w-full h-full"><Pic id={ph?.id} alt={d.name} class="!object-contain" />
+            {ph && writable && <button type="button" aria-label={`Download photo ${i + 1}`} title="Download this photo" disabled={busy === "ph" + ph.id} onClick={() => getPhoto(ph)} class="absolute right-2 bottom-2 h-8 px-3 !min-h-0 rounded-full bg-c0/90 border border-line text-[12px] font-semibold inline-flex items-center gap-1 cursor-pointer shadow"><Icon name="in" size={13} />{busy === "ph" + ph.id ? "…" : "Download"}</button>}</div></div>
           {d.photos.length > 1 && <div class="flex gap-1.5 overflow-x-auto shrink-0">{d.photos.map((p, k) => (
             <button key={p.id} type="button" onClick={() => setI(k)} aria-label={`Photo ${k + 1}`} aria-pressed={k === i} class={`w-11 h-11 !min-h-0 shrink-0 rounded-lg overflow-hidden bg-c1 p-0 cursor-pointer ${k === i ? "ring-2 ring-c4" : ""}`}><Pic id={p.id} alt="" /></button>))}</div>}
         </div>
