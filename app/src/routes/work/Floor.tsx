@@ -68,7 +68,7 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
     <th class={`${th} ${left ? "text-left" : "text-center"}`} onClick={() => setSort({ k, up: sort.k === k ? !sort.up : true })} aria-sort={sort.k === k ? (sort.up ? "ascending" : "descending") : "none"}>
       {children}<span class={`ml-0.5 text-[9px] max-[1100px]:hidden ${sort.k === k ? "text-grn-bg" : "opacity-50"}`}>{sort.k === k ? (sort.up ? "▲" : "▼") : "⇅"}</span></th>;
   const td = "px-2 py-2 text-center";
-  const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
+  const kpi = (l: string, v: string | number, c = "") => <div><div class="text-[11px] text-c2">{l}</div><div class={`num text-[20px] sm:text-[22px] font-semibold leading-tight ${c}`}>{v}</div></div>;
 
   return <div class="fixed inset-0 z-40 bg-black/50 pop-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
     <div role="dialog" aria-modal="true" aria-label={`Floor · ${o.no}`} onClick={(e) => e.stopPropagation()} class={`absolute top-[2.5dvh] bottom-[2.5dvh] left-1/2 -translate-x-1/2 ${stock ? "w-[95vw]" : "w-max min-w-[min(900px,95vw)] max-w-[95vw]"} bg-c0 rounded-2xl shadow-2xl flex flex-col max-[640px]:inset-0 max-[640px]:translate-x-0 max-[640px]:left-0 max-[640px]:w-full max-[640px]:min-w-0 max-[640px]:max-w-none max-[640px]:rounded-none`}>
@@ -80,11 +80,13 @@ export function Floor({ order, onClose }: { order: Order; onClose: () => void })
             <div class="t-meta mt-1">Due {shortDate(o.due)} · {rows.length} designs · {tot.q} pcs</div></div>
           {done > 0 && <label class="h-9 inline-flex items-center gap-2 px-3 rounded-full border border-line text-[13px] font-semibold cursor-pointer select-none">
             <input type="checkbox" checked={showDone} onChange={toggleDone} class="accent-grn w-4 h-4 !min-h-0 cursor-pointer" />Show completed ({done})</label>}
-          <Button variant="outline" onClick={() => setLines(true)}>✎ Edit line items</Button>
-          <Button variant="outline" onClick={() => setCols(true)}>✎ Edit colours</Button>
-          <Button variant="outline" onClick={toggleStock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>
+          <div class="flex gap-2 w-full md:w-auto overflow-x-auto hide-scroll md:overflow-visible [&>*]:shrink-0 -mr-16 pr-16 md:m-0 md:p-0 max-md:order-last">
+            <Button variant="outline" onClick={() => setLines(true)}>✎ Edit line items</Button>
+            <Button variant="outline" onClick={() => setCols(true)}>✎ Edit colours</Button>
+            <Button variant="outline" onClick={toggleStock}>{stock ? "Hide stock" : "▥ Filament stock"}</Button>
+          </div>
         </div>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] sm:flex sm:flex-wrap gap-x-9 gap-y-3 mt-5 mb-5">
+        <div class="grid grid-cols-3 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-x-9 mt-4 mb-4 sm:mt-5 sm:mb-5">
           {kpi("Ordered", tot.q)}{kpi("Printed", tot.p)}{kpi("Wasted", tot.w, tot.w ? "text-red" : "")}{kpi("Pending", tot.r)}{kpi("Extra (showcase)", `+${tot.e}`)}{kpi("Designs done", `${done}/${rows.length}`)}{kpi("Filament needed", `${Object.keys(est).length ? "~" : ""}${kg.toFixed(2)} kg`)}
         </div>
         {shown.filter((r) => (r.i.parts ?? []).filter((p) => !p.printer?.trim()).length > 1).map(({ i, k }) => { const loose = i.parts!.filter((p) => !p.printer?.trim()), t = (tick[k] ?? []).filter((n) => loose.some((p) => p.name === n)), names = loose.map((p) => p.name), open2 = loose.filter((p) => runTotals(o, i, p.name).good < i.qty);
@@ -174,17 +176,17 @@ function SpoolPicker({ colour, machine, value, onPick, self, picked, taken }: { 
   const close = (s: Spool) => Number(eq(b0(s), colour)), b0 = (s: Spool) => s.colour;
   const match = all.filter((s) => sameFamily(s.colour, colour) && hit(s)).sort((a, b) => close(b) - close(a) || rank(a, b)), other = all.filter((s) => !sameFamily(s.colour, colour) && hit(s)).sort((a, b) => a.colour.localeCompare(b.colour) || b.grams - a.grams);
   const Row = ({ s, dim }: { s: Spool; dim?: boolean }) => { const on = picked ? picked.includes(s.id) : value === s.id, other = !!taken?.includes(s.id), busy = spoolBusy(s.id, self) ?? (other ? ({ orderNo: "this start", name: "another machine", printer: "" } as unknown as Batch) : undefined); return (
-    <button type="button" disabled={!!busy} onClick={() => !busy && onPick(s.id)} aria-pressed={on} title={busy ? "In use until that print is completed" : undefined} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 mb-1 rounded-lg text-left !min-h-0 ${busy ? "cursor-not-allowed border border-dashed border-red/50 bg-red-bg/40" : "cursor-pointer"} ${on ? "border-2 border-grn bg-grn-bg" : busy ? "" : "border border-line hover:bg-c1"} ${(dim || busy) && !on ? "opacity-60" : ""}`}>
+    <button type="button" disabled={!!busy} onClick={() => !busy && onPick(s.id)} aria-pressed={on} title={busy ? "In use until that print is completed" : undefined} class={`w-full grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2.5 px-2.5 py-2 min-h-12 mb-1 rounded-lg text-left !min-h-0 ${busy ? "cursor-not-allowed border border-dashed border-red/50 bg-red-bg/40" : "cursor-pointer"} ${on ? "border-2 border-grn bg-grn-bg" : busy ? "" : "border border-line hover:bg-c1"} ${(dim || busy) && !on ? "opacity-60" : ""}`}>
       <Sq hex={s.hex ?? colourHex(s.colour)} size="w-4 h-4" />
       <span class="min-w-0"><b class="block text-[13px] truncate">{s.material} · {s.colour} · #{spoolNum(s)}</b><span class="block text-[11px] text-c2 truncate">{s.brand}</span>{busy && <span class="block text-[11px] font-semibold text-red truncate">In use · {busy.orderNo} · {busy.name}{busy.printer ? ` · ${busy.printer}` : ""}</span>}</span>
       {busy ? <span class="text-[10px] font-bold text-red bg-red-bg rounded px-1.5 py-0.5 whitespace-nowrap">IN USE</span> : loaded(s) ? <span class="text-[10px] font-bold text-grn bg-grn-bg rounded px-1.5 py-0.5 whitespace-nowrap">LOADED</span> : <span />}
       <span class={`num text-[13px] font-semibold ${s.grams < 200 ? "text-red" : ""}`}>{spoolGross(s)} g</span></button>); };
   const chip = (on: boolean, l: string, f: () => void) => <button type="button" onClick={f} class={`h-7 px-2.5 !min-h-0 rounded-full text-[11px] cursor-pointer border ${on ? "bg-grn-bg border-grn/40 text-grn font-semibold" : "border-line text-c3"}`}>{l}</button>;
   return <div>
-    <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search colour, material, brand or spool no. — e.g. “white petg”, “esun”, “12”" class="w-full h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] mb-2" />
-    <div class="flex flex-wrap gap-1.5 mb-2">{chip(!mat, "All materials", () => setMat(""))}{mats.map((m) => chip(mat === m, m, () => setMat(mat === m ? "" : m)))}
+    <input type="search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} placeholder="Search colour, material, brand, spool no." class="w-full h-11 md:h-9 px-3 rounded-lg border border-line bg-c0 text-[13px] mb-2 sticky top-0 z-10" />
+    <div class="flex gap-1.5 mb-2 overflow-x-auto hide-scroll md:flex-wrap [&>*]:shrink-0">{chip(!mat, "All materials", () => setMat(""))}{mats.map((m) => chip(mat === m, m, () => setMat(mat === m ? "" : m)))}
       <select value={brand} onChange={(e) => setBrand((e.target as HTMLSelectElement).value)} class="h-7 px-2 rounded-full border border-line text-[11px] bg-c0 cursor-pointer"><option value="">Brand ▾</option>{brands.map((b) => <option key={b}>{b}</option>)}</select></div>
-    <div class="max-h-[38vh] overflow-y-auto pr-1">
+    <div class="md:max-h-[38vh] md:overflow-y-auto md:pr-1">
       {!picked && <><div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase my-1">{colour} family · any material (PLA, Silk, Matte, PETG…)</div>
       {match.length ? match.map((s) => <Row key={s.id} s={s} />) : <p class="t-meta mb-2">No {colour} spool in store{q || mat || brand ? " for this search" : ""}.</p>}
       {other.length > 0 && <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-3 mb-1">Any other spool · the colour above is only a reference</div>}</>}
@@ -199,7 +201,7 @@ const spoolName = (id?: string) => { const s = spoolsSig.value.find((x) => x.id 
 const bestSpool = (colour: string, machine?: string, skip: string[] = []) => spoolsSig.value.filter((s) => s.active !== false && s.status !== "empty" && s.grams > 0 && sameFamily(s.colour, colour) && !spoolBusy(s.id) && !skip.includes(s.id)).sort((a, b) => Number(eq(b.colour, colour)) - Number(eq(a.colour, colour)) || Number(b.status === "loaded" && eq(b.printer, machine)) - Number(a.status === "loaded" && eq(a.printer, machine)) || b.grams - a.grams)[0]?.id;
 
 function Head({ i, k, f, children }: { i: LineItem; k: number; f: ReturnType<typeof floorLine>; children?: preact.ComponentChildren }) {
-  return <div class="flex gap-4 mb-4"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-24 h-24 !rounded-xl" />
+  return <div class="flex gap-3 md:gap-4 mb-3 md:mb-4"><Thumb thumb={i.thumb} full={i.img} alt={i.name} class="w-24 h-24 max-md:!w-16 max-md:!h-16 !rounded-xl" />
     <div class="min-w-0 text-[13px] leading-relaxed">{children}<div class="text-c3">Sr {k + 1} · Qty {i.qty} · <b class="text-c4">{f.printed} printed · {f.remaining} pending</b>{f.wasted ? <span class="text-red"> · {f.wasted} wasted</span> : null}</div>
       <div class="flex flex-wrap items-center gap-1 mt-1">{lineColours(i).map((c) => <Sq key={c} hex={colourHex(c)} size="w-3.5 h-3.5" />)}<span class="text-c3 ml-1">{lineColours(i).join(" · ") || "No colours set — use Edit colours"}</span></div></div></div>;
 }
@@ -318,7 +320,7 @@ export function StartPrint({ o, k, onClose, simple, part: startPart, group }: { 
                 : <input class="h-9 px-2 rounded-lg border border-line bg-c0 text-[13px]" placeholder="e.g. Left half" value={r.part} onInput={(e) => set(n, { part: (e.target as HTMLInputElement).value })} />}</label>
           </div>
           {!simple && <label class="flex items-start gap-2 mt-3 text-[12.5px] cursor-pointer"><input type="checkbox" class="mt-0.5 accent-grn" checked={!!r.free} onChange={(e) => set(n, { free: (e.target as HTMLInputElement).checked })} />
-            <span><b>Pick any spools freely</b><span class="block text-[11.5px] text-c2">The colours of this design are only a reference. Use any material, colour, brand or number of spools (e.g. Silk White instead of Pure White).</span></span></label>}
+            <span><b>Pick any spools freely</b><span class="block text-[11.5px] text-c2 max-md:hidden">The colours of this design are only a reference. Use any material, colour, brand or number of spools (e.g. Silk White instead of Pure White).</span></span></label>}
           {simple || r.free ? <>
             <div class="text-[10.5px] font-bold tracking-wide text-c2 uppercase mt-4 mb-1.5">Filaments on this machine · tap any spools: multi-material, multi-colour, any brand</div>
             <div class="flex flex-wrap gap-1.5 mb-2 min-h-8">{r.picked.length ? r.picked.map((id) => { const nm = spoolName(id); return nm && <button key={id} type="button" onClick={() => set(n, { picked: r.picked.filter((x) => x !== id) })} class="h-8 px-2.5 !min-h-0 rounded-full bg-c4 text-c0 text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer"><Sq hex={nm.s.hex ?? colourHex(nm.s.colour)} size="w-3.5 h-3.5" />{nm.t} ✕</button>; }) : <span class="t-meta">None picked yet</span>}</div>

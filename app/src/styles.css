@@ -76,9 +76,14 @@ details[open] > summary .chev { transform: rotate(90deg); }
 html, body, #app { height: 100%; }
 body { overflow: hidden; overscroll-behavior: none; }
 #app { overflow-x: clip; }
-html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+/* pinch is allowed only inside a document */
+.doc-scroll, .doc-a4, [data-zoomable] { touch-action: pan-x pan-y pinch-zoom; }
 /* iOS zooms into inputs under 16px: lift form text on touch phones only. */
-@media (pointer: coarse) and (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }
+@media (pointer: coarse) { input, select, textarea { font-size: 16px !important; } }
+/* Nothing on a phone may push the page sideways. */
+@media (max-width: 767px) { html, body { max-width: 100vw; overflow-x: hidden; } img, video, canvas, svg { max-width: 100%; } }
+.hide-scroll { scrollbar-width: none; } .hide-scroll::-webkit-scrollbar { display: none; }
 body { margin: 0; background: var(--bg); color: var(--c-4); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--c-4); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }

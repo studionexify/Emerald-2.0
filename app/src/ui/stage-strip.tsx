@@ -21,7 +21,7 @@ export const STAGE_HREF: Record<Stage, string> = {
 export function StageStrip({ orders, showValue, active }: { orders: Order[]; showValue: boolean; active?: Stage }) {
   const stages = STAGES.filter((s) => s.key !== "archived");
   return (
-    <nav aria-label="Orders by stage" class="grid grid-cols-[repeat(auto-fill,minmax(6.75rem,1fr))] md:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-1.5 min-[1400px]:flex min-[1400px]:items-stretch min-[1400px]:gap-1 rounded-[22px] bg-panel p-2">
+    <nav aria-label="Orders by stage" class="flex overflow-x-auto hide-scroll snap-x md:grid md:overflow-visible md:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-1.5 min-[1400px]:flex min-[1400px]:items-stretch min-[1400px]:gap-1 rounded-[22px] bg-panel p-2">
       {stages.map((s, i) => {
         const inStage = orders.filter((o) => o.stage === s.key);
         const n = inStage.length;
@@ -31,7 +31,7 @@ export function StageStrip({ orders, showValue, active }: { orders: Order[]; sho
           <Fragment key={s.key}>
             {i > 0 && <span aria-hidden="true" class="hidden min-[1400px]:block shrink-0 self-center text-c2 opacity-60"><Icon name="right" size={14} /></span>}
             <a href={STAGE_HREF[s.key]} aria-label={`${s.label}: ${n} order${n === 1 ? "" : "s"}`}
-              class={`flex min-w-0 min-[1400px]:min-w-[8.5rem] flex-1 flex-col gap-1.5 md:gap-2 rounded-2xl border-[1.5px] bg-c0 p-2 md:p-3 hover:border-line ${on ? "!border-c4" : "border-transparent"}`}>
+              class={`snap-start max-md:flex-none max-md:w-[7.75rem] flex min-w-0 min-[1400px]:min-w-[8.5rem] flex-1 flex-col gap-1.5 md:gap-2 rounded-2xl border-[1.5px] bg-c0 p-2 md:p-3 hover:border-line ${on ? "!border-c4" : "border-transparent"}`}>
               <span class={`inline-flex max-w-full w-max items-center gap-1 md:gap-1.5 rounded-full px-2 md:px-2.5 py-1 whitespace-nowrap text-[11px] md:text-[11.5px] font-semibold ${on ? "bg-lime text-black" : "bg-c1 text-c3"}`}>
                 <Icon name={STAGE_ICON[s.key]} size={13} />{s.label}
               </span>

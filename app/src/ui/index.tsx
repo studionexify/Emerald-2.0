@@ -62,6 +62,16 @@ export function Chip({ active, children, onClick }: { active?: boolean; children
   );
 }
 
+/** Phone: every section is one tap away in a single scrolling row (the active one is kept in view). Larger screens: the dropdown below. */
+function TabStrip({ tabs, current }: { tabs: { href: string; label: string }[]; current?: string }) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => { ref.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [current]);
+  return (
+    <nav ref={ref} aria-label="Sections" class="md:hidden -mx-3 px-3 flex gap-1.5 overflow-x-auto hide-scroll snap-x [&>*]:shrink-0">
+      {tabs.map((t) => <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined} class={`snap-start h-10 px-4 inline-flex items-center rounded-full text-[14px] whitespace-nowrap ${t.href === current ? "bg-acc text-on-acc font-semibold" : "bg-c0 text-c3 font-medium"}`}>{t.label}</a>)}
+    </nav>
+  );
+}
 export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
   const { path, route } = useLocation();
   const current = [...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => path === t.href || path.startsWith(t.href + "/"));
@@ -75,6 +85,11 @@ export function Tabs({ tabs }: { tabs: { href: string; label: string }[] }) {
       <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-c2"><Icon name="down" size={12} /></span>
     </label>
   );
+}
+export function PhoneTabs({ tabs }: { tabs: { href: string; label: string }[] }) {
+  const { path } = useLocation();
+  const current = [...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => path === t.href || path.startsWith(t.href + "/"));
+  return <TabStrip tabs={tabs} current={current?.href} />;
 }
 
 /** Filter control: chips for up to 3 options, a dropdown beyond that. */
@@ -305,9 +320,10 @@ export function Page({ title, sub, actions, tabs, toolbar, strip, detail, childr
             <h1 class="t-title min-w-0 md:shrink-0 flex items-center gap-2.5 max-md:text-[19px] max-md:leading-tight"><span aria-hidden="true" class="w-1.5 h-6 rounded-full bg-acc shrink-0" /><span class="min-w-0 md:whitespace-nowrap">{title}</span></h1>
             {sub && <Tip text={sub} />}
           </div>
-          {tabs && <div class="w-[46%] md:w-48 shrink-0"><Tabs tabs={tabs} /></div>}
+          {tabs && <div class="hidden md:block w-48 shrink-0"><Tabs tabs={tabs} /></div>}
           {actions && <div class="hidden md:flex flex-wrap justify-end gap-2 shrink-0">{actions}</div>}
         </header>
+        {tabs && <PhoneTabs tabs={tabs} />}
         {toolbar && (isPhone.value ? <FilterSheet>{toolbar}</FilterSheet> : <div class="flex flex-wrap items-center gap-2 min-w-0">{toolbar}</div>)}
         {strip}
       </div>
@@ -330,7 +346,7 @@ export function Page({ title, sub, actions, tabs, toolbar, strip, detail, childr
 /** Phone-only sticky action bar at the foot of a page, directly above the dock: primary CTAs in thumb reach. */
 export function ActionDock({ children }: { children: ComponentChildren }) {
   return (
-    <div class="md:hidden shrink-0 border-t border-line bg-c0/90 backdrop-blur-md px-3 py-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&_button]:h-12 [&_a]:min-h-12 [&>*:last-child]:flex-1">
+    <div class="md:hidden shrink-0 border-t border-line bg-c0/90 backdrop-blur-md px-3 py-2 grid grid-flow-col auto-cols-[minmax(96px,1fr)] gap-2 overflow-x-auto hide-scroll [&_button]:h-12 [&_button]:!px-2 [&_button]:!text-[13px] [&_button]:leading-tight [&_button]:whitespace-normal [&_button]:justify-center [&_a]:min-h-12">
       {children}
     </div>
   );
